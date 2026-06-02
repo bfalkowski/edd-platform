@@ -33,14 +33,14 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 - [x] Display context-pack-backed evidence in the UI.
 - [x] Replace hardcoded `project_default` with a real `Project` model.
 - [x] Add artifact detail endpoint.
-- [ ] Add artifact link model.
-- [ ] Add artifact link create/read endpoints.
-- [ ] Show related artifacts in the UI.
-- [ ] Persist state beyond in-memory storage.
+- [x] Add artifact link model.
+- [x] Add artifact link create/read endpoints.
+- [x] Show related artifacts in the UI.
+- [x] Persist state beyond in-memory storage.
 
 ## Phase 2: Agent Design Workflow
 
-- [ ] Synthesize `HLD-003: Eval-Driven Agent Design Workflow`.
+- [x] Synthesize `HLD-003: Eval-Driven Agent Design Workflow`.
 - [ ] Add target/design artifact sections.
 - [ ] Add behavior rules artifacts.
 - [ ] Add judge prompt artifacts.
@@ -104,6 +104,7 @@ The UI works for the first vertical slice:
 5. The API creates an `AGENT_DESIGN` artifact.
 6. The Evidence panel displays a deterministic `AGENT_PROMPT_REVIEW` context
    pack containing that artifact.
+7. Local API state persists to Postgres across restarts.
 
 The UI is not yet a full EDD workflow. It does not yet edit artifact sections,
 run scenarios, evaluate runs, create gates, link Langfuse traces, or persist to

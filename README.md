@@ -45,6 +45,7 @@ The repo now has a minimal local product loop:
 4. Create an initial `AGENT_DESIGN` evidence artifact.
 5. List agent designs for the active project in the left nav.
 6. Select a design and inspect its deterministic evidence context pack.
+7. Keep local state across API restarts with Postgres-backed storage.
 
 This is intentionally small. The next layers are judge prompts, gates,
 deterministic runner evidence, and evidence context.
@@ -94,11 +95,18 @@ npm install
 Run the local product:
 
 ```bash
+docker compose up -d postgres
 ./scripts/dev.sh
 ```
 
 The API runs on `http://127.0.0.1:8001`. The web console runs on Vite's
 reported local URL, usually `http://localhost:5173`.
+
+By default, the API connects to
+`postgresql://edd_platform:edd_platform@127.0.0.1:5432/edd_platform`.
+Set `EDD_PLATFORM_DATABASE_URL` to point at a different Postgres database.
+Tests use `EDD_PLATFORM_STORAGE_BACKEND=memory` so CI does not require a
+database service.
 
 Run tests and build checks:
 

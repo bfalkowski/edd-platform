@@ -34,6 +34,15 @@ type ArtifactRecord = {
   updated_at: string;
 };
 
+type ArtifactLink = {
+  id: string;
+  project_id: string;
+  source_artifact_id: string;
+  target_artifact_id: string;
+  relationship_type: string;
+  created_at: string;
+};
+
 type NewAgentResponse = {
   agent: AgentDesign;
   artifact: ArtifactRecord;
@@ -106,6 +115,14 @@ async function loadArtifact(projectId: string, artifactId: string): Promise<Arti
   return response.json();
 }
 
+async function loadArtifactLinks(projectId: string, artifactId: string): Promise<ArtifactLink[]> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/artifacts/${artifactId}/links`);
+  if (!response.ok) {
+    throw new Error("Unable to load related evidence.");
+  }
+  return response.json();
+}
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -115,6 +132,7 @@ function App() {
   const [intent, setIntent] = useState("");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
+  const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,8 +196,12 @@ function App() {
     }
     setError(null);
     try {
-      const artifact = await loadArtifact(project.id, artifactId);
+      const [artifact, links] = await Promise.all([
+        loadArtifact(project.id, artifactId),
+        loadArtifactLinks(project.id, artifactId),
+      ]);
       setReviewArtifact(artifact);
+      setReviewLinks(links);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load artifact.");
     }
@@ -344,7 +366,10 @@ function App() {
               className="icon-button"
               type="button"
               aria-label="Close review panel"
-              onClick={() => setReviewArtifact(null)}
+              onClick={() => {
+                setReviewArtifact(null);
+                setReviewLinks([]);
+              }}
             >
               <X size={22} />
             </button>
@@ -354,6 +379,31 @@ function App() {
             <section>
               <h3>Evidence</h3>
               <p>{reviewArtifact.body}</p>
+            </section>
+            <section>
+              <h3>Related evidence</h3>
+              {reviewLinks.length === 0 ? (
+                <p>No related artifacts yet.</p>
+              ) : (
+                <ul className="related-list">
+                  {reviewLinks.map((link) => {
+                    const direction =
+                      link.source_artifact_id === reviewArtifact.id ? "points to" : "linked from";
+                    const relatedId =
+                      link.source_artifact_id === reviewArtifact.id
+                        ? link.target_artifact_id
+                        : link.source_artifact_id;
+                    return (
+                      <li key={link.id}>
+                        <strong>{link.relationship_type.replaceAll("_", " ")}</strong>
+                        <span>
+                          {direction} {relatedId}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </section>
             <dl>
               <div>

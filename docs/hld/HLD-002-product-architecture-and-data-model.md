@@ -391,7 +391,7 @@ The next persistence path should be:
 
 1. Keep Pydantic/domain objects stable.
 2. Add storage abstraction only when needed.
-3. Add SQLite or Postgres-backed persistence.
+3. Add Postgres-backed persistence.
 4. Preserve mock/local behavior for tests.
 5. Migrate high-value artifact types to dedicated tables when their fields need
    querying.
@@ -464,4 +464,3 @@ This HLD is successful when the repo has:
 - gate decisions backed by linked artifacts
 - Langfuse traces linked as evidence
 - local/CI checks that pass without provider keys
-

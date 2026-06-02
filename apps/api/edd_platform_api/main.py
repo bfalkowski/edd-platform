@@ -7,6 +7,8 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from edd_platform_api.storage import create_store_from_env
+
 
 class AgentDesignCreate(BaseModel):
     name: str = Field(min_length=1)
@@ -44,6 +46,21 @@ class ArtifactRecord(BaseModel):
     updated_at: datetime
 
 
+class ArtifactLinkCreate(BaseModel):
+    source_artifact_id: str = Field(min_length=1)
+    target_artifact_id: str = Field(min_length=1)
+    relationship_type: str = Field(min_length=1)
+
+
+class ArtifactLink(BaseModel):
+    id: str
+    project_id: str
+    source_artifact_id: str
+    target_artifact_id: str
+    relationship_type: str
+    created_at: datetime
+
+
 class AgentDesignCreated(BaseModel):
     agent: AgentDesign
     artifact: ArtifactRecord
@@ -64,6 +81,7 @@ class ContextPack(BaseModel):
 
 
 app = FastAPI(title="EDD Platform API")
+store = create_store_from_env()
 seeded_at = datetime.now(timezone.utc)
 default_project = Project(
     id="project_default",
@@ -72,9 +90,13 @@ default_project = Project(
     created_at=seeded_at,
     updated_at=seeded_at,
 )
-_projects: Dict[str, Project] = {default_project.id: default_project}
-_agent_designs: Dict[str, AgentDesign] = {}
-_artifacts: Dict[str, ArtifactRecord] = {}
+_projects: Dict[str, Project] = store.load_collection("projects", Project)
+_agent_designs: Dict[str, AgentDesign] = store.load_collection("agent_designs", AgentDesign)
+_artifacts: Dict[str, ArtifactRecord] = store.load_collection("artifacts", ArtifactRecord)
+_artifact_links: Dict[str, ArtifactLink] = store.load_collection("artifact_links", ArtifactLink)
+if default_project.id not in _projects:
+    _projects[default_project.id] = default_project
+    store.save_record("projects", default_project.id, default_project)
 
 
 @app.get("/health")
@@ -87,6 +109,13 @@ def get_project_or_404(project_id: str) -> Project:
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found.")
     return project
+
+
+def get_artifact_or_404(project_id: str, artifact_id: str) -> ArtifactRecord:
+    artifact = _artifacts.get(artifact_id)
+    if artifact is None or artifact.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Artifact not found.")
+    return artifact
 
 
 @app.get("/api/projects")
@@ -120,6 +149,7 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
         updated_at=now,
     )
     _agent_designs[agent.id] = agent
+    store.save_record("agent_designs", agent.id, agent)
 
     artifact = ArtifactRecord(
         id=f"artifact_{uuid4().hex[:12]}",
@@ -134,6 +164,7 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
         updated_at=now,
     )
     _artifacts[artifact.id] = artifact
+    store.save_record("artifacts", artifact.id, artifact)
 
     return AgentDesignCreated(agent=agent, artifact=artifact)
 
@@ -185,10 +216,42 @@ def search_project_artifacts(
 @app.get("/api/projects/{project_id}/artifacts/{artifact_id}")
 def get_project_artifact(project_id: str, artifact_id: str) -> ArtifactRecord:
     get_project_or_404(project_id)
-    artifact = _artifacts.get(artifact_id)
-    if artifact is None or artifact.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Artifact not found.")
-    return artifact
+    return get_artifact_or_404(project_id, artifact_id)
+
+
+@app.post("/api/projects/{project_id}/artifact-links", status_code=201)
+def create_artifact_link(project_id: str, payload: ArtifactLinkCreate) -> ArtifactLink:
+    get_project_or_404(project_id)
+    get_artifact_or_404(project_id, payload.source_artifact_id)
+    get_artifact_or_404(project_id, payload.target_artifact_id)
+
+    link = ArtifactLink(
+        id=f"link_{uuid4().hex[:12]}",
+        project_id=project_id,
+        source_artifact_id=payload.source_artifact_id,
+        target_artifact_id=payload.target_artifact_id,
+        relationship_type=payload.relationship_type.strip().upper(),
+        created_at=datetime.now(timezone.utc),
+    )
+    _artifact_links[link.id] = link
+    store.save_record("artifact_links", link.id, link)
+    return link
+
+
+@app.get("/api/projects/{project_id}/artifacts/{artifact_id}/links")
+def list_artifact_links(project_id: str, artifact_id: str) -> List[ArtifactLink]:
+    get_project_or_404(project_id)
+    get_artifact_or_404(project_id, artifact_id)
+    links = [
+        link
+        for link in _artifact_links.values()
+        if link.project_id == project_id
+        and (
+            link.source_artifact_id == artifact_id
+            or link.target_artifact_id == artifact_id
+        )
+    ]
+    return sorted(links, key=lambda link: link.created_at, reverse=True)
 
 
 @app.post("/api/projects/{project_id}/context-packs")

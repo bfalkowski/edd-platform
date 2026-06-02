@@ -82,6 +82,71 @@
         "title": "AgentDesignCreated",
         "type": "object"
       },
+      "ArtifactLink": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "relationship_type": {
+            "title": "Relationship Type",
+            "type": "string"
+          },
+          "source_artifact_id": {
+            "title": "Source Artifact Id",
+            "type": "string"
+          },
+          "target_artifact_id": {
+            "title": "Target Artifact Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "source_artifact_id",
+          "target_artifact_id",
+          "relationship_type",
+          "created_at"
+        ],
+        "title": "ArtifactLink",
+        "type": "object"
+      },
+      "ArtifactLinkCreate": {
+        "properties": {
+          "relationship_type": {
+            "minLength": 1,
+            "title": "Relationship Type",
+            "type": "string"
+          },
+          "source_artifact_id": {
+            "minLength": 1,
+            "title": "Source Artifact Id",
+            "type": "string"
+          },
+          "target_artifact_id": {
+            "minLength": 1,
+            "title": "Target Artifact Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_artifact_id",
+          "target_artifact_id",
+          "relationship_type"
+        ],
+        "title": "ArtifactLinkCreate",
+        "type": "object"
+      },
       "ArtifactRecord": {
         "properties": {
           "agent_design_id": {
@@ -516,6 +581,55 @@
         "summary": "Get Agent Design"
       }
     },
+    "/api/projects/{project_id}/artifact-links": {
+      "post": {
+        "operationId": "create_artifact_link_api_projects__project_id__artifact_links_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactLink"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Artifact Link"
+      }
+    },
     "/api/projects/{project_id}/artifacts": {
       "get": {
         "operationId": "list_project_artifacts_api_projects__project_id__artifacts_get",
@@ -706,6 +820,58 @@
           }
         },
         "summary": "Get Project Artifact"
+      }
+    },
+    "/api/projects/{project_id}/artifacts/{artifact_id}/links": {
+      "get": {
+        "operationId": "list_artifact_links_api_projects__project_id__artifacts__artifact_id__links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactLink"
+                  },
+                  "title": "Response List Artifact Links Api Projects  Project Id  Artifacts  Artifact Id  Links Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Artifact Links"
       }
     },
     "/api/projects/{project_id}/context-packs": {

@@ -461,6 +461,33 @@ dd {
   margin: 0;
 }
 
+.related-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.related-list li {
+  background: #ffffff;
+  border: 1px solid #ececf1;
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+}
+
+.related-list strong {
+  color: #202123;
+  text-transform: capitalize;
+}
+
+.related-list span {
+  color: #606373;
+  overflow-wrap: anywhere;
+}
+
 .review-panel-body dl div {
   border: 1px solid #ececf1;
 }

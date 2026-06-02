@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
@@ -8,6 +9,7 @@ from typing import Any, Dict, List, Set
 ROOT = Path(__file__).resolve().parents[1]
 API_ROOT = ROOT / "apps" / "api"
 sys.path.insert(0, str(API_ROOT))
+os.environ.setdefault("EDD_PLATFORM_STORAGE_BACKEND", "memory")
 
 from edd_platform_api.main import app  # noqa: E402
 
@@ -17,9 +19,11 @@ REQUIRED_PATHS = {
     "/api/projects/{project_id}",
     "/api/projects/{project_id}/agent-designs",
     "/api/projects/{project_id}/agent-designs/{agent_id}",
+    "/api/projects/{project_id}/artifact-links",
     "/api/projects/{project_id}/artifacts",
     "/api/projects/{project_id}/artifacts/search",
     "/api/projects/{project_id}/artifacts/{artifact_id}",
+    "/api/projects/{project_id}/artifacts/{artifact_id}/links",
     "/api/projects/{project_id}/context-packs",
 }
 

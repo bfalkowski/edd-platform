@@ -19,6 +19,7 @@ to use the consolidated product language:
 | [HLD-000](HLD-000-clean-room-consolidation.md) | Clean-Room Consolidation Plan | Draft |
 | [HLD-001](HLD-001-artifact-retrieval-and-evidence-context.md) | Artifact Retrieval and Evidence Context | Draft |
 | [HLD-002](HLD-002-product-architecture-and-data-model.md) | Product Architecture and Data Model | Draft |
+| [HLD-003](HLD-003-eval-driven-agent-design-workflow.md) | Eval-Driven Agent Design Workflow | Draft |
 
 ## Notes
 
