@@ -24,3 +24,4 @@ Clean-room product repo for the consolidated EDD Platform.
 - Prefer fresh code in the new product language over bulk-copying legacy files.
 - If useful code is copied from older repos, rename and simplify it into this repo's model.
 - Follow `docs/engineering/AI_AGENT_DEVELOPMENT.md` for AI-assisted development guardrails.
+- Follow `docs/API_CONTRACT.md` before adding or stubbing API routes.

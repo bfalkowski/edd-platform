@@ -15,4 +15,5 @@ Current first slice:
 - `GET /api/projects/{project_id}/agent-designs/{agent_id}`
 - `GET /api/projects/{project_id}/artifacts`
 - `GET /api/projects/{project_id}/artifacts/search`
+- `GET /api/projects/{project_id}/artifacts/{artifact_id}`
 - `POST /api/projects/{project_id}/context-packs`

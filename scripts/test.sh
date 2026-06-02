@@ -9,6 +9,12 @@ echo "Running API tests"
   uv run pytest
 )
 
+echo "Linting OpenAPI contract"
+(
+  cd "$ROOT_DIR/apps/api"
+  uv run python ../../scripts/lint_openapi.py
+)
+
 echo "Building web"
 (
   cd "$ROOT_DIR/apps/web"

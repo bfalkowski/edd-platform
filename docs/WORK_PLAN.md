@@ -13,6 +13,7 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 - [x] Add AI-assisted development guardrails.
 - [x] Add architectural decision record directory.
 - [x] Add architecture overview diagrams.
+- [x] Add OpenAPI export, lint, and contract tests.
 - [x] Add monorepo folder structure.
 - [x] Add React app scaffold in `apps/web`.
 - [x] Add FastAPI app scaffold in `apps/api`.
@@ -31,7 +32,7 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 - [x] Add deterministic context pack endpoint.
 - [x] Display context-pack-backed evidence in the UI.
 - [x] Replace hardcoded `project_default` with a real `Project` model.
-- [ ] Add artifact detail endpoint.
+- [x] Add artifact detail endpoint.
 - [ ] Add artifact link model.
 - [ ] Add artifact link create/read endpoints.
 - [ ] Show related artifacts in the UI.
@@ -39,6 +40,7 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 
 ## Phase 2: Agent Design Workflow
 
+- [ ] Synthesize `HLD-003: Eval-Driven Agent Design Workflow`.
 - [ ] Add target/design artifact sections.
 - [ ] Add behavior rules artifacts.
 - [ ] Add judge prompt artifacts.
@@ -49,6 +51,7 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 
 ## Phase 3: Runner Integration
 
+- [ ] Synthesize `HLD-004: Runner, Mock Mode, and Live Mode`.
 - [ ] Add deterministic runner package.
 - [ ] Run a mock scenario from a selected agent design.
 - [ ] Store run evidence artifacts.
@@ -57,6 +60,8 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 
 ## Phase 4: Judges and Gates
 
+- [ ] Synthesize `HLD-005: Judges, Gates, and Failure Packets`.
+- [ ] Fold rubric-driven agent improvement into `HLD-005`.
 - [ ] Store judge prompts in the platform.
 - [ ] Add mock judge execution for local/CI mode.
 - [ ] Add optional LLM-as-judge execution for live mode.

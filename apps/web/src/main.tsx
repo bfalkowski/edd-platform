@@ -1,4 +1,4 @@
-import { Clock3, PanelLeft, PencilLine, Search } from "lucide-react";
+import { Clock3, PanelLeft, PanelRight, PencilLine, Search, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
@@ -98,6 +98,14 @@ async function buildContextPack(projectId: string, agentDesignId?: string): Prom
   return response.json();
 }
 
+async function loadArtifact(projectId: string, artifactId: string): Promise<ArtifactRecord> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/artifacts/${artifactId}`);
+  if (!response.ok) {
+    throw new Error("Unable to load artifact.");
+  }
+  return response.json();
+}
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -106,6 +114,7 @@ function App() {
   const [name, setName] = useState("");
   const [intent, setIntent] = useState("");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
+  const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,8 +172,26 @@ function App() {
     }
   }
 
+  async function handleReviewArtifact(artifactId: string) {
+    if (!project) {
+      return;
+    }
+    setError(null);
+    try {
+      const artifact = await loadArtifact(project.id, artifactId);
+      setReviewArtifact(artifact);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load artifact.");
+    }
+  }
+
   return (
-    <div className={sidebarOpen ? "app-shell" : "app-shell sidebar-collapsed"}>
+    <div
+      className={[
+        sidebarOpen ? "app-shell" : "app-shell sidebar-collapsed",
+        reviewArtifact ? "review-open" : "",
+      ].join(" ")}
+    >
       <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-mark">E</div>
@@ -281,6 +308,14 @@ function App() {
                       <h3>{artifact.title}</h3>
                       <p>{artifact.body}</p>
                     </div>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => handleReviewArtifact(artifact.id)}
+                    >
+                      <PanelRight size={18} />
+                      Review
+                    </button>
                     <dl>
                       <div>
                         <dt>Source</dt>
@@ -298,6 +333,49 @@ function App() {
           </section>
         </section>
       </main>
+      {reviewArtifact ? (
+        <aside className="review-panel" aria-label="Artifact review">
+          <div className="review-panel-header">
+            <div>
+              <p className="eyebrow">{reviewArtifact.artifact_type.replaceAll("_", " ")}</p>
+              <h2>{reviewArtifact.title}</h2>
+            </div>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Close review panel"
+              onClick={() => setReviewArtifact(null)}
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          <div className="review-panel-body">
+            <section>
+              <h3>Evidence</h3>
+              <p>{reviewArtifact.body}</p>
+            </section>
+            <dl>
+              <div>
+                <dt>Source</dt>
+                <dd>{reviewArtifact.source}</dd>
+              </div>
+              <div>
+                <dt>Artifact id</dt>
+                <dd>{reviewArtifact.id}</dd>
+              </div>
+              <div>
+                <dt>Project</dt>
+                <dd>{reviewArtifact.project_id}</dd>
+              </div>
+              <div>
+                <dt>Updated</dt>
+                <dd>{new Date(reviewArtifact.updated_at).toLocaleString()}</dd>
+              </div>
+            </dl>
+          </div>
+        </aside>
+      ) : null}
     </div>
   );
 }

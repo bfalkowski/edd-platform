@@ -40,7 +40,15 @@ def test_create_and_list_agent_designs() -> None:
     )
 
     assert artifacts_response.status_code == 200
-    assert artifacts_response.json()[0]["title"] == "Customer Service Triage Agent"
+    listed_artifact = artifacts_response.json()[0]
+    assert listed_artifact["title"] == "Customer Service Triage Agent"
+
+    artifact_detail_response = client.get(
+        f"/api/projects/project_default/artifacts/{listed_artifact['id']}"
+    )
+
+    assert artifact_detail_response.status_code == 200
+    assert artifact_detail_response.json()["artifact_id"] == agent["id"]
 
     search_response = client.get(
         "/api/projects/project_default/artifacts/search",
@@ -76,5 +84,13 @@ def test_project_scoped_routes_require_known_project() -> None:
     client = TestClient(app)
 
     response = client.get("/api/projects/project_missing/agent-designs")
+
+    assert response.status_code == 404
+
+
+def test_artifact_detail_requires_known_artifact() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/projects/project_default/artifacts/artifact_missing")
 
     assert response.status_code == 404

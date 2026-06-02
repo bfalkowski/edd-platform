@@ -9,6 +9,8 @@
     "web:dev": "npm --prefix apps/web run dev",
     "web:build": "npm --prefix apps/web run build",
     "api:dev": "cd apps/api && uv run uvicorn edd_platform_api.main:app --host 127.0.0.1 --port 8001",
-    "api:test": "cd apps/api && uv run pytest"
+    "api:test": "cd apps/api && uv run pytest",
+    "api:openapi": "cd apps/api && uv run python ../../scripts/export_openapi.py",
+    "api:lint-openapi": "cd apps/api && uv run python ../../scripts/lint_openapi.py"
   }
 }

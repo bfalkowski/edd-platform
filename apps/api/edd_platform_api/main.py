@@ -182,6 +182,15 @@ def search_project_artifacts(
     ]
 
 
+@app.get("/api/projects/{project_id}/artifacts/{artifact_id}")
+def get_project_artifact(project_id: str, artifact_id: str) -> ArtifactRecord:
+    get_project_or_404(project_id)
+    artifact = _artifacts.get(artifact_id)
+    if artifact is None or artifact.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Artifact not found.")
+    return artifact
+
+
 @app.post("/api/projects/{project_id}/context-packs")
 def build_context_pack(project_id: str, payload: ContextPackCreate) -> ContextPack:
     get_project_or_404(project_id)

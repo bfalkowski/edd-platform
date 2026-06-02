@@ -58,6 +58,9 @@ The product architecture and data model are captured in
 The architecture overview and diagrams are in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+The API contract is generated from OpenAPI and documented in
+[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
+
 The active implementation checklist is tracked in
 [`docs/WORK_PLAN.md`](docs/WORK_PLAN.md).
 

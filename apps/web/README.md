@@ -11,3 +11,4 @@ Current first slice:
 - create an agent design from intent
 - list agent designs in the left nav
 - select an agent and show a deterministic evidence context pack
+- review an artifact in a docked right-side panel
