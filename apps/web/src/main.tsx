@@ -1,4 +1,305 @@
-export function bootstrapPlaceholder() {
-  return "EDD Platform web app placeholder";
+import { Clock3, PanelLeft, PencilLine, Search } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import "./styles.css";
+
+type AgentDesign = {
+  id: string;
+  project_id: string;
+  name: string;
+  intent: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type Project = {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type ArtifactRecord = {
+  id: string;
+  project_id: string;
+  artifact_type: string;
+  artifact_id: string;
+  title: string;
+  body: string;
+  source: string;
+  agent_design_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type NewAgentResponse = {
+  agent: AgentDesign;
+  artifact: ArtifactRecord;
+};
+
+type ContextPack = {
+  id: string;
+  project_id: string;
+  purpose: string;
+  agent_design_id: string | null;
+  artifacts: ArtifactRecord[];
+  created_at: string;
+};
+
+const apiBase = "/api";
+
+async function listProjects(): Promise<Project[]> {
+  const response = await fetch(`${apiBase}/projects`);
+  if (!response.ok) {
+    throw new Error("Unable to load projects.");
+  }
+  return response.json();
 }
 
+async function listAgentDesigns(projectId: string): Promise<AgentDesign[]> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs`);
+  if (!response.ok) {
+    throw new Error("Unable to load agent designs.");
+  }
+  return response.json();
+}
+
+async function createAgentDesign(
+  projectId: string,
+  name: string,
+  intent: string,
+): Promise<AgentDesign> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, intent }),
+  });
+  if (!response.ok) {
+    throw new Error("Unable to create agent design.");
+  }
+  const payload = (await response.json()) as NewAgentResponse;
+  return payload.agent;
+}
+
+async function buildContextPack(projectId: string, agentDesignId?: string): Promise<ContextPack> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/context-packs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      purpose: "AGENT_PROMPT_REVIEW",
+      agent_design_id: agentDesignId ?? null,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error("Unable to build evidence context.");
+  }
+  return response.json();
+}
+
+function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [project, setProject] = useState<Project | null>(null);
+  const [agents, setAgents] = useState<AgentDesign[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [intent, setIntent] = useState("");
+  const [contextPack, setContextPack] = useState<ContextPack | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listProjects()
+      .then((projects) => {
+        const activeProject = projects[0] ?? null;
+        setProject(activeProject);
+        if (!activeProject) {
+          setAgents([]);
+          return;
+        }
+        return listAgentDesigns(activeProject.id).then((items) => {
+          setAgents(items);
+          setSelectedId(items[0]?.id ?? null);
+        });
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const selectedAgent = useMemo(
+    () => agents.find((agent) => agent.id === selectedId) ?? null,
+    [agents, selectedId],
+  );
+
+  useEffect(() => {
+    if (!project) {
+      setContextPack(null);
+      return;
+    }
+    setIsLoadingContext(true);
+    buildContextPack(project.id, selectedId ?? undefined)
+      .then(setContextPack)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setIsLoadingContext(false));
+  }, [project, selectedId]);
+
+  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+
+    try {
+      if (!project) {
+        throw new Error("No active project is available.");
+      }
+      const agent = await createAgentDesign(project.id, name.trim(), intent.trim());
+      setAgents((items) => [agent, ...items]);
+      setSelectedId(agent.id);
+      setName("");
+      setIntent("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create agent design.");
+    }
+  }
+
+  return (
+    <div className={sidebarOpen ? "app-shell" : "app-shell sidebar-collapsed"}>
+      <aside className="sidebar">
+        <div className="brand-row">
+          <div className="brand-mark">E</div>
+          {sidebarOpen ? <strong>{project?.name ?? "EDD Platform"}</strong> : null}
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Toggle sidebar"
+            onClick={() => setSidebarOpen((value) => !value)}
+          >
+            <PanelLeft size={21} />
+          </button>
+        </div>
+
+        <nav className="primary-nav" aria-label="Primary">
+          <button className="nav-item active" type="button">
+            <PencilLine size={22} />
+            {sidebarOpen ? <span>New agent</span> : null}
+          </button>
+          <button className="nav-item muted" type="button">
+            <Search size={22} />
+            {sidebarOpen ? <span>Search</span> : null}
+          </button>
+          <button className="nav-item muted" type="button">
+            <Clock3 size={22} />
+            {sidebarOpen ? <span>Runs</span> : null}
+          </button>
+        </nav>
+
+        {sidebarOpen ? (
+          <section className="agent-list" aria-label="Agent designs">
+            <p className="section-label">Agents</p>
+            {isLoading ? <p className="empty-list">Loading...</p> : null}
+            {!isLoading && agents.length === 0 ? <p className="empty-list">No agents yet</p> : null}
+            {agents.map((agent, index) => (
+              <button
+                className={agent.id === selectedId ? "agent-row selected" : "agent-row"}
+                key={agent.id}
+                type="button"
+                onClick={() => setSelectedId(agent.id)}
+              >
+                <span>{agent.name}</span>
+                <span className="shortcut">⌘{index + 1}</span>
+              </button>
+            ))}
+          </section>
+        ) : null}
+      </aside>
+
+      <main className="workspace">
+        <header className="topbar">
+          <div>
+            <h1>{selectedAgent?.name ?? "New agent"}</h1>
+            <p>
+              {selectedAgent?.intent ??
+                project?.description ??
+                "Describe an agent and persist the first platform design."}
+            </p>
+          </div>
+          <span className="status-pill">Platform: local</span>
+        </header>
+
+        <section className="canvas">
+          <form className="intent-form" onSubmit={handleCreate}>
+            <p className="eyebrow">Start from intent</p>
+            <h2>What agent are we building?</h2>
+            <label>
+              Agent name
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Customer Service Triage Agent"
+                required
+              />
+            </label>
+            <label>
+              Agent intent
+              <textarea
+                value={intent}
+                onChange={(event) => setIntent(event.target.value)}
+                placeholder="Determine why an issue escalated, gather evidence, and recommend a safe next action."
+                required
+              />
+            </label>
+            <button className="primary-button" type="submit">
+              Create agent
+            </button>
+            {error ? <p className="error-text">{error}</p> : null}
+          </form>
+
+          <section className="evidence-panel">
+            <p className="eyebrow">Evidence context</p>
+            <h2>{selectedAgent ? "Evidence artifacts" : "Ready for the first design"}</h2>
+            {!selectedAgent ? (
+              <p className="muted-copy">
+                Create an agent design to begin collecting targets, judge prompts, gates, runs,
+                and evidence.
+              </p>
+            ) : null}
+            {selectedAgent ? (
+              <div className="artifact-stack">
+                <div className="context-pack-meta">
+                  <span>Context pack</span>
+                  <strong>{contextPack?.purpose.replaceAll("_", " ") ?? "Preparing"}</strong>
+                </div>
+                {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
+                {!isLoadingContext && (contextPack?.artifacts.length ?? 0) === 0 ? (
+                  <p className="muted-copy">No artifacts recorded for this design yet.</p>
+                ) : null}
+                {(contextPack?.artifacts ?? []).map((artifact) => (
+                  <article className="artifact-card" key={artifact.id}>
+                    <div>
+                      <p className="artifact-type">{artifact.artifact_type.replaceAll("_", " ")}</p>
+                      <h3>{artifact.title}</h3>
+                      <p>{artifact.body}</p>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>Source</dt>
+                        <dd>{artifact.source}</dd>
+                      </div>
+                      <div>
+                        <dt>Updated</dt>
+                        <dd>{new Date(artifact.updated_at).toLocaleString()}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(<App />);

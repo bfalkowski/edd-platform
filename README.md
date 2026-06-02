@@ -35,6 +35,38 @@ packages/langfuse-adapter
 - Local development and CI must work without model-provider keys.
 - Useful old code should be copied intentionally, renamed as needed, and simplified.
 
+## Current Slice
+
+The repo now has a minimal local product loop:
+
+1. Start the API and web console.
+2. Create an agent design from name and intent.
+3. Persist the design through the API.
+4. Create an initial `AGENT_DESIGN` evidence artifact.
+5. List agent designs for the active project in the left nav.
+6. Select a design and inspect its deterministic evidence context pack.
+
+This is intentionally small. The next layers are judge prompts, gates,
+deterministic runner evidence, and evidence context.
+
+The evidence context design is captured in
+[`docs/hld/HLD-001-artifact-retrieval-and-evidence-context.md`](docs/hld/HLD-001-artifact-retrieval-and-evidence-context.md).
+
+The product architecture and data model are captured in
+[`docs/hld/HLD-002-product-architecture-and-data-model.md`](docs/hld/HLD-002-product-architecture-and-data-model.md).
+
+The architecture overview and diagrams are in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+The active implementation checklist is tracked in
+[`docs/WORK_PLAN.md`](docs/WORK_PLAN.md).
+
+Frontend conventions are defined in
+[`docs/design/FRONTEND_GUIDE.md`](docs/design/FRONTEND_GUIDE.md).
+
+AI-assisted development practices are documented in
+[`docs/engineering/AI_AGENT_DEVELOPMENT.md`](docs/engineering/AI_AGENT_DEVELOPMENT.md).
+
 ## Initial Milestone
 
 The first useful loop is:
@@ -49,11 +81,24 @@ The first useful loop is:
 
 ## Local Development
 
-This repo is currently a skeleton. The first implementation step is moving the
-existing React console and platform API into `apps/web` and `apps/api`.
+Install the web dependencies once:
+
+```bash
+cd apps/web
+npm install
+```
+
+Run the local product:
 
 ```bash
 ./scripts/dev.sh
-./scripts/test.sh
 ```
 
+The API runs on `http://127.0.0.1:8001`. The web console runs on Vite's
+reported local URL, usually `http://localhost:5173`.
+
+Run tests and build checks:
+
+```bash
+./scripts/test.sh
+```
