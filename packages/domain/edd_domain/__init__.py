@@ -1,0 +1,2 @@
+"""Shared EDD domain package."""
+
