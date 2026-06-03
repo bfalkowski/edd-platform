@@ -158,3 +158,150 @@ def test_artifact_links_require_known_artifacts() -> None:
 
     assert response.status_code == 404
 
+
+def test_run_agent_design_creates_run_result_artifact() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Runnable Agent",
+            "intent": "Gather evidence and recommend a safe next action.",
+        },
+    )
+    agent = create_response.json()["agent"]
+    design_artifact = create_response.json()["artifact"]
+
+    run_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
+        json={"scenario_input": "A customer reports a failed deployment."},
+    )
+
+    assert run_response.status_code == 201
+    run = run_response.json()
+    assert run["mode"] == "mock"
+    assert run["agent_design_id"] == agent["id"]
+    assert "failed deployment" in run["response"]
+    assert run["tool_calls"][0]["name"] == "collect_design_intent"
+    assert run["artifact"]["artifact_type"] == "RUN_RESULT"
+    assert run["artifact"]["source"] == "runner:mock"
+
+    artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "RUN_RESULT"},
+    )
+    assert artifacts_response.status_code == 200
+    assert artifacts_response.json()[0]["artifact_id"] == run["id"]
+
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{run['artifact']['id']}/links"
+    )
+    assert links_response.status_code == 200
+    link = links_response.json()[0]
+    assert link["relationship_type"] == "GENERATED_FROM"
+    assert link["target_artifact_id"] == design_artifact["id"]
+
+
+def test_run_agent_design_requires_known_agent() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/projects/project_default/agent-designs/agent_missing/runs",
+        json={"scenario_input": "A customer reports a failed deployment."},
+    )
+
+    assert response.status_code == 404
+
+
+def test_evaluate_run_artifact_creates_eval_result_artifact() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Evaluate Me",
+            "intent": "Gather evidence and recommend a safe next action.",
+        },
+    )
+    agent = create_response.json()["agent"]
+    run_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
+        json={"scenario_input": "A customer reports a failed deployment."},
+    )
+    run_artifact = run_response.json()["artifact"]
+
+    eval_response = client.post(
+        f"/api/projects/project_default/artifacts/{run_artifact['id']}/evaluate"
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    assert eval_result["mode"] == "mock"
+    assert eval_result["score"] == 3
+    assert eval_result["passed"] is True
+    assert eval_result["artifact"]["artifact_type"] == "EVAL_RESULT"
+    assert eval_result["artifact"]["source"] == "judge:mock"
+
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{eval_result['artifact']['id']}/links"
+    )
+    assert links_response.status_code == 200
+    link = links_response.json()[0]
+    assert link["relationship_type"] == "GENERATED_FROM"
+    assert link["target_artifact_id"] == run_artifact["id"]
+
+
+def test_evaluate_requires_run_result_artifact() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Not A Run",
+            "intent": "Temporary agent design.",
+        },
+    )
+    design_artifact = create_response.json()["artifact"]
+
+    response = client.post(
+        f"/api/projects/project_default/artifacts/{design_artifact['id']}/evaluate"
+    )
+
+    assert response.status_code == 400
+
+
+def test_delete_agent_design_removes_owned_artifacts() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Delete Me",
+            "intent": "Temporary agent design.",
+        },
+    )
+    agent = create_response.json()["agent"]
+    design_artifact = create_response.json()["artifact"]
+    run_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
+        json={"scenario_input": "A temporary scenario."},
+    )
+    run_artifact = run_response.json()["artifact"]
+
+    delete_response = client.delete(
+        f"/api/projects/project_default/agent-designs/{agent['id']}"
+    )
+
+    assert delete_response.status_code == 204
+    assert (
+        client.get(f"/api/projects/project_default/agent-designs/{agent['id']}").status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/api/projects/project_default/artifacts/{design_artifact['id']}"
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/api/projects/project_default/artifacts/{run_artifact['id']}"
+        ).status_code
+        == 404
+    )

@@ -82,6 +82,85 @@
         "title": "AgentDesignCreated",
         "type": "object"
       },
+      "AgentRunCreate": {
+        "properties": {
+          "scenario_input": {
+            "default": "A customer asks what the agent should do next.",
+            "minLength": 1,
+            "title": "Scenario Input",
+            "type": "string"
+          }
+        },
+        "title": "AgentRunCreate",
+        "type": "object"
+      },
+      "AgentRunResult": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactRecord"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "response": {
+            "title": "Response",
+            "type": "string"
+          },
+          "scenario_input": {
+            "title": "Scenario Input",
+            "type": "string"
+          },
+          "tool_calls": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Tool Calls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "mode",
+          "scenario_input",
+          "response",
+          "tool_calls",
+          "evidence",
+          "artifact",
+          "created_at"
+        ],
+        "title": "AgentRunResult",
+        "type": "object"
+      },
       "ArtifactLink": {
         "properties": {
           "created_at": {
@@ -284,6 +363,90 @@
           "purpose"
         ],
         "title": "ContextPackCreate",
+        "type": "object"
+      },
+      "EvalCheck": {
+        "properties": {
+          "comment": {
+            "title": "Comment",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "passed",
+          "comment"
+        ],
+        "title": "EvalCheck",
+        "type": "object"
+      },
+      "EvalRunResult": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactRecord"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/EvalCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "run_artifact_id": {
+            "title": "Run Artifact Id",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "run_artifact_id",
+          "mode",
+          "score",
+          "passed",
+          "checks",
+          "artifact",
+          "created_at"
+        ],
+        "title": "EvalRunResult",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -534,6 +697,45 @@
       }
     },
     "/api/projects/{project_id}/agent-designs/{agent_id}": {
+      "delete": {
+        "operationId": "delete_agent_design_api_projects__project_id__agent_designs__agent_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Agent Design"
+      },
       "get": {
         "operationId": "get_agent_design_api_projects__project_id__agent_designs__agent_id__get",
         "parameters": [
@@ -579,6 +781,64 @@
           }
         },
         "summary": "Get Agent Design"
+      }
+    },
+    "/api/projects/{project_id}/agent-designs/{agent_id}/runs": {
+      "post": {
+        "operationId": "run_agent_design_api_projects__project_id__agent_designs__agent_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Agent Design"
       }
     },
     "/api/projects/{project_id}/artifact-links": {
@@ -820,6 +1080,54 @@
           }
         },
         "summary": "Get Project Artifact"
+      }
+    },
+    "/api/projects/{project_id}/artifacts/{artifact_id}/evaluate": {
+      "post": {
+        "operationId": "evaluate_run_artifact_api_projects__project_id__artifacts__artifact_id__evaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalRunResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Run Artifact"
       }
     },
     "/api/projects/{project_id}/artifacts/{artifact_id}/links": {

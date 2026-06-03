@@ -19,10 +19,12 @@ REQUIRED_PATHS = {
     "/api/projects/{project_id}",
     "/api/projects/{project_id}/agent-designs",
     "/api/projects/{project_id}/agent-designs/{agent_id}",
+    "/api/projects/{project_id}/agent-designs/{agent_id}/runs",
     "/api/projects/{project_id}/artifact-links",
     "/api/projects/{project_id}/artifacts",
     "/api/projects/{project_id}/artifacts/search",
     "/api/projects/{project_id}/artifacts/{artifact_id}",
+    "/api/projects/{project_id}/artifacts/{artifact_id}/evaluate",
     "/api/projects/{project_id}/artifacts/{artifact_id}/links",
     "/api/projects/{project_id}/context-packs",
 }

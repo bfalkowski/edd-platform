@@ -17,6 +17,9 @@ class JsonStore(Protocol):
     def save_record(self, collection: str, record_id: str, record: BaseModel) -> None:
         ...
 
+    def delete_record(self, collection: str, record_id: str) -> None:
+        ...
+
 
 class InMemoryJsonStore:
     def __init__(self) -> None:
@@ -32,6 +35,9 @@ class InMemoryJsonStore:
     def save_record(self, collection: str, record_id: str, record: BaseModel) -> None:
         records = self._records.setdefault(collection, {})
         records[record_id] = json.dumps(record.model_dump(mode="json"), sort_keys=True)
+
+    def delete_record(self, collection: str, record_id: str) -> None:
+        self._records.get(collection, {}).pop(record_id, None)
 
 
 class PostgresJsonStore:
@@ -64,6 +70,14 @@ class PostgresJsonStore:
                     DO UPDATE SET payload = excluded.payload
                     """,
                     (collection, record_id, payload),
+                )
+
+    def delete_record(self, collection: str, record_id: str) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM platform_records WHERE collection = %s AND id = %s",
+                    (collection, record_id),
                 )
 
     def _initialize(self) -> None:

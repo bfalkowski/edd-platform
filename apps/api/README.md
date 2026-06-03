@@ -13,10 +13,13 @@ Current first slice:
 - `GET /api/projects/{project_id}/agent-designs`
 - `POST /api/projects/{project_id}/agent-designs`
 - `GET /api/projects/{project_id}/agent-designs/{agent_id}`
+- `DELETE /api/projects/{project_id}/agent-designs/{agent_id}`
+- `POST /api/projects/{project_id}/agent-designs/{agent_id}/runs`
 - `POST /api/projects/{project_id}/artifact-links`
 - `GET /api/projects/{project_id}/artifacts`
 - `GET /api/projects/{project_id}/artifacts/search`
 - `GET /api/projects/{project_id}/artifacts/{artifact_id}`
+- `POST /api/projects/{project_id}/artifacts/{artifact_id}/evaluate`
 - `GET /api/projects/{project_id}/artifacts/{artifact_id}/links`
 - `POST /api/projects/{project_id}/context-packs`
 

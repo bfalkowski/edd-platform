@@ -1,4 +1,14 @@
-import { Clock3, PanelLeft, PanelRight, PencilLine, Search, X } from "lucide-react";
+import {
+  Clock3,
+  MoreHorizontal,
+  PanelLeft,
+  PanelRight,
+  PencilLine,
+  Play,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
@@ -57,6 +67,32 @@ type ContextPack = {
   created_at: string;
 };
 
+type AgentRunResult = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  mode: string;
+  scenario_input: string;
+  response: string;
+  tool_calls: { name: string; output: string }[];
+  evidence: string[];
+  artifact: ArtifactRecord;
+  created_at: string;
+};
+
+type EvalRunResult = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  run_artifact_id: string;
+  mode: string;
+  score: number;
+  passed: boolean;
+  checks: { id: string; passed: boolean; comment: string }[];
+  artifact: ArtifactRecord;
+  created_at: string;
+};
+
 const apiBase = "/api";
 
 async function listProjects(): Promise<Project[]> {
@@ -92,6 +128,15 @@ async function createAgentDesign(
   return payload.agent;
 }
 
+async function deleteAgentDesign(projectId: string, agentDesignId: string): Promise<void> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error("Unable to delete agent design.");
+  }
+}
+
 async function buildContextPack(projectId: string, agentDesignId?: string): Promise<ContextPack> {
   const response = await fetch(`${apiBase}/projects/${projectId}/context-packs`, {
     method: "POST",
@@ -123,6 +168,32 @@ async function loadArtifactLinks(projectId: string, artifactId: string): Promise
   return response.json();
 }
 
+async function runAgentDesign(
+  projectId: string,
+  agentDesignId: string,
+  scenarioInput: string,
+): Promise<AgentRunResult> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}/runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scenario_input: scenarioInput }),
+  });
+  if (!response.ok) {
+    throw new Error("Unable to run agent scenario.");
+  }
+  return response.json();
+}
+
+async function evaluateArtifact(projectId: string, artifactId: string): Promise<EvalRunResult> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/artifacts/${artifactId}/evaluate`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error("Unable to evaluate run artifact.");
+  }
+  return response.json();
+}
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -130,11 +201,19 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [intent, setIntent] = useState("");
+  const [scenarioInput, setScenarioInput] = useState(
+    "A customer reports a failed deployment and asks what to do next.",
+  );
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
+  const [openAgentMenuId, setOpenAgentMenuId] = useState<string | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<AgentDesign | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
+  const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -159,6 +238,9 @@ function App() {
     () => agents.find((agent) => agent.id === selectedId) ?? null,
     [agents, selectedId],
   );
+  const artifactsById = useMemo(() => {
+    return new Map((contextPack?.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
+  }, [contextPack]);
 
   useEffect(() => {
     if (!project) {
@@ -183,10 +265,82 @@ function App() {
       const agent = await createAgentDesign(project.id, name.trim(), intent.trim());
       setAgents((items) => [agent, ...items]);
       setSelectedId(agent.id);
+      setReviewArtifact(null);
+      setReviewLinks([]);
       setName("");
       setIntent("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create agent design.");
+    }
+  }
+
+  async function handleDeleteAgent() {
+    if (!project || !deleteCandidate) {
+      return;
+    }
+    setError(null);
+    try {
+      await deleteAgentDesign(project.id, deleteCandidate.id);
+      setAgents((items) => items.filter((agent) => agent.id !== deleteCandidate.id));
+      if (selectedId === deleteCandidate.id) {
+        setSelectedId(null);
+        setContextPack(null);
+        setReviewArtifact(null);
+        setReviewLinks([]);
+        setActivity(null);
+      }
+      setDeleteCandidate(null);
+      setOpenAgentMenuId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete agent design.");
+    }
+  }
+
+  async function handleRunAgent() {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    setError(null);
+    setActivity("Running mock scenario.");
+    setIsRunning(true);
+    try {
+      const run = await runAgentDesign(project.id, selectedAgent.id, scenarioInput.trim());
+      setActivity("Stored run evidence.");
+      setContextPack((pack) =>
+        pack
+          ? { ...pack, artifacts: [run.artifact, ...pack.artifacts] }
+          : pack,
+      );
+      await handleReviewArtifact(run.artifact.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to run agent scenario.");
+      setActivity(null);
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  async function handleEvaluateArtifact(artifact: ArtifactRecord) {
+    if (!project) {
+      return;
+    }
+    setError(null);
+    setActivity("Evaluating run evidence.");
+    setEvaluatingArtifactId(artifact.id);
+    try {
+      const evalResult = await evaluateArtifact(project.id, artifact.id);
+      setActivity("Stored eval evidence.");
+      setContextPack((pack) =>
+        pack
+          ? { ...pack, artifacts: [evalResult.artifact, ...pack.artifacts] }
+          : pack,
+      );
+      await handleReviewArtifact(evalResult.artifact.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to evaluate run artifact.");
+      setActivity(null);
+    } finally {
+      setEvaluatingArtifactId(null);
     }
   }
 
@@ -229,7 +383,16 @@ function App() {
         </div>
 
         <nav className="primary-nav" aria-label="Primary">
-          <button className="nav-item active" type="button">
+          <button
+            className={!selectedAgent ? "nav-item active" : "nav-item"}
+            type="button"
+            onClick={() => {
+              setSelectedId(null);
+              setReviewArtifact(null);
+              setReviewLinks([]);
+              setActivity(null);
+            }}
+          >
             <PencilLine size={22} />
             {sidebarOpen ? <span>New agent</span> : null}
           </button>
@@ -248,16 +411,48 @@ function App() {
             <p className="section-label">Agents</p>
             {isLoading ? <p className="empty-list">Loading...</p> : null}
             {!isLoading && agents.length === 0 ? <p className="empty-list">No agents yet</p> : null}
-            {agents.map((agent, index) => (
-              <button
+            {agents.map((agent) => (
+              <div
                 className={agent.id === selectedId ? "agent-row selected" : "agent-row"}
                 key={agent.id}
-                type="button"
-                onClick={() => setSelectedId(agent.id)}
               >
-                <span>{agent.name}</span>
-                <span className="shortcut">⌘{index + 1}</span>
-              </button>
+                <button
+                  className="agent-select"
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(agent.id);
+                    setOpenAgentMenuId(null);
+                  }}
+                >
+                  <span>{agent.name}</span>
+                </button>
+                <button
+                  className="agent-menu-button"
+                  type="button"
+                  aria-label={`Open actions for ${agent.name}`}
+                  onClick={() =>
+                    setOpenAgentMenuId((current) => (current === agent.id ? null : agent.id))
+                  }
+                >
+                  <MoreHorizontal size={21} />
+                </button>
+                {openAgentMenuId === agent.id ? (
+                  <div className="agent-menu" role="menu">
+                    <button
+                      className="agent-menu-item danger"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setDeleteCandidate(agent);
+                        setOpenAgentMenuId(null);
+                      }}
+                    >
+                      <Trash2 size={18} />
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             ))}
           </section>
         ) : null}
@@ -276,35 +471,37 @@ function App() {
           <span className="status-pill">Platform: local</span>
         </header>
 
-        <section className="canvas">
-          <form className="intent-form" onSubmit={handleCreate}>
-            <p className="eyebrow">Start from intent</p>
-            <h2>What agent are we building?</h2>
-            <label>
-              Agent name
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Customer Service Triage Agent"
-                required
-              />
-            </label>
-            <label>
-              Agent intent
-              <textarea
-                value={intent}
-                onChange={(event) => setIntent(event.target.value)}
-                placeholder="Determine why an issue escalated, gather evidence, and recommend a safe next action."
-                required
-              />
-            </label>
-            <button className="primary-button" type="submit">
-              Create agent
-            </button>
-            {error ? <p className="error-text">{error}</p> : null}
-          </form>
+        <section className={selectedAgent ? "canvas canvas-workspace" : "canvas"}>
+          {!selectedAgent ? (
+            <form className="intent-form" onSubmit={handleCreate}>
+              <p className="eyebrow">Start from intent</p>
+              <h2>What agent are we building?</h2>
+              <label>
+                Agent name
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Customer Service Triage Agent"
+                  required
+                />
+              </label>
+              <label>
+                Agent intent
+                <textarea
+                  value={intent}
+                  onChange={(event) => setIntent(event.target.value)}
+                  placeholder="Determine why an issue escalated, gather evidence, and recommend a safe next action."
+                  required
+                />
+              </label>
+              <button className="primary-button" type="submit">
+                Create agent
+              </button>
+              {error ? <p className="error-text">{error}</p> : null}
+            </form>
+          ) : null}
 
-          <section className="evidence-panel">
+          <section className={selectedAgent ? "evidence-panel evidence-workspace" : "evidence-panel"}>
             <p className="eyebrow">Evidence context</p>
             <h2>{selectedAgent ? "Evidence artifacts" : "Ready for the first design"}</h2>
             {!selectedAgent ? (
@@ -315,6 +512,32 @@ function App() {
             ) : null}
             {selectedAgent ? (
               <div className="artifact-stack">
+                <section className="run-playground">
+                  <div>
+                    <p className="artifact-type">Agent playground</p>
+                    <h3>Run a scenario</h3>
+                    <p>
+                      Execute this design in deterministic mock mode and store the output as run evidence.
+                    </p>
+                  </div>
+                  <label>
+                    Scenario input
+                    <textarea
+                      value={scenarioInput}
+                      onChange={(event) => setScenarioInput(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={handleRunAgent}
+                    disabled={isRunning}
+                  >
+                    <Play size={18} />
+                    {isRunning ? "Running" : "Run scenario"}
+                  </button>
+                  {activity ? <p className="activity-text">{activity}</p> : null}
+                </section>
                 <div className="context-pack-meta">
                   <span>Context pack</span>
                   <strong>{contextPack?.purpose.replaceAll("_", " ") ?? "Preparing"}</strong>
@@ -330,14 +553,26 @@ function App() {
                       <h3>{artifact.title}</h3>
                       <p>{artifact.body}</p>
                     </div>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => handleReviewArtifact(artifact.id)}
-                    >
-                      <PanelRight size={18} />
-                      Review
-                    </button>
+                    <div className="artifact-actions">
+                      {artifact.artifact_type === "RUN_RESULT" ? (
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => handleEvaluateArtifact(artifact)}
+                          disabled={evaluatingArtifactId === artifact.id}
+                        >
+                          {evaluatingArtifactId === artifact.id ? "Evaluating" : "Evaluate"}
+                        </button>
+                      ) : null}
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => handleReviewArtifact(artifact.id)}
+                      >
+                        <PanelRight size={18} />
+                        Review
+                      </button>
+                    </div>
                     <dl>
                       <div>
                         <dt>Source</dt>
@@ -393,12 +628,12 @@ function App() {
                       link.source_artifact_id === reviewArtifact.id
                         ? link.target_artifact_id
                         : link.source_artifact_id;
+                    const relatedArtifact = artifactsById.get(relatedId);
                     return (
                       <li key={link.id}>
                         <strong>{link.relationship_type.replaceAll("_", " ")}</strong>
-                        <span>
-                          {direction} {relatedId}
-                        </span>
+                        <span>{direction}</span>
+                        <b>{relatedArtifact?.title ?? relatedId}</b>
                       </li>
                     );
                   })}
@@ -425,6 +660,28 @@ function App() {
             </dl>
           </div>
         </aside>
+      ) : null}
+      {deleteCandidate ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="confirm-dialog" role="dialog" aria-modal="true">
+            <h2>Delete agent?</h2>
+            <p>
+              This will delete <strong>{deleteCandidate.name}</strong> and its run evidence.
+            </p>
+            <div className="dialog-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setDeleteCandidate(null)}
+              >
+                Cancel
+              </button>
+              <button className="danger-button" type="button" onClick={handleDeleteAgent}>
+                Delete
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </div>
   );

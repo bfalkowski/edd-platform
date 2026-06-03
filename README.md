@@ -46,9 +46,12 @@ The repo now has a minimal local product loop:
 5. List agent designs for the active project in the left nav.
 6. Select a design and inspect its deterministic evidence context pack.
 7. Keep local state across API restarts with Postgres-backed storage.
+8. Run a deterministic mock scenario from the selected agent.
+9. Store the scenario output as a `RUN_RESULT` evidence artifact.
+10. Evaluate the run and store deterministic `EVAL_RESULT` evidence.
 
 This is intentionally small. The next layers are judge prompts, gates,
-deterministic runner evidence, and evidence context.
+failure packets, and richer evidence context.
 
 The evidence context design is captured in
 [`docs/hld/HLD-001-artifact-retrieval-and-evidence-context.md`](docs/hld/HLD-001-artifact-retrieval-and-evidence-context.md).

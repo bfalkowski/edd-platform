@@ -52,11 +52,11 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 ## Phase 3: Runner Integration
 
 - [ ] Synthesize `HLD-004: Runner, Mock Mode, and Live Mode`.
-- [ ] Add deterministic runner package.
-- [ ] Run a mock scenario from a selected agent design.
-- [ ] Store run evidence artifacts.
-- [ ] Store eval result artifacts.
-- [ ] Display run/eval evidence in context packs.
+- [x] Add deterministic runner package.
+- [x] Run a mock scenario from a selected agent design.
+- [x] Store run evidence artifacts.
+- [x] Store eval result artifacts.
+- [x] Display run/eval evidence in context packs.
 
 ## Phase 4: Judges and Gates
 
@@ -105,7 +105,9 @@ The UI works for the first vertical slice:
 6. The Evidence panel displays a deterministic `AGENT_PROMPT_REVIEW` context
    pack containing that artifact.
 7. Local API state persists to Postgres across restarts.
+8. A selected agent can run a deterministic mock scenario from the playground.
+9. The API stores the run output as a `RUN_RESULT` artifact.
+10. The UI can evaluate a run and store deterministic `EVAL_RESULT` evidence.
 
 The UI is not yet a full EDD workflow. It does not yet edit artifact sections,
-run scenarios, evaluate runs, create gates, link Langfuse traces, or persist to
-Postgres.
+create gates, or link Langfuse traces.
