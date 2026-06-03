@@ -13,14 +13,17 @@ flowchart LR
   UI["React console<br/>apps/web"]
   API["Platform API<br/>apps/api"]
   Store["Project + evidence store<br/>projects, designs, artifacts, links, runs, evals, gates"]
+  Tools["Tool governance<br/>definitions, approval, allowlists"]
   Runner["Runner package<br/>packages/runner"]
-  LangGraph["LangGraph agents<br/>graphs, tools, scenarios"]
+  LangGraph["LangChain / LangGraph<br/>agent + tool loop"]
   Langfuse["Langfuse<br/>trace observability"]
 
   User --> UI
   UI --> API
   API --> Store
+  API --> Tools
   API --> Runner
+  Tools --> Runner
   Runner --> LangGraph
   Runner --> API
   API --> Langfuse
@@ -149,6 +152,25 @@ flowchart LR
 
 CI must pass without model-provider credentials. Live model behavior is opt-in.
 
+## Tool Governance Boundary
+
+Tool orchestration should use existing agent framework primitives instead of a
+custom tool loop. LangChain/LangGraph should own the mechanics of model calls,
+tool-call messages, tool execution, and continuing the graph until a final
+response is produced.
+
+The platform still owns governance:
+
+- tool definitions and schemas
+- tool approval status
+- which tools are allowed for each agent design
+- tool-call and tool-result evidence
+- evals that judge tool selection and grounded use
+
+The runner is the adapter between those responsibilities. It converts approved
+platform tools into LangChain/LangGraph tools for a run, executes the graph, and
+returns tool events and final responses to the platform as evidence artifacts.
+
 ## Example Projects
 
 ```mermaid
@@ -185,7 +207,7 @@ Each example should exercise the same platform services:
 | React console | product UI, review panels, evidence views, local activity |
 | Platform API | product state, artifacts, links, context packs, judges, gates |
 | Domain package | shared object vocabulary and schemas |
-| Runner package | LangGraph execution, mock tools, scenarios, replay |
+| Runner package | LangChain/LangGraph execution, platform-approved tools, scenarios, replay |
 | Langfuse adapter | trace references and observability integration |
 | Examples | seeded portfolio/demo projects using the shared backend |
 

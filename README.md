@@ -30,7 +30,10 @@ packages/langfuse-adapter
 
 - The React console is the only product UI.
 - The platform owns agent designs, judge prompts, gates, evidence context, and promotion.
-- The runner executes agent implementations and returns evidence.
+- The platform owns tool governance: definitions, approval status, agent allowlists,
+  and tool-call evidence.
+- LangChain/LangGraph should provide the agent/tool execution loop; the runner
+  adapts approved platform tools into that loop and returns evidence.
 - Langfuse is an optional trace evidence layer, not the workflow source of truth.
 - Local development and CI must work without model-provider keys.
 - Useful old code should be copied intentionally, renamed as needed, and simplified.
@@ -49,6 +52,8 @@ The repo now has a minimal local product loop:
 8. Run a deterministic mock scenario from the selected agent.
 9. Store the scenario output as a `RUN_RESULT` evidence artifact.
 10. Evaluate the run and store deterministic `EVAL_RESULT` evidence.
+11. Optionally switch the playground to live OpenAI mode and store provider
+    output as the same `RUN_RESULT` evidence shape.
 
 This is intentionally small. The next layers are judge prompts, gates,
 failure packets, and richer evidence context.
@@ -110,6 +115,10 @@ By default, the API connects to
 Set `EDD_PLATFORM_DATABASE_URL` to point at a different Postgres database.
 Tests use `EDD_PLATFORM_STORAGE_BACKEND=memory` so CI does not require a
 database service.
+
+Live OpenAI runs are opt-in. Set `OPENAI_API_KEY` before starting the API, then
+choose `Live OpenAI` in the playground. The default model is `gpt-5-nano`; set
+`EDD_OPENAI_MODEL` to use a different OpenAI model.
 
 Run tests and build checks:
 

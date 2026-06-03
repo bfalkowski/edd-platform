@@ -54,9 +54,15 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 - [ ] Synthesize `HLD-004: Runner, Mock Mode, and Live Mode`.
 - [x] Add deterministic runner package.
 - [x] Run a mock scenario from a selected agent design.
+- [x] Run a live OpenAI scenario from a selected agent design.
 - [x] Store run evidence artifacts.
 - [x] Store eval result artifacts.
 - [x] Display run/eval evidence in context packs.
+- [ ] Add platform-owned tool definitions and approval status.
+- [ ] Add agent-level approved tool allowlists.
+- [ ] Adapt approved platform tools into LangChain/LangGraph tool primitives.
+- [ ] Replace direct live OpenAI runner with a LangGraph tool-calling runner.
+- [ ] Store tool calls and tool results as run evidence.
 
 ## Phase 4: Judges and Gates
 

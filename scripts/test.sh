@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+echo "Scanning tracked files for secrets"
+python "$ROOT_DIR/scripts/secret_scan.py"
+
 echo "Running API tests"
 (
   cd "$ROOT_DIR/apps/api"

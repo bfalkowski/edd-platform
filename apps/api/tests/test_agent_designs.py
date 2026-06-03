@@ -1,5 +1,9 @@
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
+import edd_platform_api.main as api_main
+from edd_runner import RunnerResult, RunnerToolCall, extract_response_text
 from edd_platform_api.main import app  # noqa: E402
 
 
@@ -210,6 +214,99 @@ def test_run_agent_design_requires_known_agent() -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Live Agent",
+            "intent": "Gather evidence and recommend a safe next action.",
+        },
+    )
+    agent = create_response.json()["agent"]
+
+    def fake_config_from_env():
+        return object()
+
+    def fake_run_openai_agent(agent_design, scenario, config):
+        return RunnerResult(
+            id="run_live_fake",
+            agent_design_id=agent_design.id,
+            mode="live",
+            scenario_input=scenario.input,
+            response="Live response with evidence, assumptions, and a safe next action.",
+            tool_calls=[
+                RunnerToolCall(name="openai.responses", output="gpt-5-nano"),
+            ],
+            evidence=["Used fake OpenAI provider in test."],
+            created_at=datetime.now(timezone.utc),
+        )
+
+    monkeypatch.setattr(api_main, "openai_config_from_env", fake_config_from_env)
+    monkeypatch.setattr(api_main, "run_openai_agent", fake_run_openai_agent)
+
+    response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
+        json={
+            "scenario_input": "A customer reports a failed deployment.",
+            "mode": "live",
+        },
+    )
+
+    assert response.status_code == 201
+    run = response.json()
+    assert run["mode"] == "live"
+    assert run["artifact"]["source"] == "runner:live"
+    assert run["tool_calls"][0]["output"] == "gpt-5-nano"
+
+
+def test_live_run_requires_openai_api_key(monkeypatch) -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Needs Key",
+            "intent": "Gather evidence and recommend a safe next action.",
+        },
+    )
+    agent = create_response.json()["agent"]
+
+    def fake_config_from_env():
+        raise RuntimeError("OPENAI_API_KEY is required for live OpenAI runs.")
+
+    monkeypatch.setattr(api_main, "openai_config_from_env", fake_config_from_env)
+
+    response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
+        json={
+            "scenario_input": "A customer reports a failed deployment.",
+            "mode": "live",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "OPENAI_API_KEY" in response.json()["detail"]
+
+
+def test_extract_response_text_from_nested_response_output() -> None:
+    payload = {
+        "output": [
+            {"type": "reasoning", "summary": []},
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "A grounded live response.",
+                    }
+                ],
+            },
+        ]
+    }
+
+    assert extract_response_text(payload) == "A grounded live response."
 
 
 def test_evaluate_run_artifact_creates_eval_result_artifact() -> None:

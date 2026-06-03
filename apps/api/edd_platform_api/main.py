@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Response
@@ -16,7 +16,13 @@ RUNNER_ROOT = ROOT / "packages" / "runner"
 if str(RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(RUNNER_ROOT))
 
-from edd_runner import RunnerAgentDesign, RunnerScenario, run_mock_agent  # noqa: E402
+from edd_runner import (  # noqa: E402
+    RunnerAgentDesign,
+    RunnerScenario,
+    openai_config_from_env,
+    run_mock_agent,
+    run_openai_agent,
+)
 
 
 class AgentDesignCreate(BaseModel):
@@ -75,6 +81,7 @@ class AgentRunCreate(BaseModel):
         default="A customer asks what the agent should do next.",
         min_length=1,
     )
+    mode: Literal["mock", "live"] = "mock"
 
 
 class AgentRunResult(BaseModel):
@@ -301,10 +308,21 @@ def run_agent_design(
 ) -> AgentRunResult:
     get_project_or_404(project_id)
     agent = get_agent_design_or_404(project_id, agent_id)
-    runner_result = run_mock_agent(
-        RunnerAgentDesign(id=agent.id, name=agent.name, intent=agent.intent),
-        RunnerScenario(input=payload.scenario_input.strip()),
-    )
+    runner_agent = RunnerAgentDesign(id=agent.id, name=agent.name, intent=agent.intent)
+    runner_scenario = RunnerScenario(input=payload.scenario_input.strip())
+    if payload.mode == "live":
+        try:
+            runner_result = run_openai_agent(
+                runner_agent,
+                runner_scenario,
+                openai_config_from_env(),
+            )
+        except RuntimeError as exc:
+            detail = str(exc)
+            status_code = 400 if "OPENAI_API_KEY" in detail else 502
+            raise HTTPException(status_code=status_code, detail=detail) from exc
+    else:
+        runner_result = run_mock_agent(runner_agent, runner_scenario)
     now = datetime.now(timezone.utc)
     tool_summary = ", ".join(tool.name for tool in runner_result.tool_calls)
     artifact = ArtifactRecord(
@@ -318,7 +336,7 @@ def run_agent_design(
             f"Scenario\n{runner_result.scenario_input}\n\n"
             f"Tools\n{tool_summary}"
         ),
-        source="runner:mock",
+        source=f"runner:{runner_result.mode}",
         agent_design_id=agent.id,
         created_at=now,
         updated_at=now,

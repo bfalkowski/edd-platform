@@ -84,6 +84,15 @@
       },
       "AgentRunCreate": {
         "properties": {
+          "mode": {
+            "default": "mock",
+            "enum": [
+              "mock",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "scenario_input": {
             "default": "A customer asks what the agent should do next.",
             "minLength": 1,

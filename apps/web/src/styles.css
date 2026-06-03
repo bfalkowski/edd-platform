@@ -422,6 +422,33 @@ dd {
   margin: 0;
 }
 
+.run-mode-control {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dedfe6;
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  width: max-content;
+}
+
+.mode-option {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: #737684;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 0 14px;
+}
+
+.mode-option.active {
+  background: #ececf1;
+  color: #202123;
+}
+
 .run-playground textarea {
   min-height: 86px;
 }
@@ -430,8 +457,10 @@ dd {
   margin: 0;
 }
 
+.run-mode-control,
 .run-playground .primary-button,
-.run-playground .activity-text {
+.run-playground .activity-text,
+.run-playground .error-text {
   align-self: center;
   grid-column: 2;
   justify-self: start;
@@ -694,8 +723,10 @@ dd {
     grid-template-columns: 1fr;
   }
 
+  .run-mode-control,
   .run-playground .primary-button,
-  .run-playground .activity-text {
+  .run-playground .activity-text,
+  .run-playground .error-text {
     grid-column: 1;
   }
 

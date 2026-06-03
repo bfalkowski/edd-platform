@@ -95,10 +95,22 @@ type EvalRunResult = {
 
 const apiBase = "/api";
 
+async function responseError(response: Response, fallback: string): Promise<Error> {
+  try {
+    const payload = await response.json();
+    if (typeof payload.detail === "string") {
+      return new Error(payload.detail);
+    }
+  } catch {
+    // Use the fallback below when the API returns a non-JSON error body.
+  }
+  return new Error(fallback);
+}
+
 async function listProjects(): Promise<Project[]> {
   const response = await fetch(`${apiBase}/projects`);
   if (!response.ok) {
-    throw new Error("Unable to load projects.");
+    throw await responseError(response, "Unable to load projects.");
   }
   return response.json();
 }
@@ -106,7 +118,7 @@ async function listProjects(): Promise<Project[]> {
 async function listAgentDesigns(projectId: string): Promise<AgentDesign[]> {
   const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs`);
   if (!response.ok) {
-    throw new Error("Unable to load agent designs.");
+    throw await responseError(response, "Unable to load agent designs.");
   }
   return response.json();
 }
@@ -122,7 +134,7 @@ async function createAgentDesign(
     body: JSON.stringify({ name, intent }),
   });
   if (!response.ok) {
-    throw new Error("Unable to create agent design.");
+    throw await responseError(response, "Unable to create agent design.");
   }
   const payload = (await response.json()) as NewAgentResponse;
   return payload.agent;
@@ -133,7 +145,7 @@ async function deleteAgentDesign(projectId: string, agentDesignId: string): Prom
     method: "DELETE",
   });
   if (!response.ok) {
-    throw new Error("Unable to delete agent design.");
+    throw await responseError(response, "Unable to delete agent design.");
   }
 }
 
@@ -147,7 +159,7 @@ async function buildContextPack(projectId: string, agentDesignId?: string): Prom
     }),
   });
   if (!response.ok) {
-    throw new Error("Unable to build evidence context.");
+    throw await responseError(response, "Unable to build evidence context.");
   }
   return response.json();
 }
@@ -155,7 +167,7 @@ async function buildContextPack(projectId: string, agentDesignId?: string): Prom
 async function loadArtifact(projectId: string, artifactId: string): Promise<ArtifactRecord> {
   const response = await fetch(`${apiBase}/projects/${projectId}/artifacts/${artifactId}`);
   if (!response.ok) {
-    throw new Error("Unable to load artifact.");
+    throw await responseError(response, "Unable to load artifact.");
   }
   return response.json();
 }
@@ -163,7 +175,7 @@ async function loadArtifact(projectId: string, artifactId: string): Promise<Arti
 async function loadArtifactLinks(projectId: string, artifactId: string): Promise<ArtifactLink[]> {
   const response = await fetch(`${apiBase}/projects/${projectId}/artifacts/${artifactId}/links`);
   if (!response.ok) {
-    throw new Error("Unable to load related evidence.");
+    throw await responseError(response, "Unable to load related evidence.");
   }
   return response.json();
 }
@@ -172,14 +184,15 @@ async function runAgentDesign(
   projectId: string,
   agentDesignId: string,
   scenarioInput: string,
+  mode: "mock" | "live",
 ): Promise<AgentRunResult> {
   const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}/runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scenario_input: scenarioInput }),
+    body: JSON.stringify({ scenario_input: scenarioInput, mode }),
   });
   if (!response.ok) {
-    throw new Error("Unable to run agent scenario.");
+    throw await responseError(response, "Unable to run agent scenario.");
   }
   return response.json();
 }
@@ -189,7 +202,7 @@ async function evaluateArtifact(projectId: string, artifactId: string): Promise<
     method: "POST",
   });
   if (!response.ok) {
-    throw new Error("Unable to evaluate run artifact.");
+    throw await responseError(response, "Unable to evaluate run artifact.");
   }
   return response.json();
 }
@@ -204,6 +217,7 @@ function App() {
   const [scenarioInput, setScenarioInput] = useState(
     "A customer reports a failed deployment and asks what to do next.",
   );
+  const [runMode, setRunMode] = useState<"mock" | "live">("mock");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
@@ -301,10 +315,15 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Running mock scenario.");
+    setActivity(runMode === "live" ? "Running live OpenAI scenario." : "Running mock scenario.");
     setIsRunning(true);
     try {
-      const run = await runAgentDesign(project.id, selectedAgent.id, scenarioInput.trim());
+      const run = await runAgentDesign(
+        project.id,
+        selectedAgent.id,
+        scenarioInput.trim(),
+        runMode,
+      );
       setActivity("Stored run evidence.");
       setContextPack((pack) =>
         pack
@@ -314,7 +333,7 @@ function App() {
       await handleReviewArtifact(run.artifact.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to run agent scenario.");
-      setActivity(null);
+      setActivity("Run failed.");
     } finally {
       setIsRunning(false);
     }
@@ -517,8 +536,24 @@ function App() {
                     <p className="artifact-type">Agent playground</p>
                     <h3>Run a scenario</h3>
                     <p>
-                      Execute this design in deterministic mock mode and store the output as run evidence.
+                      Execute this design in mock mode or live OpenAI mode and store the output as run evidence.
                     </p>
+                  </div>
+                  <div className="run-mode-control" aria-label="Run mode">
+                    <button
+                      className={runMode === "mock" ? "mode-option active" : "mode-option"}
+                      type="button"
+                      onClick={() => setRunMode("mock")}
+                    >
+                      Mock
+                    </button>
+                    <button
+                      className={runMode === "live" ? "mode-option active" : "mode-option"}
+                      type="button"
+                      onClick={() => setRunMode("live")}
+                    >
+                      Live OpenAI
+                    </button>
                   </div>
                   <label>
                     Scenario input
@@ -534,9 +569,10 @@ function App() {
                     disabled={isRunning}
                   >
                     <Play size={18} />
-                    {isRunning ? "Running" : "Run scenario"}
+                    {isRunning ? "Running" : runMode === "live" ? "Run live" : "Run mock"}
                   </button>
                   {activity ? <p className="activity-text">{activity}</p> : null}
+                  {error ? <p className="error-text">{error}</p> : null}
                 </section>
                 <div className="context-pack-meta">
                   <span>Context pack</span>

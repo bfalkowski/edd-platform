@@ -29,3 +29,8 @@ Local state is stored in Postgres by default. The API reads
 
 Tests use `EDD_PLATFORM_STORAGE_BACKEND=memory` so they do not require a
 database service.
+
+Run requests default to deterministic mock mode. To use live OpenAI mode, set
+`OPENAI_API_KEY` before starting the API and send `"mode": "live"` to the run
+endpoint. The default live model is `gpt-5-nano`; set `EDD_OPENAI_MODEL` to
+override it.
