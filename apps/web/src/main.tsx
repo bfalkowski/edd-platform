@@ -19,6 +19,7 @@ type AgentDesign = {
   name: string;
   intent: string;
   status: string;
+  allowed_tool_names: string[];
   created_at: string;
   updated_at: string;
 };
@@ -537,6 +538,9 @@ function App() {
                     <h3>Run a scenario</h3>
                     <p>
                       Execute this design in mock mode or live OpenAI mode and store the output as run evidence.
+                    </p>
+                    <p className="tool-list">
+                      Tools: {selectedAgent.allowed_tool_names.join(", ") || "none"}
                     </p>
                   </div>
                   <div className="run-mode-control" aria-label="Run mode">

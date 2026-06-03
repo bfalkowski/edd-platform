@@ -10,6 +10,7 @@ Current first slice:
 - `GET /health`
 - `GET /api/projects`
 - `GET /api/projects/{project_id}`
+- `GET /api/projects/{project_id}/tools`
 - `GET /api/projects/{project_id}/agent-designs`
 - `POST /api/projects/{project_id}/agent-designs`
 - `GET /api/projects/{project_id}/agent-designs/{agent_id}`
@@ -34,3 +35,7 @@ Run requests default to deterministic mock mode. To use live OpenAI mode, set
 `OPENAI_API_KEY` before starting the API and send `"mode": "live"` to the run
 endpoint. The default live model is `gpt-5-nano`; set `EDD_OPENAI_MODEL` to
 override it.
+
+The API seeds an approved `get_weather` tool for local tool-calling runs. New
+agent designs currently allow that tool by default so the runner can prove the
+platform-governed tool boundary before the UI adds explicit tool assignment.

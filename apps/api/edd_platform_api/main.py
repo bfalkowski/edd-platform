@@ -19,6 +19,7 @@ if str(RUNNER_ROOT) not in sys.path:
 from edd_runner import (  # noqa: E402
     RunnerAgentDesign,
     RunnerScenario,
+    RunnerToolDefinition,
     openai_config_from_env,
     run_mock_agent,
     run_openai_agent,
@@ -28,6 +29,7 @@ from edd_runner import (  # noqa: E402
 class AgentDesignCreate(BaseModel):
     name: str = Field(min_length=1)
     intent: str = Field(min_length=1)
+    allowed_tool_names: List[str] = Field(default_factory=list)
 
 
 class Project(BaseModel):
@@ -44,6 +46,7 @@ class AgentDesign(BaseModel):
     name: str
     intent: str
     status: str
+    allowed_tool_names: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -74,6 +77,19 @@ class ArtifactLink(BaseModel):
     target_artifact_id: str
     relationship_type: str
     created_at: datetime
+
+
+class ToolDefinition(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    description: str
+    input_schema: Dict[str, object]
+    output_description: str
+    implementation_key: str
+    status: Literal["draft", "approved"]
+    created_at: datetime
+    updated_at: datetime
 
 
 class AgentRunCreate(BaseModel):
@@ -149,9 +165,32 @@ _projects: Dict[str, Project] = store.load_collection("projects", Project)
 _agent_designs: Dict[str, AgentDesign] = store.load_collection("agent_designs", AgentDesign)
 _artifacts: Dict[str, ArtifactRecord] = store.load_collection("artifacts", ArtifactRecord)
 _artifact_links: Dict[str, ArtifactLink] = store.load_collection("artifact_links", ArtifactLink)
+_tool_definitions: Dict[str, ToolDefinition] = store.load_collection("tool_definitions", ToolDefinition)
 if default_project.id not in _projects:
     _projects[default_project.id] = default_project
     store.save_record("projects", default_project.id, default_project)
+
+default_tool = ToolDefinition(
+    id="tool_get_weather",
+    project_id=default_project.id,
+    name="get_weather",
+    description="Get current weather for a US ZIP code.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "zip_code": {"type": "string", "description": "US ZIP code."}
+        },
+        "required": ["zip_code"],
+    },
+    output_description="Current temperature and conditions.",
+    implementation_key="local_weather_fixture",
+    status="approved",
+    created_at=seeded_at,
+    updated_at=seeded_at,
+)
+if default_tool.id not in _tool_definitions:
+    _tool_definitions[default_tool.id] = default_tool
+    store.save_record("tool_definitions", default_tool.id, default_tool)
 
 
 @app.get("/health")
@@ -185,6 +224,22 @@ def find_agent_design_artifact(agent_id: str) -> Optional[ArtifactRecord]:
         if artifact.artifact_type == "AGENT_DESIGN" and artifact.artifact_id == agent_id:
             return artifact
     return None
+
+
+def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[RunnerToolDefinition]:
+    allowed = set(agent.allowed_tool_names)
+    return [
+        RunnerToolDefinition(
+            name=tool.name,
+            description=tool.description,
+            input_schema=tool.input_schema,
+            output_description=tool.output_description,
+            implementation_key=tool.implementation_key,
+            status=tool.status,
+        )
+        for tool in _tool_definitions.values()
+        if tool.project_id == project_id and tool.status == "approved" and tool.name in allowed
+    ]
 
 
 def evaluate_run_text(body: str) -> List[EvalCheck]:
@@ -262,6 +317,7 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
         name=payload.name.strip(),
         intent=payload.intent.strip(),
         status="designing",
+        allowed_tool_names=payload.allowed_tool_names or ["get_weather"],
         created_at=now,
         updated_at=now,
     )
@@ -308,7 +364,12 @@ def run_agent_design(
 ) -> AgentRunResult:
     get_project_or_404(project_id)
     agent = get_agent_design_or_404(project_id, agent_id)
-    runner_agent = RunnerAgentDesign(id=agent.id, name=agent.name, intent=agent.intent)
+    runner_agent = RunnerAgentDesign(
+        id=agent.id,
+        name=agent.name,
+        intent=agent.intent,
+        allowed_tool_names=agent.allowed_tool_names,
+    )
     runner_scenario = RunnerScenario(input=payload.scenario_input.strip())
     if payload.mode == "live":
         try:
@@ -316,6 +377,7 @@ def run_agent_design(
                 runner_agent,
                 runner_scenario,
                 openai_config_from_env(),
+                approved_tools_for_agent(project_id, agent),
             )
         except RuntimeError as exc:
             detail = str(exc)
@@ -324,7 +386,9 @@ def run_agent_design(
     else:
         runner_result = run_mock_agent(runner_agent, runner_scenario)
     now = datetime.now(timezone.utc)
-    tool_summary = ", ".join(tool.name for tool in runner_result.tool_calls)
+    tool_summary = "\n".join(
+        f"- {tool.name}: {tool.output}" for tool in runner_result.tool_calls
+    )
     artifact = ArtifactRecord(
         id=f"artifact_{uuid4().hex[:12]}",
         project_id=project_id,
@@ -369,6 +433,13 @@ def run_agent_design(
         artifact=artifact,
         created_at=runner_result.created_at,
     )
+
+
+@app.get("/api/projects/{project_id}/tools")
+def list_tool_definitions(project_id: str) -> List[ToolDefinition]:
+    get_project_or_404(project_id)
+    tools = [tool for tool in _tool_definitions.values() if tool.project_id == project_id]
+    return sorted(tools, key=lambda tool: tool.name)
 
 
 @app.post("/api/projects/{project_id}/artifacts/{artifact_id}/evaluate", status_code=201)

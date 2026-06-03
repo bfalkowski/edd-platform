@@ -54,9 +54,11 @@ The repo now has a minimal local product loop:
 10. Evaluate the run and store deterministic `EVAL_RESULT` evidence.
 11. Optionally switch the playground to live OpenAI mode and store provider
     output as the same `RUN_RESULT` evidence shape.
+12. Give new agents an approved `get_weather` tool from the platform registry;
+    live runs adapt that approved tool into a LangChain/LangGraph tool loop.
 
-This is intentionally small. The next layers are judge prompts, gates,
-failure packets, and richer evidence context.
+This is intentionally small. The next layers are editable tool allowlists,
+judge prompts, gates, failure packets, and richer evidence context.
 
 The evidence context design is captured in
 [`docs/hld/HLD-001-artifact-retrieval-and-evidence-context.md`](docs/hld/HLD-001-artifact-retrieval-and-evidence-context.md).

@@ -58,11 +58,13 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 - [x] Store run evidence artifacts.
 - [x] Store eval result artifacts.
 - [x] Display run/eval evidence in context packs.
-- [ ] Add platform-owned tool definitions and approval status.
-- [ ] Add agent-level approved tool allowlists.
-- [ ] Adapt approved platform tools into LangChain/LangGraph tool primitives.
-- [ ] Replace direct live OpenAI runner with a LangGraph tool-calling runner.
-- [ ] Store tool calls and tool results as run evidence.
+- [x] Add platform-owned tool definitions and approval status.
+- [x] Add agent-level approved tool allowlists.
+- [x] Adapt approved platform tools into LangChain/LangGraph tool primitives.
+- [x] Replace direct live OpenAI runner with a LangGraph tool-calling runner.
+- [x] Store tool calls and tool results as run evidence.
+- [ ] Add UI to edit agent tool allowlists.
+- [ ] Split tool calls and tool results into first-class evidence artifacts.
 
 ## Phase 4: Judges and Gates
 

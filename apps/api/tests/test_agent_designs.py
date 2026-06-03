@@ -3,7 +3,13 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 import edd_platform_api.main as api_main
-from edd_runner import RunnerResult, RunnerToolCall, extract_response_text
+from edd_runner import (
+    RunnerResult,
+    RunnerToolCall,
+    RunnerToolDefinition,
+    build_langchain_tools,
+    extract_response_text,
+)
 from edd_platform_api.main import app  # noqa: E402
 
 
@@ -30,6 +36,7 @@ def test_create_and_list_agent_designs() -> None:
     assert agent["name"] == "Customer Service Triage Agent"
     assert agent["project_id"] == "project_default"
     assert agent["status"] == "designing"
+    assert agent["allowed_tool_names"] == ["get_weather"]
     assert artifact["artifact_type"] == "AGENT_DESIGN"
     assert artifact["artifact_id"] == agent["id"]
 
@@ -98,6 +105,37 @@ def test_artifact_detail_requires_known_artifact() -> None:
     response = client.get("/api/projects/project_default/artifacts/artifact_missing")
 
     assert response.status_code == 404
+
+
+def test_list_tool_definitions_includes_approved_weather_tool() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/projects/project_default/tools")
+
+    assert response.status_code == 200
+    tools = response.json()
+    assert tools[0]["name"] == "get_weather"
+    assert tools[0]["status"] == "approved"
+    assert tools[0]["implementation_key"] == "local_weather_fixture"
+
+
+def test_approved_weather_tool_adapts_to_langchain_tool() -> None:
+    tools = build_langchain_tools(
+        [
+            RunnerToolDefinition(
+                name="get_weather",
+                description="Get current weather for a US ZIP code.",
+                input_schema={"type": "object"},
+                output_description="Current temperature and conditions.",
+                implementation_key="local_weather_fixture",
+                status="approved",
+            )
+        ]
+    )
+
+    assert tools[0].invoke({"zip_code": "06511"}) == (
+        "Current weather for 06511 New Haven, CT: 41°F and cloudy."
+    )
 
 
 def test_artifact_links_create_and_list_related_artifacts() -> None:
@@ -230,7 +268,24 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
     def fake_config_from_env():
         return object()
 
-    def fake_run_openai_agent(agent_design, scenario, config):
+    def fake_run_openai_agent(agent_design, scenario, config, tool_definitions):
+        assert agent_design.allowed_tool_names == ["get_weather"]
+        assert tool_definitions == [
+            RunnerToolDefinition(
+                name="get_weather",
+                description="Get current weather for a US ZIP code.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "zip_code": {"type": "string", "description": "US ZIP code."}
+                    },
+                    "required": ["zip_code"],
+                },
+                output_description="Current temperature and conditions.",
+                implementation_key="local_weather_fixture",
+                status="approved",
+            )
+        ]
         return RunnerResult(
             id="run_live_fake",
             agent_design_id=agent_design.id,
@@ -238,7 +293,7 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
             scenario_input=scenario.input,
             response="Live response with evidence, assumptions, and a safe next action.",
             tool_calls=[
-                RunnerToolCall(name="openai.responses", output="gpt-5-nano"),
+                RunnerToolCall(name="get_weather", output="Current weather: 41°F and cloudy."),
             ],
             evidence=["Used fake OpenAI provider in test."],
             created_at=datetime.now(timezone.utc),
@@ -259,7 +314,8 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
     run = response.json()
     assert run["mode"] == "live"
     assert run["artifact"]["source"] == "runner:live"
-    assert run["tool_calls"][0]["output"] == "gpt-5-nano"
+    assert run["tool_calls"][0]["name"] == "get_weather"
+    assert "41°F" in run["artifact"]["body"]
 
 
 def test_live_run_requires_openai_api_key(monkeypatch) -> None:

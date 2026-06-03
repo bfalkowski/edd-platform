@@ -422,6 +422,12 @@ dd {
   margin: 0;
 }
 
+.run-playground .tool-list {
+  color: #202123;
+  font-weight: 800;
+  margin-top: 14px;
+}
+
 .run-mode-control {
   align-items: center;
   background: #ffffff;

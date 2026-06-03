@@ -17,6 +17,7 @@ from edd_platform_api.main import app  # noqa: E402
 REQUIRED_PATHS = {
     "/api/projects",
     "/api/projects/{project_id}",
+    "/api/projects/{project_id}/tools",
     "/api/projects/{project_id}/agent-designs",
     "/api/projects/{project_id}/agent-designs/{agent_id}",
     "/api/projects/{project_id}/agent-designs/{agent_id}/runs",

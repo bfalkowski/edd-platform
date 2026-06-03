@@ -3,6 +3,13 @@
     "schemas": {
       "AgentDesign": {
         "properties": {
+          "allowed_tool_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Tool Names",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -48,6 +55,13 @@
       },
       "AgentDesignCreate": {
         "properties": {
+          "allowed_tool_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Tool Names",
+            "type": "array"
+          },
           "intent": {
             "minLength": 1,
             "title": "Intent",
@@ -504,6 +518,71 @@
           "updated_at"
         ],
         "title": "Project",
+        "type": "object"
+      },
+      "ToolDefinition": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "implementation_key": {
+            "title": "Implementation Key",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_description": {
+            "title": "Output Description",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "approved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "description",
+          "input_schema",
+          "output_description",
+          "implementation_key",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ToolDefinition",
         "type": "object"
       },
       "ValidationError": {
@@ -1238,6 +1317,49 @@
           }
         },
         "summary": "Build Context Pack"
+      }
+    },
+    "/api/projects/{project_id}/tools": {
+      "get": {
+        "operationId": "list_tool_definitions_api_projects__project_id__tools_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ToolDefinition"
+                  },
+                  "title": "Response List Tool Definitions Api Projects  Project Id  Tools Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tool Definitions"
       }
     },
     "/health": {

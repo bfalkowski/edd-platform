@@ -6,7 +6,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List
+from typing import Any, List
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -18,6 +18,7 @@ class RunnerAgentDesign(BaseModel):
     id: str
     name: str
     intent: str
+    allowed_tool_names: List[str] = []
 
 
 class RunnerScenario(BaseModel):
@@ -27,6 +28,15 @@ class RunnerScenario(BaseModel):
 class RunnerToolCall(BaseModel):
     name: str
     output: str
+
+
+class RunnerToolDefinition(BaseModel):
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    output_description: str
+    implementation_key: str
+    status: str
 
 
 class RunnerResult(BaseModel):
@@ -77,6 +87,35 @@ def run_mock_agent(agent: RunnerAgentDesign, scenario: RunnerScenario) -> Runner
         ],
         created_at=datetime.now(timezone.utc),
     )
+
+
+def get_weather(zip_code: str) -> str:
+    """Return deterministic weather data for local EDD tool-calling runs."""
+    normalized = zip_code.strip()
+    if normalized == "06511":
+        return "Current weather for 06511 New Haven, CT: 41°F and cloudy."
+    return f"Current weather for {normalized}: 55°F and clear. Source: deterministic local fixture."
+
+
+def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
+    try:
+        from langchain_core.tools import tool
+    except ImportError as exc:
+        raise RuntimeError("LangChain tools require langchain-core to be installed.") from exc
+
+    tools = []
+    for definition in tool_definitions:
+        if definition.status != "approved":
+            continue
+        if definition.implementation_key == "local_weather_fixture":
+
+            @tool("get_weather")
+            def weather_tool(zip_code: str) -> str:
+                """Get current weather for a US ZIP code."""
+                return get_weather(zip_code)
+
+            tools.append(weather_tool)
+    return tools
 
 
 def openai_config_from_env() -> OpenAIRunnerConfig:
@@ -135,13 +174,18 @@ def run_openai_agent(
     agent: RunnerAgentDesign,
     scenario: RunnerScenario,
     config: OpenAIRunnerConfig,
+    tool_definitions: List[RunnerToolDefinition] | None = None,
 ) -> RunnerResult:
-    """Run a scenario through OpenAI's Responses API."""
+    """Run a scenario through a LangGraph-backed LangChain agent."""
     instructions = (
         "You are the candidate agent being designed in an eval-driven workflow. "
         "Stay inside the design intent, gather or cite relevant evidence from the scenario, "
         "state assumptions clearly, and recommend a safe next action."
     )
+    active_tools = build_langchain_tools(tool_definitions or [])
+    if active_tools:
+        return run_langchain_agent(agent, scenario, config, instructions, active_tools)
+
     body = {
         "model": config.model,
         "reasoning": {"effort": "minimal"},
@@ -200,12 +244,87 @@ def run_openai_agent(
     )
 
 
+def message_text(message) -> str:
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(collect_text_values(content))
+    return str(content)
+
+
+def run_langchain_agent(
+    agent: RunnerAgentDesign,
+    scenario: RunnerScenario,
+    config: OpenAIRunnerConfig,
+    instructions: str,
+    tools,
+) -> RunnerResult:
+    try:
+        from langchain.agents import create_agent
+    except ImportError as exc:
+        raise RuntimeError("LangChain agent execution requires langchain to be installed.") from exc
+
+    graph = create_agent(
+        model=f"openai:{config.model}",
+        tools=tools,
+        system_prompt=(
+            f"{instructions}\n\n"
+            f"Agent name: {agent.name}\n"
+            f"Design intent: {agent.intent}\n"
+            f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}"
+        ),
+    )
+    result = graph.invoke({"messages": [{"role": "user", "content": scenario.input}]})
+    messages = result.get("messages", [])
+    response_text = ""
+    tool_calls: List[RunnerToolCall] = []
+
+    for message in messages:
+        message_type = getattr(message, "type", "")
+        if message_type == "tool":
+            tool_calls.append(
+                RunnerToolCall(
+                    name=getattr(message, "name", None) or "tool",
+                    output=message_text(message),
+                )
+            )
+        elif message_type in {"ai", "assistant"}:
+            text = message_text(message).strip()
+            if text:
+                response_text = text
+
+    if not response_text:
+        raise RuntimeError("LangGraph agent did not return a final response.")
+
+    return RunnerResult(
+        id=f"run_{uuid4().hex[:12]}",
+        agent_design_id=agent.id,
+        mode="live",
+        scenario_input=scenario.input,
+        response=response_text,
+        tool_calls=tool_calls or [
+            RunnerToolCall(
+                name="langchain.agent",
+                output=config.model,
+            )
+        ],
+        evidence=[
+            f"Used LangChain/LangGraph agent with OpenAI model {config.model}.",
+            f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}.",
+        ],
+        created_at=datetime.now(timezone.utc),
+    )
+
+
 __all__ = [
     "OpenAIRunnerConfig",
     "RunnerAgentDesign",
     "RunnerResult",
     "RunnerScenario",
     "RunnerToolCall",
+    "RunnerToolDefinition",
+    "build_langchain_tools",
     "openai_config_from_env",
     "run_mock_agent",
     "run_openai_agent",
