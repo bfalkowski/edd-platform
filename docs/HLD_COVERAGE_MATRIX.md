@@ -24,15 +24,15 @@ Statuses:
 | Evidence context packs | HLD-001 | covered | partial | covered | Basic context packs exist; richer purposes remain later. |
 | Agent design | HLD-002, HLD-003 | covered | covered | covered | Create/list/delete and left-nav UI exist. |
 | Platform tools | HLD-002, HLD-004 | partial | partial | partial | Tool definitions exist; editing/governance UI is missing. |
-| Agent versions | HLD-001, HLD-004 | planned | gap | gap | Planned in `API_CONTRACT.md`; implementation missing. |
-| Scenarios | HLD-003, HLD-004 | planned | partial | partial | Scenario input exists in playground; scenario artifact/API implementation is not first-class yet. |
-| Eval contracts | HLD-003, HLD-004 | planned | gap | gap | Planned in `API_CONTRACT.md`; central next dependency. |
-| Runs | HLD-002, HLD-003, HLD-004 | planned | partial | partial | Agent-scoped run endpoint exists; canonical project-scoped run API is planned. |
+| Agent versions | HLD-001, HLD-004 | partial | gap | partial | Create/list/get API exists; versioned runs and comparison are missing. |
+| Scenarios | HLD-003, HLD-004 | partial | partial | partial | Create/list/get API exists; playground is not yet driven by scenario records. |
+| Eval contracts | HLD-003, HLD-004 | partial | gap | partial | Create/list/get API exists; evaluation does not yet consume contracts. |
+| Runs | HLD-002, HLD-003, HLD-004 | partial | partial | partial | Canonical project-scoped run API exists; contract-driven evaluation is missing. |
 | Tool call evidence | HLD-004 | partial | partial | partial | Stored in run artifact body; should become first-class evidence. |
-| Eval results | HLD-003, HLD-004 | planned | partial | partial | Eval endpoint exists, but checks are hardcoded; contract-driven API is planned. |
+| Eval results | HLD-003, HLD-004 | partial | partial | partial | Contract-driven run evaluation API exists; failure packets are next. |
 | Judge prompts | HLD-002, HLD-003, HLD-004 | gap | gap | gap | Mentioned in docs, not modeled in API yet. |
-| Judge outputs | HLD-001, HLD-004 | planned | gap | gap | Need implementation and linked artifact shape. |
-| Failure packets | HLD-001, HLD-003, HLD-004 | planned | gap | gap | Planned in `API_CONTRACT.md`; needed for EDD proof loop. |
+| Judge outputs | HLD-001, HLD-004 | partial | gap | partial | Deterministic judge output artifacts are created during run evaluation. |
+| Failure packets | HLD-001, HLD-003, HLD-004 | partial | gap | partial | API and automatic failed-eval creation exist; UI is missing. |
 | Fix proposals | HLD-001, HLD-003, HLD-004 | planned | gap | gap | Planned in `API_CONTRACT.md`; needed for bounded improvement. |
 | Comparisons | HLD-001, HLD-004 | planned | gap | gap | Planned in `API_CONTRACT.md`; needed for v0/v1 proof. |
 | Gates | HLD-002, HLD-003 | gap | gap | partial | Concept exists, implementation is later. |
@@ -46,15 +46,8 @@ Statuses:
 The repo should not add more workflow feature code until these gaps are covered
 by HLD and OpenAPI contracts:
 
-1. implement `EvalContract` API
-2. implement `Scenario` API
-3. implement first-class `Run` API
-4. implement contract-driven `EvalResult`
-5. implement `JudgeOutput` artifacts
-6. implement `FailurePacket` API
-7. implement `FixProposal` API
-8. implement `AgentVersion` API
-9. implement `Comparison` API
+1. implement `FixProposal` API
+2. implement `Comparison` API
 
 ## Rule
 

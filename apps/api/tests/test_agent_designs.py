@@ -243,6 +243,544 @@ def test_run_agent_design_creates_run_result_artifact() -> None:
     assert link["target_artifact_id"] == design_artifact["id"]
 
 
+def test_create_scenario_and_eval_contract_artifacts() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Contract Agent",
+            "intent": "Use evidence and tools before answering.",
+        },
+    )
+    agent = create_response.json()["agent"]
+
+    scenario_response = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Escalation triage",
+            "input": "A customer reports a failed deployment.",
+            "setup_context": "The support team needs a safe next action.",
+        },
+    )
+
+    assert scenario_response.status_code == 201
+    scenario = scenario_response.json()
+    assert scenario["agent_design_id"] == agent["id"]
+    assert scenario["input"] == "A customer reports a failed deployment."
+
+    contract_response = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Evidence-grounded triage",
+            "description": "The agent should collect evidence before action.",
+            "scenario_id": scenario["id"],
+            "expected_behavior": ["Gather relevant evidence.", "Recommend a safe next action."],
+            "required_tools": ["get_weather"],
+            "checks": [
+                {
+                    "id": "mentions_evidence",
+                    "type": "output_contains",
+                    "value": "evidence",
+                }
+            ],
+        },
+    )
+
+    assert contract_response.status_code == 201
+    contract = contract_response.json()
+    assert contract["scenario_id"] == scenario["id"]
+    assert contract["required_tools"] == ["get_weather"]
+    assert contract["checks"][0]["id"] == "mentions_evidence"
+
+    scenarios_response = client.get(
+        "/api/projects/project_default/scenarios",
+        params={"agent_design_id": agent["id"]},
+    )
+    contracts_response = client.get(
+        "/api/projects/project_default/eval-contracts",
+        params={"agent_design_id": agent["id"]},
+    )
+    artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"]},
+    )
+
+    assert scenarios_response.status_code == 200
+    assert scenarios_response.json()[0]["id"] == scenario["id"]
+    assert contracts_response.status_code == 200
+    assert contracts_response.json()[0]["id"] == contract["id"]
+    artifact_types = {artifact["artifact_type"] for artifact in artifacts_response.json()}
+    assert "SCENARIO" in artifact_types
+    assert "EVAL_CONTRACT" in artifact_types
+
+
+def test_eval_contract_requires_matching_scenario_agent() -> None:
+    client = TestClient(app)
+    first_agent_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "First", "intent": "First intent."},
+    )
+    second_agent_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Second", "intent": "Second intent."},
+    )
+    first_agent = first_agent_response.json()["agent"]
+    second_agent = second_agent_response.json()["agent"]
+    scenario_response = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": first_agent["id"],
+            "name": "First scenario",
+            "input": "Input for first agent.",
+        },
+    )
+    scenario = scenario_response.json()
+
+    response = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": second_agent["id"],
+            "name": "Mismatched contract",
+            "scenario_id": scenario["id"],
+        },
+    )
+
+    assert response.status_code == 400
+
+
+def test_create_agent_versions_for_baseline_and_candidate() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Versioned Agent",
+            "intent": "Baseline instructions.",
+            "allowed_tool_names": ["get_weather"],
+        },
+    )
+    agent = create_response.json()["agent"]
+
+    baseline_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={"version_label": "v0", "status": "baseline"},
+    )
+
+    assert baseline_response.status_code == 201
+    baseline = baseline_response.json()
+    assert baseline["version_label"] == "v0"
+    assert baseline["instructions"] == "Baseline instructions."
+    assert baseline["tool_policy"] == {"allowed_tool_names": ["get_weather"]}
+
+    candidate_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={
+            "version_label": "v1",
+            "parent_version_id": baseline["id"],
+            "instructions": "Improved instructions.",
+        },
+    )
+
+    assert candidate_response.status_code == 201
+    candidate = candidate_response.json()
+    assert candidate["parent_version_id"] == baseline["id"]
+    assert candidate["instructions"] == "Improved instructions."
+
+    versions_response = client.get(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions"
+    )
+    version_labels = [version["version_label"] for version in versions_response.json()]
+    assert version_labels == ["v0", "v1"]
+
+    artifact_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "AGENT_VERSION"},
+    )
+    assert artifact_response.status_code == 200
+    assert len(artifact_response.json()) == 2
+
+
+def test_project_scoped_run_references_version_scenario_and_contract() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Backbone Runner",
+            "intent": "Gather evidence before responding.",
+        },
+    )
+    agent = create_response.json()["agent"]
+    version_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={"version_label": "v0", "status": "baseline"},
+    )
+    version = version_response.json()
+    scenario_response = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Backbone scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    )
+    scenario = scenario_response.json()
+    contract_response = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Backbone contract",
+            "scenario_id": scenario["id"],
+            "expected_behavior": ["Gather evidence."],
+        },
+    )
+    contract = contract_response.json()
+
+    run_response = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "agent_version_id": version["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+            "mode": "mock",
+        },
+    )
+
+    assert run_response.status_code == 201
+    run = run_response.json()
+    assert run["agent_design_id"] == agent["id"]
+    assert run["agent_version_id"] == version["id"]
+    assert run["scenario_id"] == scenario["id"]
+    assert run["eval_contract_id"] == contract["id"]
+    assert run["mode"] == "mock"
+    assert run["status"] == "completed"
+    assert run["artifact_ids"]
+
+    list_response = client.get(
+        "/api/projects/project_default/runs",
+        params={"agent_design_id": agent["id"]},
+    )
+    get_response = client.get(f"/api/projects/project_default/runs/{run['id']}")
+    artifact_response = client.get(
+        f"/api/projects/project_default/artifacts/{run['artifact_ids'][0]}"
+    )
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["id"] == run["id"]
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == run["id"]
+    assert artifact_response.status_code == 200
+    assert artifact_response.json()["artifact_type"] == "RUN_RESULT"
+
+
+def test_project_scoped_run_requires_matching_contract_scenario() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Mismatch Runner", "intent": "Run with matching evidence."},
+    )
+    agent = create_response.json()["agent"]
+    first_scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "First scenario",
+            "input": "First input.",
+        },
+    ).json()
+    second_scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Second scenario",
+            "input": "Second input.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "First-only contract",
+            "scenario_id": first_scenario["id"],
+        },
+    ).json()
+
+    response = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": second_scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    )
+
+    assert response.status_code == 400
+
+
+def test_contract_driven_run_evaluation_creates_eval_result() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Contract Judge",
+            "intent": "Gather evidence and recommend a safe next action.",
+        },
+    )
+    agent = create_response.json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Judge scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Judge contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "mentions_evidence",
+                    "type": "output_contains",
+                    "value": "evidence",
+                },
+                {
+                    "id": "does_not_invent_refund",
+                    "type": "output_not_contains",
+                    "value": "refund approved",
+                },
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    assert eval_result["run_id"] == run["id"]
+    assert eval_result["eval_contract_id"] == contract["id"]
+    assert eval_result["mode"] == "deterministic"
+    assert eval_result["score"] == 2
+    assert eval_result["passed"] is True
+    assert [check["check_id"] for check in eval_result["checks"]] == [
+        "mentions_evidence",
+        "does_not_invent_refund",
+    ]
+    assert eval_result["judge_output_ids"]
+    assert eval_result["artifact_ids"]
+
+    get_response = client.get(
+        f"/api/projects/project_default/eval-results/{eval_result['id']}"
+    )
+    artifact_response = client.get(
+        f"/api/projects/project_default/artifacts/{eval_result['artifact_ids'][0]}"
+    )
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{eval_result['artifact_ids'][0]}/links"
+    )
+
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == eval_result["id"]
+    assert artifact_response.status_code == 200
+    assert artifact_response.json()["artifact_type"] == "EVAL_RESULT"
+    judge_artifact_response = client.get(
+        f"/api/projects/project_default/artifacts/{eval_result['artifact_ids'][1]}"
+    )
+    assert judge_artifact_response.status_code == 200
+    assert judge_artifact_response.json()["artifact_type"] == "JUDGE_OUTPUT"
+    relationship_types = {link["relationship_type"] for link in links_response.json()}
+    assert "GENERATED_FROM" in relationship_types
+    assert "SUPPORTED_BY" in relationship_types
+
+
+def test_contract_driven_run_evaluation_can_fail() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Failing Judge", "intent": "Gather evidence."},
+    )
+    agent = create_response.json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Failing scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Failing contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "requires_impossible_phrase",
+                    "type": "output_contains",
+                    "value": "purple elephant",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={},
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    assert eval_result["score"] == 0
+    assert eval_result["passed"] is False
+    assert eval_result["checks"][0]["passed"] is False
+
+    packets_response = client.get(
+        "/api/projects/project_default/failure-packets",
+        params={"agent_design_id": agent["id"]},
+    )
+    assert packets_response.status_code == 200
+    failure_packet = packets_response.json()[0]
+    assert failure_packet["run_id"] == run["id"]
+    assert failure_packet["eval_result_id"] == eval_result["id"]
+    assert failure_packet["eval_contract_id"] == contract["id"]
+    assert failure_packet["failed_check_ids"] == ["requires_impossible_phrase"]
+    assert failure_packet["status"] == "open"
+
+    packet_artifacts = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "FAILURE_PACKET"},
+    )
+    assert packet_artifacts.status_code == 200
+    assert packet_artifacts.json()[0]["artifact_id"] == failure_packet["id"]
+
+    update_response = client.patch(
+        f"/api/projects/project_default/failure-packets/{failure_packet['id']}",
+        json={"status": "triaged", "recommended_fix": "Add the missing behavior."},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["status"] == "triaged"
+    assert update_response.json()["recommended_fix"] == "Add the missing behavior."
+
+
+def test_contract_driven_run_evaluation_requires_contract() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "No Contract", "intent": "Gather evidence."},
+    )
+    agent = create_response.json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "No contract scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={},
+    )
+
+    assert eval_response.status_code == 400
+
+
+def test_create_failure_packet_requires_consistent_references() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Manual Failure", "intent": "Gather evidence."},
+    )
+    agent = create_response.json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Manual failure scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Manual failure contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "requires_missing_phrase",
+                    "type": "output_contains",
+                    "value": "missing phrase",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+    eval_result = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={},
+    ).json()
+
+    response = client.post(
+        "/api/projects/project_default/failure-packets",
+        json={
+            "agent_design_id": agent["id"],
+            "run_id": run["id"],
+            "eval_result_id": eval_result["id"],
+            "eval_contract_id": contract["id"],
+            "failed_check_ids": ["requires_missing_phrase"],
+            "title": "Manual packet",
+            "diagnosis": "A reviewer added more detail.",
+            "evidence_artifact_ids": eval_result["artifact_ids"],
+            "recommended_fix": "Constrain the output.",
+        },
+    )
+
+    assert response.status_code == 201
+    packet = response.json()
+    assert packet["title"] == "Manual packet"
+    assert packet["evidence_artifact_ids"] == eval_result["artifact_ids"]
+
+
 def test_run_agent_design_requires_known_agent() -> None:
     client = TestClient(app)
 

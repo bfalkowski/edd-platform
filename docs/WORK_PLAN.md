@@ -65,6 +65,14 @@ Do this before adding more workflow UI.
 - [x] Define planned OpenAPI contracts for `EvalContract`, `Run`, `EvalResult`,
       `FailurePacket`, `FixProposal`, `AgentVersion`, and `Comparison`.
 - [ ] Implement the Phase 2 API contracts in FastAPI and generated OpenAPI.
+- [x] Implement `Scenario` API contracts.
+- [x] Implement `EvalContract` API contracts.
+- [x] Implement `AgentVersion` API contracts.
+- [x] Implement canonical project-scoped `Run` API contracts.
+- [x] Implement contract-driven `EvalResult` API contracts.
+- [x] Implement `FailurePacket` API contracts.
+- [ ] Implement `FixProposal` API contracts.
+- [ ] Implement `Comparison` API contracts.
 - [ ] Add `EvalContract` artifacts as the first-class place where agent
       expectations live.
 - [ ] Add scenario-specific contracts that can describe any agent behavior,
@@ -74,9 +82,9 @@ Do this before adding more workflow UI.
       tools, and optional eval contract.
 - [ ] Split tool calls and tool results into first-class evidence artifacts.
 - [ ] Replace hardcoded eval checks with contract-driven deterministic checks.
-- [ ] Store eval results and judge outputs as evidence artifacts linked to runs
+- [x] Store eval results and judge outputs as evidence artifacts linked to runs
       and contracts.
-- [ ] Create failure packet artifacts when contract checks fail.
+- [x] Create failure packet artifacts when contract checks fail.
 - [ ] Add bounded fix proposal artifacts linked to failure packets.
 - [ ] Add agent versions so fixes can produce v1, v2, v3, and later candidates.
 - [ ] Add comparison artifacts/API for baseline vs candidate runs.

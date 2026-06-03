@@ -51,6 +51,93 @@ class AgentDesign(BaseModel):
     updated_at: datetime
 
 
+class ScenarioCreate(BaseModel):
+    agent_design_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    input: str = Field(min_length=1)
+    setup_context: str = ""
+    fixture_refs: List[str] = Field(default_factory=list)
+    default_eval_contract_id: Optional[str] = None
+    status: str = "draft"
+
+
+class Scenario(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    name: str
+    input: str
+    setup_context: str
+    fixture_refs: List[str]
+    default_eval_contract_id: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class EvalContractCreate(BaseModel):
+    agent_design_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = ""
+    scenario_id: Optional[str] = None
+    version: str = "v1"
+    expected_behavior: List[str] = Field(default_factory=list)
+    required_evidence: List[str] = Field(default_factory=list)
+    required_tools: List[str] = Field(default_factory=list)
+    forbidden_tools: List[str] = Field(default_factory=list)
+    forbidden_behavior: List[str] = Field(default_factory=list)
+    output_requirements: List[str] = Field(default_factory=list)
+    checks: List[Dict[str, object]] = Field(default_factory=list)
+    judge_prompt_template_id: Optional[str] = None
+    pass_criteria: str = "all_checks_pass"
+    status: str = "draft"
+
+
+class EvalContract(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    name: str
+    description: str
+    scenario_id: Optional[str] = None
+    version: str
+    expected_behavior: List[str]
+    required_evidence: List[str]
+    required_tools: List[str]
+    forbidden_tools: List[str]
+    forbidden_behavior: List[str]
+    output_requirements: List[str]
+    checks: List[Dict[str, object]]
+    judge_prompt_template_id: Optional[str] = None
+    pass_criteria: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentVersionCreate(BaseModel):
+    version_label: Optional[str] = None
+    parent_version_id: Optional[str] = None
+    instructions: Optional[str] = None
+    tool_policy: Dict[str, object] = Field(default_factory=dict)
+    source_fix_proposal_id: Optional[str] = None
+    status: str = "candidate"
+
+
+class AgentVersion(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    version_label: str
+    parent_version_id: Optional[str] = None
+    instructions: str
+    tool_policy: Dict[str, object]
+    source_fix_proposal_id: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class ArtifactRecord(BaseModel):
     id: str
     project_id: str
@@ -100,6 +187,32 @@ class AgentRunCreate(BaseModel):
     mode: Literal["mock", "live"] = "mock"
 
 
+class RunCreate(BaseModel):
+    agent_design_id: str = Field(min_length=1)
+    agent_version_id: Optional[str] = None
+    scenario_id: str = Field(min_length=1)
+    eval_contract_id: Optional[str] = None
+    mode: Literal["mock", "live"] = "mock"
+
+
+class RunRecord(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    agent_version_id: Optional[str] = None
+    scenario_id: str
+    eval_contract_id: Optional[str] = None
+    mode: str
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    input: str
+    output: str
+    status: str
+    artifact_ids: List[str]
+    started_at: datetime
+    completed_at: datetime
+
+
 class AgentRunResult(BaseModel):
     id: str
     project_id: str
@@ -117,6 +230,93 @@ class EvalCheck(BaseModel):
     id: str
     passed: bool
     comment: str
+
+
+class EvalCheckResult(BaseModel):
+    check_id: str
+    check_type: str
+    passed: bool
+    observed: str
+    expected: str
+    evidence_artifact_ids: List[str]
+    comment: str
+
+
+class RunEvaluateCreate(BaseModel):
+    eval_contract_id: Optional[str] = None
+    judge_mode: Literal["deterministic"] = "deterministic"
+
+
+class EvalResult(BaseModel):
+    id: str
+    project_id: str
+    run_id: str
+    eval_contract_id: str
+    judge_prompt_template_id: Optional[str] = None
+    mode: str
+    score: int
+    passed: bool
+    checks: List[EvalCheckResult]
+    judge_output_ids: List[str]
+    artifact_ids: List[str]
+    created_at: datetime
+
+
+class JudgeOutput(BaseModel):
+    id: str
+    project_id: str
+    eval_result_id: str
+    judge_prompt_template_id: Optional[str] = None
+    mode: str
+    model: Optional[str] = None
+    input_summary: str
+    output: str
+    token_usage: Dict[str, object]
+    cost_estimate: Optional[float] = None
+    artifact_ids: List[str]
+    created_at: datetime
+
+
+class FailurePacketCreate(BaseModel):
+    agent_design_id: str = Field(min_length=1)
+    agent_version_id: Optional[str] = None
+    run_id: str = Field(min_length=1)
+    eval_result_id: str = Field(min_length=1)
+    eval_contract_id: str = Field(min_length=1)
+    failed_check_ids: List[str] = Field(default_factory=list)
+    title: str = Field(min_length=1)
+    diagnosis: str = Field(min_length=1)
+    severity: str = "medium"
+    evidence_artifact_ids: List[str] = Field(default_factory=list)
+    recommended_fix: str = ""
+    status: str = "open"
+
+
+class FailurePacketUpdate(BaseModel):
+    title: Optional[str] = None
+    diagnosis: Optional[str] = None
+    severity: Optional[str] = None
+    recommended_fix: Optional[str] = None
+    status: Optional[str] = None
+
+
+class FailurePacket(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    agent_version_id: Optional[str] = None
+    run_id: str
+    eval_result_id: str
+    eval_contract_id: str
+    failed_check_ids: List[str]
+    title: str
+    diagnosis: str
+    severity: str
+    evidence_artifact_ids: List[str]
+    recommended_fix: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class EvalRunResult(BaseModel):
@@ -163,6 +363,13 @@ default_project = Project(
 )
 _projects: Dict[str, Project] = store.load_collection("projects", Project)
 _agent_designs: Dict[str, AgentDesign] = store.load_collection("agent_designs", AgentDesign)
+_scenarios: Dict[str, Scenario] = store.load_collection("scenarios", Scenario)
+_eval_contracts: Dict[str, EvalContract] = store.load_collection("eval_contracts", EvalContract)
+_agent_versions: Dict[str, AgentVersion] = store.load_collection("agent_versions", AgentVersion)
+_runs: Dict[str, RunRecord] = store.load_collection("runs", RunRecord)
+_eval_results: Dict[str, EvalResult] = store.load_collection("eval_results", EvalResult)
+_judge_outputs: Dict[str, JudgeOutput] = store.load_collection("judge_outputs", JudgeOutput)
+_failure_packets: Dict[str, FailurePacket] = store.load_collection("failure_packets", FailurePacket)
 _artifacts: Dict[str, ArtifactRecord] = store.load_collection("artifacts", ArtifactRecord)
 _artifact_links: Dict[str, ArtifactLink] = store.load_collection("artifact_links", ArtifactLink)
 _tool_definitions: Dict[str, ToolDefinition] = store.load_collection("tool_definitions", ToolDefinition)
@@ -219,11 +426,123 @@ def get_agent_design_or_404(project_id: str, agent_id: str) -> AgentDesign:
     return agent
 
 
+def get_scenario_or_404(project_id: str, scenario_id: str) -> Scenario:
+    scenario = _scenarios.get(scenario_id)
+    if scenario is None or scenario.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Scenario not found.")
+    return scenario
+
+
+def get_eval_contract_or_404(project_id: str, contract_id: str) -> EvalContract:
+    contract = _eval_contracts.get(contract_id)
+    if contract is None or contract.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Eval contract not found.")
+    return contract
+
+
+def get_agent_version_or_404(project_id: str, version_id: str) -> AgentVersion:
+    version = _agent_versions.get(version_id)
+    if version is None or version.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Agent version not found.")
+    return version
+
+
+def get_eval_result_or_404(project_id: str, eval_result_id: str) -> EvalResult:
+    eval_result = _eval_results.get(eval_result_id)
+    if eval_result is None or eval_result.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Eval result not found.")
+    return eval_result
+
+
+def get_failure_packet_or_404(project_id: str, failure_packet_id: str) -> FailurePacket:
+    failure_packet = _failure_packets.get(failure_packet_id)
+    if failure_packet is None or failure_packet.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Failure packet not found.")
+    return failure_packet
+
+
 def find_agent_design_artifact(agent_id: str) -> Optional[ArtifactRecord]:
     for artifact in _artifacts.values():
         if artifact.artifact_type == "AGENT_DESIGN" and artifact.artifact_id == agent_id:
             return artifact
     return None
+
+
+def find_artifact_by_type_and_artifact_id(
+    artifact_type: str,
+    artifact_id: str,
+) -> Optional[ArtifactRecord]:
+    for artifact in _artifacts.values():
+        if artifact.artifact_type == artifact_type and artifact.artifact_id == artifact_id:
+            return artifact
+    return None
+
+
+def create_artifact(
+    *,
+    project_id: str,
+    artifact_type: str,
+    artifact_id: str,
+    title: str,
+    body: str,
+    source: str,
+    agent_design_id: Optional[str],
+    now: datetime,
+) -> ArtifactRecord:
+    artifact = ArtifactRecord(
+        id=f"artifact_{uuid4().hex[:12]}",
+        project_id=project_id,
+        artifact_type=artifact_type,
+        artifact_id=artifact_id,
+        title=title,
+        body=body,
+        source=source,
+        agent_design_id=agent_design_id,
+        created_at=now,
+        updated_at=now,
+    )
+    _artifacts[artifact.id] = artifact
+    store.save_record("artifacts", artifact.id, artifact)
+    return artifact
+
+
+def link_artifacts(
+    *,
+    project_id: str,
+    source_artifact_id: str,
+    target_artifact_id: str,
+    relationship_type: str,
+    now: datetime,
+) -> ArtifactLink:
+    link = ArtifactLink(
+        id=f"link_{uuid4().hex[:12]}",
+        project_id=project_id,
+        source_artifact_id=source_artifact_id,
+        target_artifact_id=target_artifact_id,
+        relationship_type=relationship_type,
+        created_at=now,
+    )
+    _artifact_links[link.id] = link
+    store.save_record("artifact_links", link.id, link)
+    return link
+
+
+def link_to_agent_design(
+    *,
+    project_id: str,
+    agent_design_id: str,
+    artifact: ArtifactRecord,
+    now: datetime,
+) -> None:
+    design_artifact = find_agent_design_artifact(agent_design_id)
+    if design_artifact is not None:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=design_artifact.id,
+            relationship_type="GENERATED_FROM",
+            now=now,
+        )
 
 
 def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[RunnerToolDefinition]:
@@ -240,6 +559,63 @@ def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[Runner
         for tool in _tool_definitions.values()
         if tool.project_id == project_id and tool.status == "approved" and tool.name in allowed
     ]
+
+
+def run_agent_with_runner(
+    *,
+    project_id: str,
+    agent: AgentDesign,
+    instructions: str,
+    scenario_input: str,
+    mode: Literal["mock", "live"],
+) -> tuple[object, ArtifactRecord]:
+    runner_agent = RunnerAgentDesign(
+        id=agent.id,
+        name=agent.name,
+        intent=instructions,
+        allowed_tool_names=agent.allowed_tool_names,
+    )
+    runner_scenario = RunnerScenario(input=scenario_input.strip())
+    if mode == "live":
+        try:
+            runner_result = run_openai_agent(
+                runner_agent,
+                runner_scenario,
+                openai_config_from_env(),
+                approved_tools_for_agent(project_id, agent),
+            )
+        except RuntimeError as exc:
+            detail = str(exc)
+            status_code = 400 if "OPENAI_API_KEY" in detail else 502
+            raise HTTPException(status_code=status_code, detail=detail) from exc
+    else:
+        runner_result = run_mock_agent(runner_agent, runner_scenario)
+
+    now = datetime.now(timezone.utc)
+    tool_summary = "\n".join(
+        f"- {tool.name}: {tool.output}" for tool in runner_result.tool_calls
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="RUN_RESULT",
+        artifact_id=runner_result.id,
+        title=f"Run: {agent.name}",
+        body=(
+            f"Response\n{runner_result.response}\n\n"
+            f"Scenario\n{runner_result.scenario_input}\n\n"
+            f"Tools\n{tool_summary}"
+        ),
+        source=f"runner:{runner_result.mode}",
+        agent_design_id=agent.id,
+        now=now,
+    )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=agent.id,
+        artifact=artifact,
+        now=now,
+    )
+    return runner_result, artifact
 
 
 def evaluate_run_text(body: str) -> List[EvalCheck]:
@@ -261,6 +637,117 @@ def evaluate_run_text(body: str) -> List[EvalCheck]:
             comment="Response should recommend a safe next action.",
         ),
     ]
+
+
+def evaluate_contract_check(
+    *,
+    check: Dict[str, object],
+    run: RunRecord,
+    evidence_artifact_ids: List[str],
+    run_artifact_body: str,
+) -> EvalCheckResult:
+    check_id = str(check.get("id") or "unnamed_check")
+    check_type = str(check.get("type") or "manual_review_required")
+    expected = str(check.get("value") or check.get("tool") or "")
+    normalized_output = run.output.lower()
+    normalized_body = run_artifact_body.lower()
+    normalized_expected = expected.lower()
+
+    if check_type == "output_contains":
+        passed = bool(normalized_expected and normalized_expected in normalized_output)
+        observed = run.output
+        comment = f"Output should contain {expected!r}."
+    elif check_type == "output_not_contains":
+        passed = bool(normalized_expected and normalized_expected not in normalized_output)
+        observed = run.output
+        comment = f"Output should not contain {expected!r}."
+    elif check_type == "tool_called":
+        passed = bool(normalized_expected and f"- {normalized_expected}:" in normalized_body)
+        observed = run_artifact_body
+        comment = f"Run should call tool {expected!r}."
+    elif check_type == "tool_not_called":
+        passed = bool(normalized_expected and f"- {normalized_expected}:" not in normalized_body)
+        observed = run_artifact_body
+        comment = f"Run should not call tool {expected!r}."
+    else:
+        passed = False
+        observed = "manual review required"
+        comment = f"Unsupported deterministic check type {check_type!r}."
+
+    return EvalCheckResult(
+        check_id=check_id,
+        check_type=check_type,
+        passed=passed,
+        observed=observed,
+        expected=expected,
+        evidence_artifact_ids=evidence_artifact_ids,
+        comment=comment,
+    )
+
+
+def create_failure_packet_record(
+    *,
+    project_id: str,
+    agent_design_id: str,
+    agent_version_id: Optional[str],
+    run_id: str,
+    eval_result_id: str,
+    eval_contract_id: str,
+    failed_check_ids: List[str],
+    title: str,
+    diagnosis: str,
+    severity: str,
+    evidence_artifact_ids: List[str],
+    recommended_fix: str,
+    status: str,
+    now: datetime,
+) -> FailurePacket:
+    failure_packet = FailurePacket(
+        id=f"failure_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=agent_design_id,
+        agent_version_id=agent_version_id,
+        run_id=run_id,
+        eval_result_id=eval_result_id,
+        eval_contract_id=eval_contract_id,
+        failed_check_ids=failed_check_ids,
+        title=title,
+        diagnosis=diagnosis,
+        severity=severity,
+        evidence_artifact_ids=evidence_artifact_ids,
+        recommended_fix=recommended_fix,
+        status=status,
+        created_at=now,
+        updated_at=now,
+    )
+    _failure_packets[failure_packet.id] = failure_packet
+    store.save_record("failure_packets", failure_packet.id, failure_packet)
+
+    body = (
+        f"Diagnosis\n{failure_packet.diagnosis}\n\n"
+        f"Failed checks\n"
+        + "\n".join(f"- {check_id}" for check_id in failure_packet.failed_check_ids)
+        + f"\n\nRecommended fix\n{failure_packet.recommended_fix or 'Needs review'}"
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="FAILURE_PACKET",
+        artifact_id=failure_packet.id,
+        title=failure_packet.title,
+        body=body,
+        source="failure-packet",
+        agent_design_id=agent_design_id,
+        now=now,
+    )
+    for evidence_artifact_id in evidence_artifact_ids:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=evidence_artifact_id,
+            relationship_type="SUPPORTED_BY",
+            now=now,
+        )
+    return failure_packet
 
 
 def delete_agent_design_records(project_id: str, agent_id: str) -> None:
@@ -285,6 +772,48 @@ def delete_agent_design_records(project_id: str, agent_id: str) -> None:
     for link_id in link_ids:
         _artifact_links.pop(link_id, None)
         store.delete_record("artifact_links", link_id)
+
+    for scenario_id, scenario in list(_scenarios.items()):
+        if scenario.project_id == project_id and scenario.agent_design_id == agent_id:
+            _scenarios.pop(scenario_id, None)
+            store.delete_record("scenarios", scenario_id)
+
+    for contract_id, contract in list(_eval_contracts.items()):
+        if contract.project_id == project_id and contract.agent_design_id == agent_id:
+            _eval_contracts.pop(contract_id, None)
+            store.delete_record("eval_contracts", contract_id)
+
+    for version_id, version in list(_agent_versions.items()):
+        if version.project_id == project_id and version.agent_design_id == agent_id:
+            _agent_versions.pop(version_id, None)
+            store.delete_record("agent_versions", version_id)
+
+    deleted_run_ids: List[str] = []
+    for run_id, run in list(_runs.items()):
+        if run.project_id == project_id and run.agent_design_id == agent_id:
+            deleted_run_ids.append(run_id)
+            _runs.pop(run_id, None)
+            store.delete_record("runs", run_id)
+
+    deleted_eval_result_ids: List[str] = []
+    for eval_result_id, eval_result in list(_eval_results.items()):
+        if eval_result.project_id == project_id and eval_result.run_id in deleted_run_ids:
+            deleted_eval_result_ids.append(eval_result_id)
+            _eval_results.pop(eval_result_id, None)
+            store.delete_record("eval_results", eval_result_id)
+
+    for judge_output_id, judge_output in list(_judge_outputs.items()):
+        if (
+            judge_output.project_id == project_id
+            and judge_output.eval_result_id in deleted_eval_result_ids
+        ):
+            _judge_outputs.pop(judge_output_id, None)
+            store.delete_record("judge_outputs", judge_output_id)
+
+    for failure_packet_id, failure_packet in list(_failure_packets.items()):
+        if failure_packet.project_id == project_id and failure_packet.run_id in deleted_run_ids:
+            _failure_packets.pop(failure_packet_id, None)
+            store.delete_record("failure_packets", failure_packet_id)
 
     _agent_designs.pop(agent_id, None)
     store.delete_record("agent_designs", agent_id)
@@ -356,6 +885,610 @@ def delete_agent_design(project_id: str, agent_id: str) -> Response:
     return Response(status_code=204)
 
 
+@app.get("/api/projects/{project_id}/scenarios")
+def list_scenarios(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+) -> List[Scenario]:
+    get_project_or_404(project_id)
+    scenarios = [
+        scenario
+        for scenario in _scenarios.values()
+        if scenario.project_id == project_id
+        and (agent_design_id is None or scenario.agent_design_id == agent_design_id)
+    ]
+    return sorted(scenarios, key=lambda scenario: scenario.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/scenarios", status_code=201)
+def create_scenario(project_id: str, payload: ScenarioCreate) -> Scenario:
+    get_project_or_404(project_id)
+    get_agent_design_or_404(project_id, payload.agent_design_id)
+    if payload.default_eval_contract_id is not None:
+        get_eval_contract_or_404(project_id, payload.default_eval_contract_id)
+
+    now = datetime.now(timezone.utc)
+    scenario = Scenario(
+        id=f"scenario_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        name=payload.name.strip(),
+        input=payload.input.strip(),
+        setup_context=payload.setup_context.strip(),
+        fixture_refs=payload.fixture_refs,
+        default_eval_contract_id=payload.default_eval_contract_id,
+        status=payload.status.strip(),
+        created_at=now,
+        updated_at=now,
+    )
+    _scenarios[scenario.id] = scenario
+    store.save_record("scenarios", scenario.id, scenario)
+
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="SCENARIO",
+        artifact_id=scenario.id,
+        title=scenario.name,
+        body=(
+            f"Input\n{scenario.input}\n\n"
+            f"Setup context\n{scenario.setup_context or 'None'}\n\n"
+            f"Default eval contract\n{scenario.default_eval_contract_id or 'None'}"
+        ),
+        source="scenario",
+        agent_design_id=scenario.agent_design_id,
+        now=now,
+    )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=scenario.agent_design_id,
+        artifact=artifact,
+        now=now,
+    )
+    return scenario
+
+
+@app.get("/api/projects/{project_id}/scenarios/{scenario_id}")
+def get_scenario(project_id: str, scenario_id: str) -> Scenario:
+    get_project_or_404(project_id)
+    return get_scenario_or_404(project_id, scenario_id)
+
+
+@app.get("/api/projects/{project_id}/eval-contracts")
+def list_eval_contracts(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+) -> List[EvalContract]:
+    get_project_or_404(project_id)
+    contracts = [
+        contract
+        for contract in _eval_contracts.values()
+        if contract.project_id == project_id
+        and (agent_design_id is None or contract.agent_design_id == agent_design_id)
+    ]
+    return sorted(contracts, key=lambda contract: contract.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/eval-contracts", status_code=201)
+def create_eval_contract(project_id: str, payload: EvalContractCreate) -> EvalContract:
+    get_project_or_404(project_id)
+    get_agent_design_or_404(project_id, payload.agent_design_id)
+    if payload.scenario_id is not None:
+        scenario = get_scenario_or_404(project_id, payload.scenario_id)
+        if scenario.agent_design_id != payload.agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Eval contract scenario must belong to the same agent design.",
+            )
+
+    now = datetime.now(timezone.utc)
+    contract = EvalContract(
+        id=f"contract_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        name=payload.name.strip(),
+        description=payload.description.strip(),
+        scenario_id=payload.scenario_id,
+        version=payload.version.strip(),
+        expected_behavior=payload.expected_behavior,
+        required_evidence=payload.required_evidence,
+        required_tools=payload.required_tools,
+        forbidden_tools=payload.forbidden_tools,
+        forbidden_behavior=payload.forbidden_behavior,
+        output_requirements=payload.output_requirements,
+        checks=payload.checks,
+        judge_prompt_template_id=payload.judge_prompt_template_id,
+        pass_criteria=payload.pass_criteria.strip(),
+        status=payload.status.strip(),
+        created_at=now,
+        updated_at=now,
+    )
+    _eval_contracts[contract.id] = contract
+    store.save_record("eval_contracts", contract.id, contract)
+
+    check_lines = "\n".join(
+        f"- {check.get('id', 'unnamed_check')}: {check.get('type', 'unspecified')}"
+        for check in contract.checks
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="EVAL_CONTRACT",
+        artifact_id=contract.id,
+        title=contract.name,
+        body=(
+            f"Description\n{contract.description or 'None'}\n\n"
+            f"Expected behavior\n"
+            + "\n".join(f"- {item}" for item in contract.expected_behavior)
+            + "\n\nRequired tools\n"
+            + "\n".join(f"- {tool}" for tool in contract.required_tools)
+            + "\n\nChecks\n"
+            + (check_lines or "None")
+            + f"\n\nPass criteria\n{contract.pass_criteria}"
+        ),
+        source="eval-contract",
+        agent_design_id=contract.agent_design_id,
+        now=now,
+    )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=contract.agent_design_id,
+        artifact=artifact,
+        now=now,
+    )
+    return contract
+
+
+@app.get("/api/projects/{project_id}/eval-contracts/{contract_id}")
+def get_eval_contract(project_id: str, contract_id: str) -> EvalContract:
+    get_project_or_404(project_id)
+    return get_eval_contract_or_404(project_id, contract_id)
+
+
+@app.get("/api/projects/{project_id}/agent-designs/{agent_id}/versions")
+def list_agent_versions(project_id: str, agent_id: str) -> List[AgentVersion]:
+    get_project_or_404(project_id)
+    get_agent_design_or_404(project_id, agent_id)
+    versions = [
+        version
+        for version in _agent_versions.values()
+        if version.project_id == project_id and version.agent_design_id == agent_id
+    ]
+    return sorted(versions, key=lambda version: version.created_at)
+
+
+@app.post("/api/projects/{project_id}/agent-designs/{agent_id}/versions", status_code=201)
+def create_agent_version(
+    project_id: str,
+    agent_id: str,
+    payload: AgentVersionCreate,
+) -> AgentVersion:
+    get_project_or_404(project_id)
+    agent = get_agent_design_or_404(project_id, agent_id)
+    if payload.parent_version_id is not None:
+        parent = get_agent_version_or_404(project_id, payload.parent_version_id)
+        if parent.agent_design_id != agent_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Parent version must belong to the same agent design.",
+            )
+
+    now = datetime.now(timezone.utc)
+    existing_count = len(
+        [
+            version
+            for version in _agent_versions.values()
+            if version.project_id == project_id and version.agent_design_id == agent_id
+        ]
+    )
+    version_label = payload.version_label or f"v{existing_count}"
+    version = AgentVersion(
+        id=f"version_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=agent.id,
+        version_label=version_label.strip(),
+        parent_version_id=payload.parent_version_id,
+        instructions=(payload.instructions or agent.intent).strip(),
+        tool_policy=payload.tool_policy or {"allowed_tool_names": agent.allowed_tool_names},
+        source_fix_proposal_id=payload.source_fix_proposal_id,
+        status=payload.status.strip(),
+        created_at=now,
+        updated_at=now,
+    )
+    _agent_versions[version.id] = version
+    store.save_record("agent_versions", version.id, version)
+
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="AGENT_VERSION",
+        artifact_id=version.id,
+        title=f"{agent.name} {version.version_label}",
+        body=(
+            f"Instructions\n{version.instructions}\n\n"
+            f"Parent version\n{version.parent_version_id or 'None'}\n\n"
+            f"Status\n{version.status}"
+        ),
+        source="agent-version",
+        agent_design_id=agent.id,
+        now=now,
+    )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=agent.id,
+        artifact=artifact,
+        now=now,
+    )
+    return version
+
+
+@app.get("/api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}")
+def get_agent_version(project_id: str, agent_id: str, version_id: str) -> AgentVersion:
+    get_project_or_404(project_id)
+    get_agent_design_or_404(project_id, agent_id)
+    version = get_agent_version_or_404(project_id, version_id)
+    if version.agent_design_id != agent_id:
+        raise HTTPException(status_code=404, detail="Agent version not found.")
+    return version
+
+
+@app.get("/api/projects/{project_id}/runs")
+def list_runs(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+) -> List[RunRecord]:
+    get_project_or_404(project_id)
+    runs = [
+        run
+        for run in _runs.values()
+        if run.project_id == project_id
+        and (agent_design_id is None or run.agent_design_id == agent_design_id)
+    ]
+    return sorted(runs, key=lambda run: run.completed_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/runs", status_code=201)
+def create_run(project_id: str, payload: RunCreate) -> RunRecord:
+    get_project_or_404(project_id)
+    agent = get_agent_design_or_404(project_id, payload.agent_design_id)
+    scenario = get_scenario_or_404(project_id, payload.scenario_id)
+    if scenario.agent_design_id != agent.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Run scenario must belong to the selected agent design.",
+        )
+
+    version: Optional[AgentVersion] = None
+    if payload.agent_version_id is not None:
+        version = get_agent_version_or_404(project_id, payload.agent_version_id)
+        if version.agent_design_id != agent.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Run version must belong to the selected agent design.",
+            )
+
+    if payload.eval_contract_id is not None:
+        contract = get_eval_contract_or_404(project_id, payload.eval_contract_id)
+        if contract.agent_design_id != agent.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Run eval contract must belong to the selected agent design.",
+            )
+        if contract.scenario_id is not None and contract.scenario_id != scenario.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Run eval contract must match the selected scenario.",
+            )
+
+    instructions = version.instructions if version is not None else agent.intent
+    runner_result, artifact = run_agent_with_runner(
+        project_id=project_id,
+        agent=agent,
+        instructions=instructions,
+        scenario_input=scenario.input,
+        mode=payload.mode,
+    )
+    run = RunRecord(
+        id=runner_result.id,
+        project_id=project_id,
+        agent_design_id=agent.id,
+        agent_version_id=version.id if version is not None else None,
+        scenario_id=scenario.id,
+        eval_contract_id=payload.eval_contract_id,
+        mode=runner_result.mode,
+        provider="openai" if runner_result.mode == "live" else "mock",
+        model=None,
+        input=runner_result.scenario_input,
+        output=runner_result.response,
+        status="completed",
+        artifact_ids=[artifact.id],
+        started_at=runner_result.created_at,
+        completed_at=runner_result.created_at,
+    )
+    _runs[run.id] = run
+    store.save_record("runs", run.id, run)
+    return run
+
+
+@app.get("/api/projects/{project_id}/runs/{run_id}")
+def get_run(project_id: str, run_id: str) -> RunRecord:
+    get_project_or_404(project_id)
+    run = _runs.get(run_id)
+    if run is None or run.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return run
+
+
+@app.post("/api/projects/{project_id}/runs/{run_id}/evaluate", status_code=201)
+def evaluate_run(
+    project_id: str,
+    run_id: str,
+    payload: RunEvaluateCreate,
+) -> EvalResult:
+    get_project_or_404(project_id)
+    run = _runs.get(run_id)
+    if run is None or run.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Run not found.")
+
+    contract_id = payload.eval_contract_id or run.eval_contract_id
+    if contract_id is None:
+        raise HTTPException(status_code=400, detail="Run evaluation requires an eval contract.")
+    contract = get_eval_contract_or_404(project_id, contract_id)
+    if contract.agent_design_id != run.agent_design_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Eval contract must belong to the same agent design as the run.",
+        )
+    if contract.scenario_id is not None and contract.scenario_id != run.scenario_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Eval contract must match the run scenario.",
+        )
+
+    run_artifact = (
+        get_artifact_or_404(project_id, run.artifact_ids[0])
+        if run.artifact_ids
+        else None
+    )
+    run_artifact_body = run_artifact.body if run_artifact is not None else run.output
+    evidence_artifact_ids = [run_artifact.id] if run_artifact is not None else []
+    checks = [
+        evaluate_contract_check(
+            check=check,
+            run=run,
+            evidence_artifact_ids=evidence_artifact_ids,
+            run_artifact_body=run_artifact_body,
+        )
+        for check in contract.checks
+    ]
+    score = sum(1 for check in checks if check.passed)
+    passed = score == len(checks)
+    now = datetime.now(timezone.utc)
+    eval_id = f"eval_{uuid4().hex[:12]}"
+    check_lines = "\n".join(
+        f"- {check.check_id}: {'pass' if check.passed else 'fail'} - {check.comment}"
+        for check in checks
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="EVAL_RESULT",
+        artifact_id=eval_id,
+        title=f"Eval: {contract.name}",
+        body=(
+            f"Contract\n{contract.name}\n\n"
+            f"Run\n{run.id}\n\n"
+            f"Score\n{score}/{len(checks)}\n\n"
+            f"Result\n{'Passed' if passed else 'Failed'}\n\n"
+            f"Checks\n{check_lines or 'No checks defined'}"
+        ),
+        source=f"judge:{payload.judge_mode}",
+        agent_design_id=run.agent_design_id,
+        now=now,
+    )
+    if run_artifact is not None:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=run_artifact.id,
+            relationship_type="GENERATED_FROM",
+            now=now,
+        )
+    contract_artifact = find_artifact_by_type_and_artifact_id("EVAL_CONTRACT", contract.id)
+    if contract_artifact is not None:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=contract_artifact.id,
+            relationship_type="SUPPORTED_BY",
+            now=now,
+        )
+    judge_output_id = f"judge_{uuid4().hex[:12]}"
+    judge_output_text = "\n".join(
+        f"{check.check_id}: {'pass' if check.passed else 'fail'} ({check.comment})"
+        for check in checks
+    ) or "No deterministic checks defined."
+    judge_artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="JUDGE_OUTPUT",
+        artifact_id=judge_output_id,
+        title=f"Judge: {contract.name}",
+        body=judge_output_text,
+        source=f"judge:{payload.judge_mode}",
+        agent_design_id=run.agent_design_id,
+        now=now,
+    )
+    link_artifacts(
+        project_id=project_id,
+        source_artifact_id=artifact.id,
+        target_artifact_id=judge_artifact.id,
+        relationship_type="SUPPORTED_BY",
+        now=now,
+    )
+    judge_output = JudgeOutput(
+        id=judge_output_id,
+        project_id=project_id,
+        eval_result_id=eval_id,
+        judge_prompt_template_id=contract.judge_prompt_template_id,
+        mode=payload.judge_mode,
+        model=None,
+        input_summary=f"Run {run.id} evaluated against {contract.id}.",
+        output=judge_output_text,
+        token_usage={},
+        cost_estimate=None,
+        artifact_ids=[judge_artifact.id],
+        created_at=now,
+    )
+    _judge_outputs[judge_output.id] = judge_output
+    store.save_record("judge_outputs", judge_output.id, judge_output)
+
+    eval_result = EvalResult(
+        id=eval_id,
+        project_id=project_id,
+        run_id=run.id,
+        eval_contract_id=contract.id,
+        judge_prompt_template_id=contract.judge_prompt_template_id,
+        mode=payload.judge_mode,
+        score=score,
+        passed=passed,
+        checks=checks,
+        judge_output_ids=[judge_output.id],
+        artifact_ids=[artifact.id, judge_artifact.id],
+        created_at=now,
+    )
+    _eval_results[eval_result.id] = eval_result
+    store.save_record("eval_results", eval_result.id, eval_result)
+    failed_check_ids = [check.check_id for check in checks if not check.passed]
+    if failed_check_ids:
+        create_failure_packet_record(
+            project_id=project_id,
+            agent_design_id=run.agent_design_id,
+            agent_version_id=run.agent_version_id,
+            run_id=run.id,
+            eval_result_id=eval_result.id,
+            eval_contract_id=contract.id,
+            failed_check_ids=failed_check_ids,
+            title=f"Failed eval: {contract.name}",
+            diagnosis=(
+                "The run failed one or more eval contract checks: "
+                + ", ".join(failed_check_ids)
+            ),
+            severity="medium",
+            evidence_artifact_ids=eval_result.artifact_ids,
+            recommended_fix="Review the failed checks and propose a bounded agent change.",
+            status="open",
+            now=now,
+        )
+    return eval_result
+
+
+@app.get("/api/projects/{project_id}/eval-results/{eval_result_id}")
+def get_eval_result(project_id: str, eval_result_id: str) -> EvalResult:
+    get_project_or_404(project_id)
+    return get_eval_result_or_404(project_id, eval_result_id)
+
+
+@app.get("/api/projects/{project_id}/failure-packets")
+def list_failure_packets(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+) -> List[FailurePacket]:
+    get_project_or_404(project_id)
+    failure_packets = [
+        failure_packet
+        for failure_packet in _failure_packets.values()
+        if failure_packet.project_id == project_id
+        and (
+            agent_design_id is None
+            or failure_packet.agent_design_id == agent_design_id
+        )
+    ]
+    return sorted(
+        failure_packets,
+        key=lambda failure_packet: failure_packet.updated_at,
+        reverse=True,
+    )
+
+
+@app.post("/api/projects/{project_id}/failure-packets", status_code=201)
+def create_failure_packet(
+    project_id: str,
+    payload: FailurePacketCreate,
+) -> FailurePacket:
+    get_project_or_404(project_id)
+    get_agent_design_or_404(project_id, payload.agent_design_id)
+    run = _runs.get(payload.run_id)
+    if run is None or run.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    eval_result = get_eval_result_or_404(project_id, payload.eval_result_id)
+    contract = get_eval_contract_or_404(project_id, payload.eval_contract_id)
+    if (
+        run.agent_design_id != payload.agent_design_id
+        or eval_result.run_id != run.id
+        or contract.agent_design_id != payload.agent_design_id
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Failure packet references must belong to the same evaluated run.",
+        )
+    for evidence_artifact_id in payload.evidence_artifact_ids:
+        get_artifact_or_404(project_id, evidence_artifact_id)
+
+    return create_failure_packet_record(
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        agent_version_id=payload.agent_version_id,
+        run_id=payload.run_id,
+        eval_result_id=payload.eval_result_id,
+        eval_contract_id=payload.eval_contract_id,
+        failed_check_ids=payload.failed_check_ids,
+        title=payload.title.strip(),
+        diagnosis=payload.diagnosis.strip(),
+        severity=payload.severity.strip(),
+        evidence_artifact_ids=payload.evidence_artifact_ids,
+        recommended_fix=payload.recommended_fix.strip(),
+        status=payload.status.strip(),
+        now=datetime.now(timezone.utc),
+    )
+
+
+@app.get("/api/projects/{project_id}/failure-packets/{failure_packet_id}")
+def get_failure_packet(project_id: str, failure_packet_id: str) -> FailurePacket:
+    get_project_or_404(project_id)
+    return get_failure_packet_or_404(project_id, failure_packet_id)
+
+
+@app.patch("/api/projects/{project_id}/failure-packets/{failure_packet_id}")
+def update_failure_packet(
+    project_id: str,
+    failure_packet_id: str,
+    payload: FailurePacketUpdate,
+) -> FailurePacket:
+    get_project_or_404(project_id)
+    existing = get_failure_packet_or_404(project_id, failure_packet_id)
+    updated = existing.model_copy(
+        update={
+            "title": payload.title.strip() if payload.title is not None else existing.title,
+            "diagnosis": (
+                payload.diagnosis.strip()
+                if payload.diagnosis is not None
+                else existing.diagnosis
+            ),
+            "severity": (
+                payload.severity.strip()
+                if payload.severity is not None
+                else existing.severity
+            ),
+            "recommended_fix": (
+                payload.recommended_fix.strip()
+                if payload.recommended_fix is not None
+                else existing.recommended_fix
+            ),
+            "status": payload.status.strip() if payload.status is not None else existing.status,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    _failure_packets[updated.id] = updated
+    store.save_record("failure_packets", updated.id, updated)
+    return updated
+
+
 @app.post("/api/projects/{project_id}/agent-designs/{agent_id}/runs", status_code=201)
 def run_agent_design(
     project_id: str,
@@ -364,62 +1497,13 @@ def run_agent_design(
 ) -> AgentRunResult:
     get_project_or_404(project_id)
     agent = get_agent_design_or_404(project_id, agent_id)
-    runner_agent = RunnerAgentDesign(
-        id=agent.id,
-        name=agent.name,
-        intent=agent.intent,
-        allowed_tool_names=agent.allowed_tool_names,
-    )
-    runner_scenario = RunnerScenario(input=payload.scenario_input.strip())
-    if payload.mode == "live":
-        try:
-            runner_result = run_openai_agent(
-                runner_agent,
-                runner_scenario,
-                openai_config_from_env(),
-                approved_tools_for_agent(project_id, agent),
-            )
-        except RuntimeError as exc:
-            detail = str(exc)
-            status_code = 400 if "OPENAI_API_KEY" in detail else 502
-            raise HTTPException(status_code=status_code, detail=detail) from exc
-    else:
-        runner_result = run_mock_agent(runner_agent, runner_scenario)
-    now = datetime.now(timezone.utc)
-    tool_summary = "\n".join(
-        f"- {tool.name}: {tool.output}" for tool in runner_result.tool_calls
-    )
-    artifact = ArtifactRecord(
-        id=f"artifact_{uuid4().hex[:12]}",
+    runner_result, artifact = run_agent_with_runner(
         project_id=project_id,
-        artifact_type="RUN_RESULT",
-        artifact_id=runner_result.id,
-        title=f"Run: {agent.name}",
-        body=(
-            f"Response\n{runner_result.response}\n\n"
-            f"Scenario\n{runner_result.scenario_input}\n\n"
-            f"Tools\n{tool_summary}"
-        ),
-        source=f"runner:{runner_result.mode}",
-        agent_design_id=agent.id,
-        created_at=now,
-        updated_at=now,
+        agent=agent,
+        instructions=agent.intent,
+        scenario_input=payload.scenario_input,
+        mode=payload.mode,
     )
-    _artifacts[artifact.id] = artifact
-    store.save_record("artifacts", artifact.id, artifact)
-
-    design_artifact = find_agent_design_artifact(agent.id)
-    if design_artifact is not None:
-        link = ArtifactLink(
-            id=f"link_{uuid4().hex[:12]}",
-            project_id=project_id,
-            source_artifact_id=artifact.id,
-            target_artifact_id=design_artifact.id,
-            relationship_type="GENERATED_FROM",
-            created_at=now,
-        )
-        _artifact_links[link.id] = link
-        store.save_record("artifact_links", link.id, link)
 
     return AgentRunResult(
         id=runner_result.id,

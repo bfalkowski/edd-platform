@@ -184,6 +184,144 @@
         "title": "AgentRunResult",
         "type": "object"
       },
+      "AgentVersion": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "source_fix_proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fix Proposal Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tool_policy": {
+            "additionalProperties": true,
+            "title": "Tool Policy",
+            "type": "object"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version_label": {
+            "title": "Version Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "version_label",
+          "instructions",
+          "tool_policy",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AgentVersion",
+        "type": "object"
+      },
+      "AgentVersionCreate": {
+        "properties": {
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "parent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Version Id"
+          },
+          "source_fix_proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Fix Proposal Id"
+          },
+          "status": {
+            "default": "candidate",
+            "title": "Status",
+            "type": "string"
+          },
+          "tool_policy": {
+            "additionalProperties": true,
+            "title": "Tool Policy",
+            "type": "object"
+          },
+          "version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Label"
+          }
+        },
+        "title": "AgentVersionCreate",
+        "type": "object"
+      },
       "ArtifactLink": {
         "properties": {
           "created_at": {
@@ -411,6 +549,387 @@
         "title": "EvalCheck",
         "type": "object"
       },
+      "EvalCheckResult": {
+        "properties": {
+          "check_id": {
+            "title": "Check Id",
+            "type": "string"
+          },
+          "check_type": {
+            "title": "Check Type",
+            "type": "string"
+          },
+          "comment": {
+            "title": "Comment",
+            "type": "string"
+          },
+          "evidence_artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Artifact Ids",
+            "type": "array"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "string"
+          },
+          "observed": {
+            "title": "Observed",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "check_id",
+          "check_type",
+          "passed",
+          "observed",
+          "expected",
+          "evidence_artifact_ids",
+          "comment"
+        ],
+        "title": "EvalCheckResult",
+        "type": "object"
+      },
+      "EvalContract": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "expected_behavior": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Behavior",
+            "type": "array"
+          },
+          "forbidden_behavior": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Behavior",
+            "type": "array"
+          },
+          "forbidden_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Tools",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "judge_prompt_template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Prompt Template Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Output Requirements",
+            "type": "array"
+          },
+          "pass_criteria": {
+            "title": "Pass Criteria",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "required_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Evidence",
+            "type": "array"
+          },
+          "required_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Tools",
+            "type": "array"
+          },
+          "scenario_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "name",
+          "description",
+          "version",
+          "expected_behavior",
+          "required_evidence",
+          "required_tools",
+          "forbidden_tools",
+          "forbidden_behavior",
+          "output_requirements",
+          "checks",
+          "pass_criteria",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EvalContract",
+        "type": "object"
+      },
+      "EvalContractCreate": {
+        "properties": {
+          "agent_design_id": {
+            "minLength": 1,
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "expected_behavior": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Behavior",
+            "type": "array"
+          },
+          "forbidden_behavior": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Behavior",
+            "type": "array"
+          },
+          "forbidden_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Tools",
+            "type": "array"
+          },
+          "judge_prompt_template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Prompt Template Id"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "output_requirements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Output Requirements",
+            "type": "array"
+          },
+          "pass_criteria": {
+            "default": "all_checks_pass",
+            "title": "Pass Criteria",
+            "type": "string"
+          },
+          "required_evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Evidence",
+            "type": "array"
+          },
+          "required_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Tools",
+            "type": "array"
+          },
+          "scenario_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Id"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "default": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "name"
+        ],
+        "title": "EvalContractCreate",
+        "type": "object"
+      },
+      "EvalResult": {
+        "properties": {
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/EvalCheckResult"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "eval_contract_id": {
+            "title": "Eval Contract Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "judge_output_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Judge Output Ids",
+            "type": "array"
+          },
+          "judge_prompt_template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Prompt Template Id"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "run_id",
+          "eval_contract_id",
+          "mode",
+          "score",
+          "passed",
+          "checks",
+          "judge_output_ids",
+          "artifact_ids",
+          "created_at"
+        ],
+        "title": "EvalResult",
+        "type": "object"
+      },
       "EvalRunResult": {
         "properties": {
           "agent_design_id": {
@@ -472,6 +991,253 @@
         "title": "EvalRunResult",
         "type": "object"
       },
+      "FailurePacket": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "agent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Version Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "diagnosis": {
+            "title": "Diagnosis",
+            "type": "string"
+          },
+          "eval_contract_id": {
+            "title": "Eval Contract Id",
+            "type": "string"
+          },
+          "eval_result_id": {
+            "title": "Eval Result Id",
+            "type": "string"
+          },
+          "evidence_artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Artifact Ids",
+            "type": "array"
+          },
+          "failed_check_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Check Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "recommended_fix": {
+            "title": "Recommended Fix",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "run_id",
+          "eval_result_id",
+          "eval_contract_id",
+          "failed_check_ids",
+          "title",
+          "diagnosis",
+          "severity",
+          "evidence_artifact_ids",
+          "recommended_fix",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FailurePacket",
+        "type": "object"
+      },
+      "FailurePacketCreate": {
+        "properties": {
+          "agent_design_id": {
+            "minLength": 1,
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "agent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Version Id"
+          },
+          "diagnosis": {
+            "minLength": 1,
+            "title": "Diagnosis",
+            "type": "string"
+          },
+          "eval_contract_id": {
+            "minLength": 1,
+            "title": "Eval Contract Id",
+            "type": "string"
+          },
+          "eval_result_id": {
+            "minLength": 1,
+            "title": "Eval Result Id",
+            "type": "string"
+          },
+          "evidence_artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Artifact Ids",
+            "type": "array"
+          },
+          "failed_check_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Check Ids",
+            "type": "array"
+          },
+          "recommended_fix": {
+            "default": "",
+            "title": "Recommended Fix",
+            "type": "string"
+          },
+          "run_id": {
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "severity": {
+            "default": "medium",
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "default": "open",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "run_id",
+          "eval_result_id",
+          "eval_contract_id",
+          "title",
+          "diagnosis"
+        ],
+        "title": "FailurePacketCreate",
+        "type": "object"
+      },
+      "FailurePacketUpdate": {
+        "properties": {
+          "diagnosis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis"
+          },
+          "recommended_fix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Fix"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "FailurePacketUpdate",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -518,6 +1284,320 @@
           "updated_at"
         ],
         "title": "Project",
+        "type": "object"
+      },
+      "RunCreate": {
+        "properties": {
+          "agent_design_id": {
+            "minLength": 1,
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "agent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Version Id"
+          },
+          "eval_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Contract Id"
+          },
+          "mode": {
+            "default": "mock",
+            "enum": [
+              "mock",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "scenario_id": {
+            "minLength": 1,
+            "title": "Scenario Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "scenario_id"
+        ],
+        "title": "RunCreate",
+        "type": "object"
+      },
+      "RunEvaluateCreate": {
+        "properties": {
+          "eval_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Contract Id"
+          },
+          "judge_mode": {
+            "const": "deterministic",
+            "default": "deterministic",
+            "title": "Judge Mode",
+            "type": "string"
+          }
+        },
+        "title": "RunEvaluateCreate",
+        "type": "object"
+      },
+      "RunRecord": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "agent_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Version Id"
+          },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "eval_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Contract Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "scenario_id": {
+            "title": "Scenario Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "scenario_id",
+          "mode",
+          "input",
+          "output",
+          "status",
+          "artifact_ids",
+          "started_at",
+          "completed_at"
+        ],
+        "title": "RunRecord",
+        "type": "object"
+      },
+      "Scenario": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_eval_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Eval Contract Id"
+          },
+          "fixture_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fixture Refs",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "setup_context": {
+            "title": "Setup Context",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "name",
+          "input",
+          "setup_context",
+          "fixture_refs",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Scenario",
+        "type": "object"
+      },
+      "ScenarioCreate": {
+        "properties": {
+          "agent_design_id": {
+            "minLength": 1,
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "default_eval_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Eval Contract Id"
+          },
+          "fixture_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fixture Refs",
+            "type": "array"
+          },
+          "input": {
+            "minLength": 1,
+            "title": "Input",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "setup_context": {
+            "default": "",
+            "title": "Setup Context",
+            "type": "string"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "name",
+          "input"
+        ],
+        "title": "ScenarioCreate",
         "type": "object"
       },
       "ToolDefinition": {
@@ -929,6 +2009,171 @@
         "summary": "Run Agent Design"
       }
     },
+    "/api/projects/{project_id}/agent-designs/{agent_id}/versions": {
+      "get": {
+        "operationId": "list_agent_versions_api_projects__project_id__agent_designs__agent_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentVersion"
+                  },
+                  "title": "Response List Agent Versions Api Projects  Project Id  Agent Designs  Agent Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Versions"
+      },
+      "post": {
+        "operationId": "create_agent_version_api_projects__project_id__agent_designs__agent_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentVersionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Agent Version"
+      }
+    },
+    "/api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}": {
+      "get": {
+        "operationId": "get_agent_version_api_projects__project_id__agent_designs__agent_id__versions__version_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentVersion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Version"
+      }
+    },
     "/api/projects/{project_id}/artifact-links": {
       "post": {
         "operationId": "create_artifact_link_api_projects__project_id__artifact_links_post",
@@ -1317,6 +2562,784 @@
           }
         },
         "summary": "Build Context Pack"
+      }
+    },
+    "/api/projects/{project_id}/eval-contracts": {
+      "get": {
+        "operationId": "list_eval_contracts_api_projects__project_id__eval_contracts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvalContract"
+                  },
+                  "title": "Response List Eval Contracts Api Projects  Project Id  Eval Contracts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Eval Contracts"
+      },
+      "post": {
+        "operationId": "create_eval_contract_api_projects__project_id__eval_contracts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalContractCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalContract"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Eval Contract"
+      }
+    },
+    "/api/projects/{project_id}/eval-contracts/{contract_id}": {
+      "get": {
+        "operationId": "get_eval_contract_api_projects__project_id__eval_contracts__contract_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contract_id",
+            "required": true,
+            "schema": {
+              "title": "Contract Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalContract"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Eval Contract"
+      }
+    },
+    "/api/projects/{project_id}/eval-results/{eval_result_id}": {
+      "get": {
+        "operationId": "get_eval_result_api_projects__project_id__eval_results__eval_result_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "eval_result_id",
+            "required": true,
+            "schema": {
+              "title": "Eval Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Eval Result"
+      }
+    },
+    "/api/projects/{project_id}/failure-packets": {
+      "get": {
+        "operationId": "list_failure_packets_api_projects__project_id__failure_packets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FailurePacket"
+                  },
+                  "title": "Response List Failure Packets Api Projects  Project Id  Failure Packets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Failure Packets"
+      },
+      "post": {
+        "operationId": "create_failure_packet_api_projects__project_id__failure_packets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailurePacketCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailurePacket"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Failure Packet"
+      }
+    },
+    "/api/projects/{project_id}/failure-packets/{failure_packet_id}": {
+      "get": {
+        "operationId": "get_failure_packet_api_projects__project_id__failure_packets__failure_packet_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "failure_packet_id",
+            "required": true,
+            "schema": {
+              "title": "Failure Packet Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailurePacket"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Failure Packet"
+      },
+      "patch": {
+        "operationId": "update_failure_packet_api_projects__project_id__failure_packets__failure_packet_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "failure_packet_id",
+            "required": true,
+            "schema": {
+              "title": "Failure Packet Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailurePacketUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailurePacket"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Failure Packet"
+      }
+    },
+    "/api/projects/{project_id}/runs": {
+      "get": {
+        "operationId": "list_runs_api_projects__project_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunRecord"
+                  },
+                  "title": "Response List Runs Api Projects  Project Id  Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs"
+      },
+      "post": {
+        "operationId": "create_run_api_projects__project_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Run"
+      }
+    },
+    "/api/projects/{project_id}/runs/{run_id}": {
+      "get": {
+        "operationId": "get_run_api_projects__project_id__runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run"
+      }
+    },
+    "/api/projects/{project_id}/runs/{run_id}/evaluate": {
+      "post": {
+        "operationId": "evaluate_run_api_projects__project_id__runs__run_id__evaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunEvaluateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Run"
+      }
+    },
+    "/api/projects/{project_id}/scenarios": {
+      "get": {
+        "operationId": "list_scenarios_api_projects__project_id__scenarios_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Scenario"
+                  },
+                  "title": "Response List Scenarios Api Projects  Project Id  Scenarios Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scenarios"
+      },
+      "post": {
+        "operationId": "create_scenario_api_projects__project_id__scenarios_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScenarioCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scenario"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scenario"
+      }
+    },
+    "/api/projects/{project_id}/scenarios/{scenario_id}": {
+      "get": {
+        "operationId": "get_scenario_api_projects__project_id__scenarios__scenario_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scenario_id",
+            "required": true,
+            "schema": {
+              "title": "Scenario Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scenario"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scenario"
       }
     },
     "/api/projects/{project_id}/tools": {

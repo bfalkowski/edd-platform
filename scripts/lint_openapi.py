@@ -21,6 +21,8 @@ REQUIRED_PATHS = {
     "/api/projects/{project_id}/agent-designs",
     "/api/projects/{project_id}/agent-designs/{agent_id}",
     "/api/projects/{project_id}/agent-designs/{agent_id}/runs",
+    "/api/projects/{project_id}/agent-designs/{agent_id}/versions",
+    "/api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}",
     "/api/projects/{project_id}/artifact-links",
     "/api/projects/{project_id}/artifacts",
     "/api/projects/{project_id}/artifacts/search",
@@ -28,6 +30,16 @@ REQUIRED_PATHS = {
     "/api/projects/{project_id}/artifacts/{artifact_id}/evaluate",
     "/api/projects/{project_id}/artifacts/{artifact_id}/links",
     "/api/projects/{project_id}/context-packs",
+    "/api/projects/{project_id}/eval-contracts",
+    "/api/projects/{project_id}/eval-contracts/{contract_id}",
+    "/api/projects/{project_id}/eval-results/{eval_result_id}",
+    "/api/projects/{project_id}/failure-packets",
+    "/api/projects/{project_id}/failure-packets/{failure_packet_id}",
+    "/api/projects/{project_id}/runs",
+    "/api/projects/{project_id}/runs/{run_id}",
+    "/api/projects/{project_id}/runs/{run_id}/evaluate",
+    "/api/projects/{project_id}/scenarios",
+    "/api/projects/{project_id}/scenarios/{scenario_id}",
 }
 
 
