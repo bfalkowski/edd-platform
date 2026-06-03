@@ -20,7 +20,10 @@ to use the consolidated product language:
 | [HLD-001](HLD-001-artifact-retrieval-and-evidence-context.md) | Artifact Retrieval and Evidence Context | Draft |
 | [HLD-002](HLD-002-product-architecture-and-data-model.md) | Product Architecture and Data Model | Draft |
 | [HLD-003](HLD-003-eval-driven-agent-design-workflow.md) | Eval-Driven Agent Design Workflow | Draft |
+| [HLD-004](HLD-004-eval-contracts-runs-judges-and-fixes.md) | Eval Contracts, Runs, Judges, and Fixes | Draft |
 
 ## Notes
 
-- [Rubric-driven agent improvement](notes-rubric-driven-agent-improvement.md) should be folded into `HLD-005`.
+- [Rubric-driven agent improvement](notes-rubric-driven-agent-improvement.md)
+  is captured by `HLD-004` and should be revisited when implementing optional
+  LLM-as-judge behavior.

@@ -5,6 +5,16 @@ This is the working checklist for the clean-room consolidated EDD Platform repo.
 The product direction is one React console, one platform API, runner packages
 behind the API, and evidence artifacts as the durable memory of the workflow.
 
+Planning anchors:
+
+- [`PRODUCT_SPINE.md`](PRODUCT_SPINE.md) defines the canonical product objects.
+- [`HLD_COVERAGE_MATRIX.md`](HLD_COVERAGE_MATRIX.md) tracks planning coverage
+  before feature code.
+- [`hld/HLD-004-eval-contracts-runs-judges-and-fixes.md`](hld/HLD-004-eval-contracts-runs-judges-and-fixes.md)
+  defines the next implementation backbone.
+- [`API_CONTRACT.md`](API_CONTRACT.md) defines the Phase 2 API backbone to
+  implement through FastAPI/OpenAPI.
+
 ## Phase 0: Repo Foundation
 
 - [x] Create clean public repo with fresh history.
@@ -38,44 +48,104 @@ behind the API, and evidence artifacts as the durable memory of the workflow.
 - [x] Show related artifacts in the UI.
 - [x] Persist state beyond in-memory storage.
 
-## Phase 2: Agent Design Workflow
+## Phase 2: Eval Contract Backbone
 
-- [x] Synthesize `HLD-003: Eval-Driven Agent Design Workflow`.
-- [ ] Add target/design artifact sections.
-- [ ] Add behavior rules artifacts.
-- [ ] Add judge prompt artifacts.
-- [ ] Add gate artifacts.
-- [ ] Add edit/save support for artifact sections.
-- [ ] Add add/remove controls for repeatable sections.
-- [ ] Keep every generated or edited output represented as an artifact.
+This phase defines the missing API and data contracts for eval-driven design.
+Do this before adding more workflow UI.
 
-## Phase 3: Runner Integration
-
-- [ ] Synthesize `HLD-004: Runner, Mock Mode, and Live Mode`.
 - [x] Add deterministic runner package.
 - [x] Run a mock scenario from a selected agent design.
 - [x] Run a live OpenAI scenario from a selected agent design.
 - [x] Store run evidence artifacts.
-- [x] Store eval result artifacts.
-- [x] Display run/eval evidence in context packs.
 - [x] Add platform-owned tool definitions and approval status.
 - [x] Add agent-level approved tool allowlists.
 - [x] Adapt approved platform tools into LangChain/LangGraph tool primitives.
-- [x] Replace direct live OpenAI runner with a LangGraph tool-calling runner.
 - [x] Store tool calls and tool results as run evidence.
-- [ ] Add UI to edit agent tool allowlists.
+- [x] Synthesize `HLD-004: Eval Contracts, Runs, Judges, and Fixes`.
+- [x] Define planned OpenAPI contracts for `EvalContract`, `Run`, `EvalResult`,
+      `FailurePacket`, `FixProposal`, `AgentVersion`, and `Comparison`.
+- [ ] Implement the Phase 2 API contracts in FastAPI and generated OpenAPI.
+- [ ] Add `EvalContract` artifacts as the first-class place where agent
+      expectations live.
+- [ ] Add scenario-specific contracts that can describe any agent behavior,
+      required evidence, tool expectations, output shape, forbidden behavior,
+      and pass/fail criteria.
+- [ ] Add run records that reference agent design/version, scenario, mode,
+      tools, and optional eval contract.
 - [ ] Split tool calls and tool results into first-class evidence artifacts.
+- [ ] Replace hardcoded eval checks with contract-driven deterministic checks.
+- [ ] Store eval results and judge outputs as evidence artifacts linked to runs
+      and contracts.
+- [ ] Create failure packet artifacts when contract checks fail.
+- [ ] Add bounded fix proposal artifacts linked to failure packets.
+- [ ] Add agent versions so fixes can produce v1, v2, v3, and later candidates.
+- [ ] Add comparison artifacts/API for baseline vs candidate runs.
+- [ ] Keep all new API shapes covered by OpenAPI export, lint, and contract
+      tests.
+
+### Phase 2 Vertical Slice: Prove Eval-Driven Design
+
+The first Phase 2 demo should prove this loop end to end:
+
+```text
+v0 run
+  -> evaluate against explicit EvalContract
+  -> create failure packet
+  -> create bounded fix
+  -> run v1
+  -> evaluate against the same EvalContract
+  -> compare whether the fix improved the agent
+```
+
+The product model must support arbitrary agents. A contract should be able to
+describe expectations for customer triage, document review, research support,
+coding assistance, weather lookup, or any other runnable behavior. Contracts
+should be data, not code branches.
+
+For any scenario, the expectation contract should be able to verify that an
+agent:
+
+- uses required tools when the contract requires tool use;
+- avoids tools that are not approved for the agent or scenario;
+- grounds the final answer in the available evidence;
+- follows required output shape and safety constraints;
+- avoids contract-specific forbidden behavior;
+- records tool calls and judge results as evidence artifacts.
+
+The current weather/tool scenario is only an implementation smoke test because
+it is easy to verify. It should not become the canonical product workflow.
+
+## Phase 3: Builder UI for the EDD Loop
+
+This phase makes the backbone usable without hiding the system model.
+
+- [x] Add React console scaffold.
+- [x] Add left-nav agent creation and selection.
+- [x] Display context-pack-backed evidence in the UI.
+- [x] Show related artifacts in the UI.
+- [x] Show run/eval evidence in context packs.
+- [ ] Show the selected eval contract beside the playground run controls.
+- [ ] Add UI to create/edit scenario inputs.
+- [ ] Add UI to create/edit eval contracts.
+- [ ] Add UI to edit agent tool allowlists.
+- [ ] Add UI to run v0 against a selected contract.
+- [ ] Add UI to evaluate a selected run against a selected contract.
+- [ ] Add UI to inspect failure packets and bounded fix proposals.
+- [ ] Add UI to create a candidate version from a fix proposal.
+- [ ] Add UI to run/evaluate candidate versions.
+- [ ] Add a v0/v1 comparison view that shows run evidence, eval checks,
+      failure packets, fixes, and pass/fail movement.
+- [ ] Keep every generated or edited output represented as an artifact.
 
 ## Phase 4: Judges and Gates
 
-- [ ] Synthesize `HLD-005: Judges, Gates, and Failure Packets`.
-- [ ] Fold rubric-driven agent improvement into `HLD-005`.
-- [ ] Store judge prompts in the platform.
+- [ ] Store judge prompts in the platform and link them to contracts.
 - [ ] Add mock judge execution for local/CI mode.
 - [ ] Add optional LLM-as-judge execution for live mode.
 - [ ] Add gate definitions.
 - [ ] Add gate decision artifacts.
 - [ ] Track token and cost telemetry for live judge calls.
+- [ ] Add promotion readiness views backed by gate decisions.
 
 ## Phase 5: Langfuse Adapter
 

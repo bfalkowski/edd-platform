@@ -28,7 +28,9 @@ middleware state:
 - `FixProposal` or runner retry applies bounded correction.
 - `GateDecision` records whether the result is acceptable.
 
-This should be folded into `HLD-005: Judges, Gates, and Failure Packets`.
+This is now represented in
+[`HLD-004: Eval Contracts, Runs, Judges, and Fixes`](HLD-004-eval-contracts-runs-judges-and-fixes.md).
+Revisit this note when implementing optional LLM-as-judge behavior.
 
 Do not copy a framework-specific implementation wholesale. The product value is
 the platform-native evidence model around rubric-driven improvement.
