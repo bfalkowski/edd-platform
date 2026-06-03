@@ -71,6 +71,7 @@ def run_mock_agent(agent: RunnerAgentDesign, scenario: RunnerScenario) -> Runner
     ]
     response = (
         f"{agent.name} reviewed the scenario and stayed within its design intent. "
+        f"Design intent: {agent.intent}. "
         f"It should gather relevant evidence, state assumptions, and recommend a safe next action. "
         f"Scenario: {scenario.input}"
     )

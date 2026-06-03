@@ -319,6 +319,65 @@ class FailurePacket(BaseModel):
     updated_at: datetime
 
 
+class FixProposalCreate(BaseModel):
+    agent_design_id: str = Field(min_length=1)
+    target_version_id: Optional[str] = None
+    title: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    proposed_changes: List[Dict[str, object]] = Field(default_factory=list)
+    addressed_failure_packet_ids: List[str] = Field(default_factory=list)
+    validation_contract_ids: List[str] = Field(default_factory=list)
+    status: str = "proposed"
+
+
+class FixProposalUpdate(BaseModel):
+    title: Optional[str] = None
+    rationale: Optional[str] = None
+    proposed_changes: Optional[List[Dict[str, object]]] = None
+    addressed_failure_packet_ids: Optional[List[str]] = None
+    validation_contract_ids: Optional[List[str]] = None
+    status: Optional[str] = None
+
+
+class FixProposal(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    target_version_id: Optional[str] = None
+    title: str
+    rationale: str
+    proposed_changes: List[Dict[str, object]]
+    addressed_failure_packet_ids: List[str]
+    validation_contract_ids: List[str]
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ComparisonCreate(BaseModel):
+    baseline_run_id: str = Field(min_length=1)
+    candidate_run_id: str = Field(min_length=1)
+    eval_contract_id: str = Field(min_length=1)
+
+
+class Comparison(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    baseline_version_id: Optional[str] = None
+    candidate_version_id: Optional[str] = None
+    baseline_run_id: str
+    candidate_run_id: str
+    baseline_eval_result_id: str
+    candidate_eval_result_id: str
+    fixed_failure_packet_ids: List[str]
+    new_failure_packet_ids: List[str]
+    remaining_failure_packet_ids: List[str]
+    summary: str
+    artifact_ids: List[str]
+    created_at: datetime
+
+
 class EvalRunResult(BaseModel):
     id: str
     project_id: str
@@ -370,6 +429,8 @@ _runs: Dict[str, RunRecord] = store.load_collection("runs", RunRecord)
 _eval_results: Dict[str, EvalResult] = store.load_collection("eval_results", EvalResult)
 _judge_outputs: Dict[str, JudgeOutput] = store.load_collection("judge_outputs", JudgeOutput)
 _failure_packets: Dict[str, FailurePacket] = store.load_collection("failure_packets", FailurePacket)
+_fix_proposals: Dict[str, FixProposal] = store.load_collection("fix_proposals", FixProposal)
+_comparisons: Dict[str, Comparison] = store.load_collection("comparisons", Comparison)
 _artifacts: Dict[str, ArtifactRecord] = store.load_collection("artifacts", ArtifactRecord)
 _artifact_links: Dict[str, ArtifactLink] = store.load_collection("artifact_links", ArtifactLink)
 _tool_definitions: Dict[str, ToolDefinition] = store.load_collection("tool_definitions", ToolDefinition)
@@ -459,6 +520,20 @@ def get_failure_packet_or_404(project_id: str, failure_packet_id: str) -> Failur
     if failure_packet is None or failure_packet.project_id != project_id:
         raise HTTPException(status_code=404, detail="Failure packet not found.")
     return failure_packet
+
+
+def get_fix_proposal_or_404(project_id: str, fix_proposal_id: str) -> FixProposal:
+    fix_proposal = _fix_proposals.get(fix_proposal_id)
+    if fix_proposal is None or fix_proposal.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Fix proposal not found.")
+    return fix_proposal
+
+
+def get_comparison_or_404(project_id: str, comparison_id: str) -> Comparison:
+    comparison = _comparisons.get(comparison_id)
+    if comparison is None or comparison.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Comparison not found.")
+    return comparison
 
 
 def find_agent_design_artifact(agent_id: str) -> Optional[ArtifactRecord]:
@@ -750,6 +825,251 @@ def create_failure_packet_record(
     return failure_packet
 
 
+def validate_fix_proposal_references(
+    *,
+    project_id: str,
+    agent_design_id: str,
+    target_version_id: Optional[str],
+    addressed_failure_packet_ids: List[str],
+    validation_contract_ids: List[str],
+) -> None:
+    get_agent_design_or_404(project_id, agent_design_id)
+    if target_version_id is not None:
+        target_version = get_agent_version_or_404(project_id, target_version_id)
+        if target_version.agent_design_id != agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Fix proposal target version must belong to the same agent design.",
+            )
+
+    for failure_packet_id in addressed_failure_packet_ids:
+        failure_packet = get_failure_packet_or_404(project_id, failure_packet_id)
+        if failure_packet.agent_design_id != agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Fix proposal failure packets must belong to the same agent design.",
+            )
+
+    for contract_id in validation_contract_ids:
+        contract = get_eval_contract_or_404(project_id, contract_id)
+        if contract.agent_design_id != agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Fix proposal validation contracts must belong to the same agent design.",
+            )
+
+
+def create_fix_proposal_record(
+    *,
+    project_id: str,
+    agent_design_id: str,
+    target_version_id: Optional[str],
+    title: str,
+    rationale: str,
+    proposed_changes: List[Dict[str, object]],
+    addressed_failure_packet_ids: List[str],
+    validation_contract_ids: List[str],
+    status: str,
+    now: datetime,
+) -> FixProposal:
+    fix_proposal = FixProposal(
+        id=f"fix_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=agent_design_id,
+        target_version_id=target_version_id,
+        title=title,
+        rationale=rationale,
+        proposed_changes=proposed_changes,
+        addressed_failure_packet_ids=addressed_failure_packet_ids,
+        validation_contract_ids=validation_contract_ids,
+        status=status,
+        created_at=now,
+        updated_at=now,
+    )
+    _fix_proposals[fix_proposal.id] = fix_proposal
+    store.save_record("fix_proposals", fix_proposal.id, fix_proposal)
+
+    change_lines = "\n".join(
+        f"- {change.get('surface', 'change')}: {change.get('change', change)}"
+        for change in proposed_changes
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="FIX_PROPOSAL",
+        artifact_id=fix_proposal.id,
+        title=fix_proposal.title,
+        body=(
+            f"Rationale\n{fix_proposal.rationale}\n\n"
+            f"Target version\n{fix_proposal.target_version_id or 'None'}\n\n"
+            f"Addressed failures\n"
+            + "\n".join(
+                f"- {failure_id}" for failure_id in fix_proposal.addressed_failure_packet_ids
+            )
+            + "\n\nValidation contracts\n"
+            + "\n".join(
+                f"- {contract_id}" for contract_id in fix_proposal.validation_contract_ids
+            )
+            + f"\n\nProposed changes\n{change_lines or 'Needs review'}"
+        ),
+        source="fix-proposal",
+        agent_design_id=agent_design_id,
+        now=now,
+    )
+    for failure_packet_id in addressed_failure_packet_ids:
+        failure_artifact = find_artifact_by_type_and_artifact_id(
+            "FAILURE_PACKET",
+            failure_packet_id,
+        )
+        if failure_artifact is not None:
+            link_artifacts(
+                project_id=project_id,
+                source_artifact_id=artifact.id,
+                target_artifact_id=failure_artifact.id,
+                relationship_type="ADDRESSES",
+                now=now,
+            )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=agent_design_id,
+        artifact=artifact,
+        now=now,
+    )
+    return fix_proposal
+
+
+def get_run_or_404(project_id: str, run_id: str) -> RunRecord:
+    run = _runs.get(run_id)
+    if run is None or run.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return run
+
+
+def find_eval_result_for_run(
+    *,
+    project_id: str,
+    run_id: str,
+    eval_contract_id: str,
+) -> Optional[EvalResult]:
+    for eval_result in _eval_results.values():
+        if (
+            eval_result.project_id == project_id
+            and eval_result.run_id == run_id
+            and eval_result.eval_contract_id == eval_contract_id
+        ):
+            return eval_result
+    return None
+
+
+def failure_packets_for_eval(
+    *,
+    project_id: str,
+    eval_result_id: str,
+) -> List[FailurePacket]:
+    return [
+        failure_packet
+        for failure_packet in _failure_packets.values()
+        if failure_packet.project_id == project_id
+        and failure_packet.eval_result_id == eval_result_id
+    ]
+
+
+def create_comparison_record(
+    *,
+    project_id: str,
+    baseline_run: RunRecord,
+    candidate_run: RunRecord,
+    eval_contract_id: str,
+    baseline_eval_result: EvalResult,
+    candidate_eval_result: EvalResult,
+    now: datetime,
+) -> Comparison:
+    baseline_packets = failure_packets_for_eval(
+        project_id=project_id,
+        eval_result_id=baseline_eval_result.id,
+    )
+    candidate_packets = failure_packets_for_eval(
+        project_id=project_id,
+        eval_result_id=candidate_eval_result.id,
+    )
+    candidate_failed_check_ids = {
+        check.check_id for check in candidate_eval_result.checks if not check.passed
+    }
+    baseline_failed_check_ids = {
+        check.check_id for check in baseline_eval_result.checks if not check.passed
+    }
+    fixed_failure_packet_ids = [
+        packet.id
+        for packet in baseline_packets
+        if not set(packet.failed_check_ids) & candidate_failed_check_ids
+    ]
+    remaining_failure_packet_ids = [
+        packet.id
+        for packet in baseline_packets
+        if set(packet.failed_check_ids) & candidate_failed_check_ids
+    ]
+    new_failure_packet_ids = [
+        packet.id
+        for packet in candidate_packets
+        if bool(set(packet.failed_check_ids) - baseline_failed_check_ids)
+    ]
+    summary = (
+        f"Comparison fixed {len(fixed_failure_packet_ids)} failure packet(s), "
+        f"left {len(remaining_failure_packet_ids)} remaining, "
+        f"and introduced {len(new_failure_packet_ids)} new failure packet(s)."
+    )
+    comparison_id = f"comparison_{uuid4().hex[:12]}"
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="COMPARISON",
+        artifact_id=comparison_id,
+        title="Version comparison",
+        body=(
+            f"Baseline run\n{baseline_run.id}\n\n"
+            f"Candidate run\n{candidate_run.id}\n\n"
+            f"Eval contract\n{eval_contract_id}\n\n"
+            f"Summary\n{summary}\n\n"
+            f"Fixed failures\n"
+            + "\n".join(f"- {failure_id}" for failure_id in fixed_failure_packet_ids)
+            + "\n\nRemaining failures\n"
+            + "\n".join(f"- {failure_id}" for failure_id in remaining_failure_packet_ids)
+            + "\n\nNew failures\n"
+            + "\n".join(f"- {failure_id}" for failure_id in new_failure_packet_ids)
+        ),
+        source="comparison",
+        agent_design_id=baseline_run.agent_design_id,
+        now=now,
+    )
+    for artifact_id in baseline_run.artifact_ids + candidate_run.artifact_ids:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=artifact_id,
+            relationship_type="SUPPORTED_BY",
+            now=now,
+        )
+
+    comparison = Comparison(
+        id=comparison_id,
+        project_id=project_id,
+        agent_design_id=baseline_run.agent_design_id,
+        baseline_version_id=baseline_run.agent_version_id,
+        candidate_version_id=candidate_run.agent_version_id,
+        baseline_run_id=baseline_run.id,
+        candidate_run_id=candidate_run.id,
+        baseline_eval_result_id=baseline_eval_result.id,
+        candidate_eval_result_id=candidate_eval_result.id,
+        fixed_failure_packet_ids=fixed_failure_packet_ids,
+        new_failure_packet_ids=new_failure_packet_ids,
+        remaining_failure_packet_ids=remaining_failure_packet_ids,
+        summary=summary,
+        artifact_ids=[artifact.id],
+        created_at=now,
+    )
+    _comparisons[comparison.id] = comparison
+    store.save_record("comparisons", comparison.id, comparison)
+    return comparison
+
+
 def delete_agent_design_records(project_id: str, agent_id: str) -> None:
     artifact_ids = [
         artifact.id
@@ -814,6 +1134,16 @@ def delete_agent_design_records(project_id: str, agent_id: str) -> None:
         if failure_packet.project_id == project_id and failure_packet.run_id in deleted_run_ids:
             _failure_packets.pop(failure_packet_id, None)
             store.delete_record("failure_packets", failure_packet_id)
+
+    for fix_proposal_id, fix_proposal in list(_fix_proposals.items()):
+        if fix_proposal.project_id == project_id and fix_proposal.agent_design_id == agent_id:
+            _fix_proposals.pop(fix_proposal_id, None)
+            store.delete_record("fix_proposals", fix_proposal_id)
+
+    for comparison_id, comparison in list(_comparisons.items()):
+        if comparison.project_id == project_id and comparison.agent_design_id == agent_id:
+            _comparisons.pop(comparison_id, None)
+            store.delete_record("comparisons", comparison_id)
 
     _agent_designs.pop(agent_id, None)
     store.delete_record("agent_designs", agent_id)
@@ -1210,10 +1540,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
 @app.get("/api/projects/{project_id}/runs/{run_id}")
 def get_run(project_id: str, run_id: str) -> RunRecord:
     get_project_or_404(project_id)
-    run = _runs.get(run_id)
-    if run is None or run.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Run not found.")
-    return run
+    return get_run_or_404(project_id, run_id)
 
 
 @app.post("/api/projects/{project_id}/runs/{run_id}/evaluate", status_code=201)
@@ -1223,9 +1550,7 @@ def evaluate_run(
     payload: RunEvaluateCreate,
 ) -> EvalResult:
     get_project_or_404(project_id)
-    run = _runs.get(run_id)
-    if run is None or run.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Run not found.")
+    run = get_run_or_404(project_id, run_id)
 
     contract_id = payload.eval_contract_id or run.eval_contract_id
     if contract_id is None:
@@ -1384,6 +1709,26 @@ def get_eval_result(project_id: str, eval_result_id: str) -> EvalResult:
     return get_eval_result_or_404(project_id, eval_result_id)
 
 
+@app.get("/api/projects/{project_id}/eval-results")
+def list_eval_results(
+    project_id: str,
+    run_id: Optional[str] = None,
+    eval_contract_id: Optional[str] = None,
+) -> List[EvalResult]:
+    get_project_or_404(project_id)
+    eval_results = [
+        eval_result
+        for eval_result in _eval_results.values()
+        if eval_result.project_id == project_id
+        and (run_id is None or eval_result.run_id == run_id)
+        and (
+            eval_contract_id is None
+            or eval_result.eval_contract_id == eval_contract_id
+        )
+    ]
+    return sorted(eval_results, key=lambda eval_result: eval_result.created_at, reverse=True)
+
+
 @app.get("/api/projects/{project_id}/failure-packets")
 def list_failure_packets(
     project_id: str,
@@ -1487,6 +1832,188 @@ def update_failure_packet(
     _failure_packets[updated.id] = updated
     store.save_record("failure_packets", updated.id, updated)
     return updated
+
+
+@app.get("/api/projects/{project_id}/fix-proposals")
+def list_fix_proposals(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+) -> List[FixProposal]:
+    get_project_or_404(project_id)
+    fix_proposals = [
+        fix_proposal
+        for fix_proposal in _fix_proposals.values()
+        if fix_proposal.project_id == project_id
+        and (
+            agent_design_id is None
+            or fix_proposal.agent_design_id == agent_design_id
+        )
+    ]
+    return sorted(
+        fix_proposals,
+        key=lambda fix_proposal: fix_proposal.updated_at,
+        reverse=True,
+    )
+
+
+@app.post("/api/projects/{project_id}/fix-proposals", status_code=201)
+def create_fix_proposal(
+    project_id: str,
+    payload: FixProposalCreate,
+) -> FixProposal:
+    get_project_or_404(project_id)
+    validate_fix_proposal_references(
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        target_version_id=payload.target_version_id,
+        addressed_failure_packet_ids=payload.addressed_failure_packet_ids,
+        validation_contract_ids=payload.validation_contract_ids,
+    )
+    return create_fix_proposal_record(
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        target_version_id=payload.target_version_id,
+        title=payload.title.strip(),
+        rationale=payload.rationale.strip(),
+        proposed_changes=payload.proposed_changes,
+        addressed_failure_packet_ids=payload.addressed_failure_packet_ids,
+        validation_contract_ids=payload.validation_contract_ids,
+        status=payload.status.strip(),
+        now=datetime.now(timezone.utc),
+    )
+
+
+@app.get("/api/projects/{project_id}/fix-proposals/{fix_proposal_id}")
+def get_fix_proposal(project_id: str, fix_proposal_id: str) -> FixProposal:
+    get_project_or_404(project_id)
+    return get_fix_proposal_or_404(project_id, fix_proposal_id)
+
+
+@app.patch("/api/projects/{project_id}/fix-proposals/{fix_proposal_id}")
+def update_fix_proposal(
+    project_id: str,
+    fix_proposal_id: str,
+    payload: FixProposalUpdate,
+) -> FixProposal:
+    get_project_or_404(project_id)
+    existing = get_fix_proposal_or_404(project_id, fix_proposal_id)
+    target_version_id = existing.target_version_id
+    addressed_failure_packet_ids = existing.addressed_failure_packet_ids
+    validation_contract_ids = existing.validation_contract_ids
+    if payload.addressed_failure_packet_ids is not None:
+        addressed_failure_packet_ids = payload.addressed_failure_packet_ids
+    if payload.validation_contract_ids is not None:
+        validation_contract_ids = payload.validation_contract_ids
+    validate_fix_proposal_references(
+        project_id=project_id,
+        agent_design_id=existing.agent_design_id,
+        target_version_id=target_version_id,
+        addressed_failure_packet_ids=addressed_failure_packet_ids,
+        validation_contract_ids=validation_contract_ids,
+    )
+    updated = existing.model_copy(
+        update={
+            "title": payload.title.strip() if payload.title is not None else existing.title,
+            "rationale": (
+                payload.rationale.strip()
+                if payload.rationale is not None
+                else existing.rationale
+            ),
+            "proposed_changes": (
+                payload.proposed_changes
+                if payload.proposed_changes is not None
+                else existing.proposed_changes
+            ),
+            "addressed_failure_packet_ids": addressed_failure_packet_ids,
+            "validation_contract_ids": validation_contract_ids,
+            "status": payload.status.strip() if payload.status is not None else existing.status,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    _fix_proposals[updated.id] = updated
+    store.save_record("fix_proposals", updated.id, updated)
+    return updated
+
+
+@app.post("/api/projects/{project_id}/comparisons", status_code=201)
+def create_comparison(
+    project_id: str,
+    payload: ComparisonCreate,
+) -> Comparison:
+    get_project_or_404(project_id)
+    baseline_run = get_run_or_404(project_id, payload.baseline_run_id)
+    candidate_run = get_run_or_404(project_id, payload.candidate_run_id)
+    contract = get_eval_contract_or_404(project_id, payload.eval_contract_id)
+    if baseline_run.agent_design_id != candidate_run.agent_design_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Comparison runs must belong to the same agent design.",
+        )
+    if contract.agent_design_id != baseline_run.agent_design_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Comparison eval contract must belong to the same agent design.",
+        )
+    if baseline_run.scenario_id != candidate_run.scenario_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Comparison runs must use the same scenario.",
+        )
+    if contract.scenario_id is not None and contract.scenario_id != baseline_run.scenario_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Comparison eval contract must match the compared scenario.",
+        )
+
+    baseline_eval_result = find_eval_result_for_run(
+        project_id=project_id,
+        run_id=baseline_run.id,
+        eval_contract_id=contract.id,
+    )
+    candidate_eval_result = find_eval_result_for_run(
+        project_id=project_id,
+        run_id=candidate_run.id,
+        eval_contract_id=contract.id,
+    )
+    if baseline_eval_result is None or candidate_eval_result is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Comparison requires both runs to be evaluated against the contract.",
+        )
+
+    return create_comparison_record(
+        project_id=project_id,
+        baseline_run=baseline_run,
+        candidate_run=candidate_run,
+        eval_contract_id=contract.id,
+        baseline_eval_result=baseline_eval_result,
+        candidate_eval_result=candidate_eval_result,
+        now=datetime.now(timezone.utc),
+    )
+
+
+@app.get("/api/projects/{project_id}/comparisons")
+def list_comparisons(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+) -> List[Comparison]:
+    get_project_or_404(project_id)
+    comparisons = [
+        comparison
+        for comparison in _comparisons.values()
+        if comparison.project_id == project_id
+        and (
+            agent_design_id is None
+            or comparison.agent_design_id == agent_design_id
+        )
+    ]
+    return sorted(comparisons, key=lambda comparison: comparison.created_at, reverse=True)
+
+
+@app.get("/api/projects/{project_id}/comparisons/{comparison_id}")
+def get_comparison(project_id: str, comparison_id: str) -> Comparison:
+    get_project_or_404(project_id)
+    return get_comparison_or_404(project_id, comparison_id)
 
 
 @app.post("/api/projects/{project_id}/agent-designs/{agent_id}/runs", status_code=201)

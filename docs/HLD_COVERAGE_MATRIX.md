@@ -33,8 +33,8 @@ Statuses:
 | Judge prompts | HLD-002, HLD-003, HLD-004 | gap | gap | gap | Mentioned in docs, not modeled in API yet. |
 | Judge outputs | HLD-001, HLD-004 | partial | gap | partial | Deterministic judge output artifacts are created during run evaluation. |
 | Failure packets | HLD-001, HLD-003, HLD-004 | partial | gap | partial | API and automatic failed-eval creation exist; UI is missing. |
-| Fix proposals | HLD-001, HLD-003, HLD-004 | planned | gap | gap | Planned in `API_CONTRACT.md`; needed for bounded improvement. |
-| Comparisons | HLD-001, HLD-004 | planned | gap | gap | Planned in `API_CONTRACT.md`; needed for v0/v1 proof. |
+| Fix proposals | HLD-001, HLD-003, HLD-004 | partial | gap | partial | API and evidence artifact links exist; UI is missing. |
+| Comparisons | HLD-001, HLD-004 | partial | gap | partial | API and comparison artifacts exist; UI is missing. |
 | Gates | HLD-002, HLD-003 | gap | gap | partial | Concept exists, implementation is later. |
 | Gate decisions | HLD-001, HLD-002 | gap | gap | partial | Later readiness milestone. |
 | Langfuse trace refs | HLD-001, HLD-002 | gap | gap | partial | Boundary is clear; adapter remains future work. |
@@ -43,11 +43,8 @@ Statuses:
 
 ## Immediate Planning Gaps
 
-The repo should not add more workflow feature code until these gaps are covered
-by HLD and OpenAPI contracts:
-
-1. implement `FixProposal` API
-2. implement `Comparison` API
+The Phase 2 EDD backbone is now covered by HLD and OpenAPI contracts. The next
+gaps are workflow UI and deeper judge/tool evidence modeling.
 
 ## Rule
 

@@ -64,15 +64,15 @@ Do this before adding more workflow UI.
 - [x] Synthesize `HLD-004: Eval Contracts, Runs, Judges, and Fixes`.
 - [x] Define planned OpenAPI contracts for `EvalContract`, `Run`, `EvalResult`,
       `FailurePacket`, `FixProposal`, `AgentVersion`, and `Comparison`.
-- [ ] Implement the Phase 2 API contracts in FastAPI and generated OpenAPI.
+- [x] Implement the Phase 2 API contracts in FastAPI and generated OpenAPI.
 - [x] Implement `Scenario` API contracts.
 - [x] Implement `EvalContract` API contracts.
 - [x] Implement `AgentVersion` API contracts.
 - [x] Implement canonical project-scoped `Run` API contracts.
 - [x] Implement contract-driven `EvalResult` API contracts.
 - [x] Implement `FailurePacket` API contracts.
-- [ ] Implement `FixProposal` API contracts.
-- [ ] Implement `Comparison` API contracts.
+- [x] Implement `FixProposal` API contracts.
+- [x] Implement `Comparison` API contracts.
 - [ ] Add `EvalContract` artifacts as the first-class place where agent
       expectations live.
 - [ ] Add scenario-specific contracts that can describe any agent behavior,
@@ -85,9 +85,9 @@ Do this before adding more workflow UI.
 - [x] Store eval results and judge outputs as evidence artifacts linked to runs
       and contracts.
 - [x] Create failure packet artifacts when contract checks fail.
-- [ ] Add bounded fix proposal artifacts linked to failure packets.
+- [x] Add bounded fix proposal artifacts linked to failure packets.
 - [ ] Add agent versions so fixes can produce v1, v2, v3, and later candidates.
-- [ ] Add comparison artifacts/API for baseline vs candidate runs.
+- [x] Add comparison artifacts/API for baseline vs candidate runs.
 - [ ] Keep all new API shapes covered by OpenAPI export, lint, and contract
       tests.
 
@@ -132,17 +132,19 @@ This phase makes the backbone usable without hiding the system model.
 - [x] Display context-pack-backed evidence in the UI.
 - [x] Show related artifacts in the UI.
 - [x] Show run/eval evidence in context packs.
-- [ ] Show the selected eval contract beside the playground run controls.
-- [ ] Add UI to create/edit scenario inputs.
-- [ ] Add UI to create/edit eval contracts.
+- [x] Show the selected eval contract beside the playground run controls.
+- [x] Add UI to create scenario inputs.
+- [x] Add UI to create eval contracts.
 - [ ] Add UI to edit agent tool allowlists.
-- [ ] Add UI to run v0 against a selected contract.
-- [ ] Add UI to evaluate a selected run against a selected contract.
-- [ ] Add UI to inspect failure packets and bounded fix proposals.
-- [ ] Add UI to create a candidate version from a fix proposal.
-- [ ] Add UI to run/evaluate candidate versions.
-- [ ] Add a v0/v1 comparison view that shows run evidence, eval checks,
+- [x] Add UI to run v0 against a selected contract.
+- [x] Add UI to evaluate a selected run against a selected contract.
+- [x] Add UI to inspect failure packets and bounded fix proposals.
+- [x] Add UI to create a candidate version from a fix proposal.
+- [x] Add UI to run/evaluate candidate versions.
+- [x] Add a v0/v1 comparison view that shows run evidence, eval checks,
       failure packets, fixes, and pass/fail movement.
+- [x] Reconstruct the selected agent's EDD loop from platform records after
+      refresh or agent switch.
 - [ ] Keep every generated or edited output represented as an artifact.
 
 ## Phase 4: Judges and Gates

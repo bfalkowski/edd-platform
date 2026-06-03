@@ -472,6 +472,111 @@ dd {
   justify-self: start;
 }
 
+.edd-loop-panel {
+  background: #ffffff;
+  border: 1px solid #ececf1;
+  border-radius: 18px;
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+}
+
+.edd-loop-header {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+}
+
+.edd-loop-header h3 {
+  font-size: 24px;
+  line-height: 1.15;
+  margin: 0 0 8px;
+}
+
+.edd-loop-header p {
+  color: #606373;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.compact-label {
+  margin: 0;
+}
+
+.compact-label input {
+  min-height: 48px;
+}
+
+.loop-step-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.loop-step {
+  background: #f7f7f8;
+  border: 1px solid #e2e3ea;
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  min-height: 92px;
+  padding: 13px;
+}
+
+.loop-step span {
+  align-items: center;
+  border: 1px solid #d5d7df;
+  border-radius: 999px;
+  color: #ffffff;
+  display: flex;
+  font-size: 13px;
+  font-weight: 900;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.loop-step.done span {
+  background: #202123;
+  border-color: #202123;
+}
+
+.loop-step strong {
+  color: #202123;
+  font-size: 16px;
+}
+
+.loop-step small {
+  color: #6f7280;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.loop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.comparison-summary {
+  background: #f7f7f8;
+  border: 1px solid #e2e3ea;
+  border-radius: 14px;
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+}
+
+.comparison-summary strong {
+  color: #202123;
+}
+
+.comparison-summary span {
+  color: #606373;
+  font-weight: 700;
+}
+
 .context-pack-meta {
   align-items: center;
   background: #f7f7f8;
@@ -726,6 +831,11 @@ dd {
   }
 
   .run-playground {
+    grid-template-columns: 1fr;
+  }
+
+  .edd-loop-header,
+  .loop-step-grid {
     grid-template-columns: 1fr;
   }
 

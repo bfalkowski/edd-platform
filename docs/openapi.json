@@ -453,6 +453,140 @@
         "title": "ArtifactRecord",
         "type": "object"
       },
+      "Comparison": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "baseline_eval_result_id": {
+            "title": "Baseline Eval Result Id",
+            "type": "string"
+          },
+          "baseline_run_id": {
+            "title": "Baseline Run Id",
+            "type": "string"
+          },
+          "baseline_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Version Id"
+          },
+          "candidate_eval_result_id": {
+            "title": "Candidate Eval Result Id",
+            "type": "string"
+          },
+          "candidate_run_id": {
+            "title": "Candidate Run Id",
+            "type": "string"
+          },
+          "candidate_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Version Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "fixed_failure_packet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fixed Failure Packet Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "new_failure_packet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "New Failure Packet Ids",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "remaining_failure_packet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remaining Failure Packet Ids",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "baseline_run_id",
+          "candidate_run_id",
+          "baseline_eval_result_id",
+          "candidate_eval_result_id",
+          "fixed_failure_packet_ids",
+          "new_failure_packet_ids",
+          "remaining_failure_packet_ids",
+          "summary",
+          "artifact_ids",
+          "created_at"
+        ],
+        "title": "Comparison",
+        "type": "object"
+      },
+      "ComparisonCreate": {
+        "properties": {
+          "baseline_run_id": {
+            "minLength": 1,
+            "title": "Baseline Run Id",
+            "type": "string"
+          },
+          "candidate_run_id": {
+            "minLength": 1,
+            "title": "Candidate Run Id",
+            "type": "string"
+          },
+          "eval_contract_id": {
+            "minLength": 1,
+            "title": "Eval Contract Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseline_run_id",
+          "candidate_run_id",
+          "eval_contract_id"
+        ],
+        "title": "ComparisonCreate",
+        "type": "object"
+      },
       "ContextPack": {
         "properties": {
           "agent_design_id": {
@@ -1236,6 +1370,238 @@
           }
         },
         "title": "FailurePacketUpdate",
+        "type": "object"
+      },
+      "FixProposal": {
+        "properties": {
+          "addressed_failure_packet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addressed Failure Packet Ids",
+            "type": "array"
+          },
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "proposed_changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Proposed Changes",
+            "type": "array"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Version Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "validation_contract_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Validation Contract Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "title",
+          "rationale",
+          "proposed_changes",
+          "addressed_failure_packet_ids",
+          "validation_contract_ids",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FixProposal",
+        "type": "object"
+      },
+      "FixProposalCreate": {
+        "properties": {
+          "addressed_failure_packet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addressed Failure Packet Ids",
+            "type": "array"
+          },
+          "agent_design_id": {
+            "minLength": 1,
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "proposed_changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Proposed Changes",
+            "type": "array"
+          },
+          "rationale": {
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "status": {
+            "default": "proposed",
+            "title": "Status",
+            "type": "string"
+          },
+          "target_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Version Id"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "validation_contract_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Validation Contract Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "title",
+          "rationale"
+        ],
+        "title": "FixProposalCreate",
+        "type": "object"
+      },
+      "FixProposalUpdate": {
+        "properties": {
+          "addressed_failure_packet_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addressed Failure Packet Ids"
+          },
+          "proposed_changes": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Changes"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "validation_contract_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Contract Ids"
+          }
+        },
+        "title": "FixProposalUpdate",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -2515,6 +2881,160 @@
         "summary": "List Artifact Links"
       }
     },
+    "/api/projects/{project_id}/comparisons": {
+      "get": {
+        "operationId": "list_comparisons_api_projects__project_id__comparisons_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Comparison"
+                  },
+                  "title": "Response List Comparisons Api Projects  Project Id  Comparisons Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Comparisons"
+      },
+      "post": {
+        "operationId": "create_comparison_api_projects__project_id__comparisons_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComparisonCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Comparison"
+      }
+    },
+    "/api/projects/{project_id}/comparisons/{comparison_id}": {
+      "get": {
+        "operationId": "get_comparison_api_projects__project_id__comparisons__comparison_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "comparison_id",
+            "required": true,
+            "schema": {
+              "title": "Comparison Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Comparison"
+      }
+    },
     "/api/projects/{project_id}/context-packs": {
       "post": {
         "operationId": "build_context_pack_api_projects__project_id__context_packs_post",
@@ -2716,6 +3236,81 @@
           }
         },
         "summary": "Get Eval Contract"
+      }
+    },
+    "/api/projects/{project_id}/eval-results": {
+      "get": {
+        "operationId": "list_eval_results_api_projects__project_id__eval_results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "eval_contract_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Eval Contract Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvalResult"
+                  },
+                  "title": "Response List Eval Results Api Projects  Project Id  Eval Results Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Eval Results"
       }
     },
     "/api/projects/{project_id}/eval-results/{eval_result_id}": {
@@ -2974,6 +3569,216 @@
           }
         },
         "summary": "Update Failure Packet"
+      }
+    },
+    "/api/projects/{project_id}/fix-proposals": {
+      "get": {
+        "operationId": "list_fix_proposals_api_projects__project_id__fix_proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FixProposal"
+                  },
+                  "title": "Response List Fix Proposals Api Projects  Project Id  Fix Proposals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Fix Proposals"
+      },
+      "post": {
+        "operationId": "create_fix_proposal_api_projects__project_id__fix_proposals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixProposalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Fix Proposal"
+      }
+    },
+    "/api/projects/{project_id}/fix-proposals/{fix_proposal_id}": {
+      "get": {
+        "operationId": "get_fix_proposal_api_projects__project_id__fix_proposals__fix_proposal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fix_proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Fix Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Fix Proposal"
+      },
+      "patch": {
+        "operationId": "update_fix_proposal_api_projects__project_id__fix_proposals__fix_proposal_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fix_proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Fix Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixProposalUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Fix Proposal"
       }
     },
     "/api/projects/{project_id}/runs": {

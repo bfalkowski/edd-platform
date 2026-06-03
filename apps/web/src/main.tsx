@@ -94,6 +94,162 @@ type EvalRunResult = {
   created_at: string;
 };
 
+type Scenario = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  name: string;
+  input: string;
+  setup_context: string;
+  fixture_refs: string[];
+  default_eval_contract_id: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type EvalContract = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  name: string;
+  description: string;
+  scenario_id: string | null;
+  version: string;
+  expected_behavior: string[];
+  required_evidence: string[];
+  required_tools: string[];
+  forbidden_tools: string[];
+  forbidden_behavior: string[];
+  output_requirements: string[];
+  checks: { id: string; type: string; value?: string; tool?: string }[];
+  judge_prompt_template_id: string | null;
+  pass_criteria: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type AgentVersion = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  version_label: string;
+  parent_version_id: string | null;
+  instructions: string;
+  tool_policy: Record<string, unknown>;
+  source_fix_proposal_id: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type RunRecord = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  agent_version_id: string | null;
+  scenario_id: string;
+  eval_contract_id: string | null;
+  mode: string;
+  provider: string | null;
+  model: string | null;
+  input: string;
+  output: string;
+  status: string;
+  artifact_ids: string[];
+  started_at: string;
+  completed_at: string;
+};
+
+type EvalResult = {
+  id: string;
+  project_id: string;
+  run_id: string;
+  eval_contract_id: string;
+  mode: string;
+  score: number;
+  passed: boolean;
+  checks: {
+    check_id: string;
+    check_type: string;
+    passed: boolean;
+    observed: string;
+    expected: string;
+    evidence_artifact_ids: string[];
+    comment: string;
+  }[];
+  judge_output_ids: string[];
+  artifact_ids: string[];
+  created_at: string;
+};
+
+type FailurePacket = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  agent_version_id: string | null;
+  run_id: string;
+  eval_result_id: string;
+  eval_contract_id: string;
+  failed_check_ids: string[];
+  title: string;
+  diagnosis: string;
+  severity: string;
+  evidence_artifact_ids: string[];
+  recommended_fix: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type FixProposal = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  target_version_id: string | null;
+  title: string;
+  rationale: string;
+  proposed_changes: Record<string, unknown>[];
+  addressed_failure_packet_ids: string[];
+  validation_contract_ids: string[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type Comparison = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  baseline_version_id: string | null;
+  candidate_version_id: string | null;
+  baseline_run_id: string;
+  candidate_run_id: string;
+  baseline_eval_result_id: string;
+  candidate_eval_result_id: string;
+  fixed_failure_packet_ids: string[];
+  new_failure_packet_ids: string[];
+  remaining_failure_packet_ids: string[];
+  summary: string;
+  artifact_ids: string[];
+  created_at: string;
+};
+
+type EddFlowState = {
+  baselineVersion?: AgentVersion;
+  candidateVersion?: AgentVersion;
+  scenario?: Scenario;
+  contract?: EvalContract;
+  baselineRun?: RunRecord;
+  candidateRun?: RunRecord;
+  baselineEval?: EvalResult;
+  candidateEval?: EvalResult;
+  failurePackets: FailurePacket[];
+  fixProposal?: FixProposal;
+  comparison?: Comparison;
+};
+
 const apiBase = "/api";
 
 async function responseError(response: Response, fallback: string): Promise<Error> {
@@ -208,6 +364,321 @@ async function evaluateArtifact(projectId: string, artifactId: string): Promise<
   return response.json();
 }
 
+async function createAgentVersion(
+  projectId: string,
+  agentDesignId: string,
+  payload: {
+    version_label: string;
+    parent_version_id?: string;
+    instructions: string;
+    source_fix_proposal_id?: string;
+    status?: string;
+  },
+): Promise<AgentVersion> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}/versions`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create agent version.");
+  }
+  return response.json();
+}
+
+async function createScenario(
+  projectId: string,
+  agentDesignId: string,
+  input: string,
+): Promise<Scenario> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/scenarios`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_design_id: agentDesignId,
+      name: "EDD proof scenario",
+      input,
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create scenario.");
+  }
+  return response.json();
+}
+
+async function createEvalContract(
+  projectId: string,
+  agentDesignId: string,
+  scenarioId: string,
+  requiredPhrase: string,
+): Promise<EvalContract> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/eval-contracts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_design_id: agentDesignId,
+      name: "EDD proof contract",
+      description: "Checks whether the candidate behavior includes the bounded fix.",
+      scenario_id: scenarioId,
+      expected_behavior: [
+        "Use the scenario as evidence.",
+        `Include the bounded fix phrase: ${requiredPhrase}.`,
+      ],
+      required_evidence: ["scenario"],
+      checks: [
+        {
+          id: "includes_bounded_fix_phrase",
+          type: "output_contains",
+          value: requiredPhrase,
+        },
+      ],
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create eval contract.");
+  }
+  return response.json();
+}
+
+async function createProjectRun(
+  projectId: string,
+  payload: {
+    agent_design_id: string;
+    agent_version_id?: string;
+    scenario_id: string;
+    eval_contract_id: string;
+    mode: "mock" | "live";
+  },
+): Promise<RunRecord> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create run.");
+  }
+  return response.json();
+}
+
+async function evaluateRun(projectId: string, runId: string): Promise<EvalResult> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/runs/${runId}/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ judge_mode: "deterministic" }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to evaluate run.");
+  }
+  return response.json();
+}
+
+async function listFailurePackets(
+  projectId: string,
+  agentDesignId: string,
+): Promise<FailurePacket[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/failure-packets?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load failure packets.");
+  }
+  return response.json();
+}
+
+async function createFixProposal(
+  projectId: string,
+  agentDesignId: string,
+  targetVersionId: string,
+  failurePackets: FailurePacket[],
+  contractId: string,
+  requiredPhrase: string,
+): Promise<FixProposal> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/fix-proposals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_design_id: agentDesignId,
+      target_version_id: targetVersionId,
+      title: `Add bounded phrase: ${requiredPhrase}`,
+      rationale: "The baseline failed the explicit eval contract check.",
+      proposed_changes: [
+        {
+          surface: "instructions",
+          change: `Include the phrase: ${requiredPhrase}.`,
+        },
+      ],
+      addressed_failure_packet_ids: failurePackets.map((packet) => packet.id),
+      validation_contract_ids: [contractId],
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create fix proposal.");
+  }
+  return response.json();
+}
+
+async function createComparison(
+  projectId: string,
+  baselineRunId: string,
+  candidateRunId: string,
+  evalContractId: string,
+): Promise<Comparison> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/comparisons`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      baseline_run_id: baselineRunId,
+      candidate_run_id: candidateRunId,
+      eval_contract_id: evalContractId,
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to compare runs.");
+  }
+  return response.json();
+}
+
+async function listAgentVersions(projectId: string, agentDesignId: string): Promise<AgentVersion[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}/versions`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load agent versions.");
+  }
+  return response.json();
+}
+
+async function listScenarios(projectId: string, agentDesignId: string): Promise<Scenario[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/scenarios?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load scenarios.");
+  }
+  return response.json();
+}
+
+async function listEvalContracts(projectId: string, agentDesignId: string): Promise<EvalContract[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/eval-contracts?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load eval contracts.");
+  }
+  return response.json();
+}
+
+async function listRuns(projectId: string, agentDesignId: string): Promise<RunRecord[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/runs?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load runs.");
+  }
+  return response.json();
+}
+
+async function listEvalResults(projectId: string, runId: string): Promise<EvalResult[]> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/eval-results?run_id=${runId}`);
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load eval results.");
+  }
+  return response.json();
+}
+
+async function listFixProposals(projectId: string, agentDesignId: string): Promise<FixProposal[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/fix-proposals?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load fix proposals.");
+  }
+  return response.json();
+}
+
+async function listComparisons(projectId: string, agentDesignId: string): Promise<Comparison[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/comparisons?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load comparisons.");
+  }
+  return response.json();
+}
+
+function latestRunForVersion(
+  runs: RunRecord[],
+  versionId: string | undefined,
+  scenarioId: string | undefined,
+  contractId: string | undefined,
+): RunRecord | undefined {
+  if (!versionId || !scenarioId || !contractId) {
+    return undefined;
+  }
+  return runs.find(
+    (run) =>
+      run.agent_version_id === versionId &&
+      run.scenario_id === scenarioId &&
+      run.eval_contract_id === contractId,
+  );
+}
+
+async function hydrateEddFlow(projectId: string, agent: AgentDesign): Promise<EddFlowState> {
+  const [versions, scenarios, contracts, runs, failurePackets, fixProposals, comparisons] =
+    await Promise.all([
+      listAgentVersions(projectId, agent.id),
+      listScenarios(projectId, agent.id),
+      listEvalContracts(projectId, agent.id),
+      listRuns(projectId, agent.id),
+      listFailurePackets(projectId, agent.id),
+      listFixProposals(projectId, agent.id),
+      listComparisons(projectId, agent.id),
+    ]);
+
+  const comparison = comparisons[0];
+  const baselineVersion =
+    versions.find((version) => version.id === comparison?.baseline_version_id) ??
+    versions.find((version) => version.status === "baseline") ??
+    versions.find((version) => version.version_label === "v0");
+  const candidateVersion =
+    versions.find((version) => version.id === comparison?.candidate_version_id) ??
+    versions.find((version) => version.source_fix_proposal_id) ??
+    versions.find((version) => version.status === "candidate") ??
+    versions.find((version) => version.version_label === "v1");
+  const contract = contracts[0];
+  const scenario =
+    scenarios.find((item) => item.id === contract?.scenario_id) ??
+    scenarios[0];
+  const baselineRun =
+    runs.find((run) => run.id === comparison?.baseline_run_id) ??
+    latestRunForVersion(runs, baselineVersion?.id, scenario?.id, contract?.id);
+  const candidateRun =
+    runs.find((run) => run.id === comparison?.candidate_run_id) ??
+    latestRunForVersion(runs, candidateVersion?.id, scenario?.id, contract?.id);
+  const [baselineEvalResults, candidateEvalResults] = await Promise.all([
+    baselineRun ? listEvalResults(projectId, baselineRun.id) : Promise.resolve([]),
+    candidateRun ? listEvalResults(projectId, candidateRun.id) : Promise.resolve([]),
+  ]);
+
+  return {
+    baselineVersion,
+    candidateVersion,
+    scenario,
+    contract,
+    baselineRun,
+    candidateRun,
+    baselineEval: baselineEvalResults[0],
+    candidateEval: candidateEvalResults[0],
+    failurePackets,
+    fixProposal: fixProposals[0],
+    comparison,
+  };
+}
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -218,8 +689,10 @@ function App() {
   const [scenarioInput, setScenarioInput] = useState(
     "A customer reports a failed deployment and asks what to do next.",
   );
+  const [requiredPhrase, setRequiredPhrase] = useState("bounded resolution");
   const [runMode, setRunMode] = useState<"mock" | "live">("mock");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
+  const [eddFlow, setEddFlow] = useState<EddFlowState>({ failurePackets: [] });
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
   const [openAgentMenuId, setOpenAgentMenuId] = useState<string | null>(null);
@@ -227,6 +700,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [isFlowBusy, setIsFlowBusy] = useState(false);
   const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,12 +736,32 @@ function App() {
       setContextPack(null);
       return;
     }
+    let isCurrent = true;
+    setEddFlow({ failurePackets: [] });
     setIsLoadingContext(true);
-    buildContextPack(project.id, selectedId ?? undefined)
-      .then(setContextPack)
+    Promise.all([
+      buildContextPack(project.id, selectedId ?? undefined),
+      selectedAgent
+        ? hydrateEddFlow(project.id, selectedAgent)
+        : Promise.resolve({ failurePackets: [] } as EddFlowState),
+    ])
+      .then(([pack, flow]) => {
+        if (!isCurrent) {
+          return;
+        }
+        setContextPack(pack);
+        setEddFlow(flow);
+        const phrase = flow.contract?.checks.find((check) => check.value)?.value;
+        if (phrase) {
+          setRequiredPhrase(phrase);
+        }
+      })
       .catch((err: Error) => setError(err.message))
       .finally(() => setIsLoadingContext(false));
-  }, [project, selectedId]);
+    return () => {
+      isCurrent = false;
+    };
+  }, [project, selectedAgent, selectedId]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -380,6 +874,282 @@ function App() {
       setError(err instanceof Error ? err.message : "Unable to load artifact.");
     }
   }
+
+  async function refreshContext() {
+    if (!project) {
+      return;
+    }
+    const pack = await buildContextPack(project.id, selectedId ?? undefined);
+    setContextPack(pack);
+  }
+
+  async function reviewFirstArtifact(artifactIds: string[]) {
+    if (artifactIds[0]) {
+      await handleReviewArtifact(artifactIds[0]);
+    }
+  }
+
+  async function handleInitializeEddFlow() {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    setError(null);
+    setActivity("Creating baseline, scenario, and eval contract.");
+    setIsFlowBusy(true);
+    try {
+      const baselineVersion = await createAgentVersion(project.id, selectedAgent.id, {
+        version_label: "v0",
+        instructions: selectedAgent.intent,
+        status: "baseline",
+      });
+      const scenario = await createScenario(project.id, selectedAgent.id, scenarioInput.trim());
+      const contract = await createEvalContract(
+        project.id,
+        selectedAgent.id,
+        scenario.id,
+        requiredPhrase.trim(),
+      );
+      setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
+      setActivity("EDD proof is ready for the baseline run.");
+      await refreshContext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to initialize EDD flow.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  async function handleRunBaseline() {
+    if (!project || !selectedAgent || !eddFlow.baselineVersion || !eddFlow.scenario || !eddFlow.contract) {
+      return;
+    }
+    setError(null);
+    setActivity("Running baseline v0.");
+    setIsFlowBusy(true);
+    try {
+      const baselineRun = await createProjectRun(project.id, {
+        agent_design_id: selectedAgent.id,
+        agent_version_id: eddFlow.baselineVersion.id,
+        scenario_id: eddFlow.scenario.id,
+        eval_contract_id: eddFlow.contract.id,
+        mode: runMode,
+      });
+      setEddFlow((flow) => ({ ...flow, baselineRun }));
+      setActivity("Stored baseline run evidence.");
+      await refreshContext();
+      await reviewFirstArtifact(baselineRun.artifact_ids);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to run baseline.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  async function handleEvaluateBaseline() {
+    if (!project || !selectedAgent || !eddFlow.baselineRun) {
+      return;
+    }
+    setError(null);
+    setActivity("Evaluating baseline v0.");
+    setIsFlowBusy(true);
+    try {
+      const baselineEval = await evaluateRun(project.id, eddFlow.baselineRun.id);
+      const failurePackets = await listFailurePackets(project.id, selectedAgent.id);
+      setEddFlow((flow) => ({ ...flow, baselineEval, failurePackets }));
+      setActivity(
+        baselineEval.passed ? "Baseline passed the contract." : "Baseline failure packet recorded.",
+      );
+      await refreshContext();
+      await reviewFirstArtifact(baselineEval.artifact_ids);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to evaluate baseline.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  async function handleCreateFixProposal() {
+    if (
+      !project ||
+      !selectedAgent ||
+      !eddFlow.baselineVersion ||
+      !eddFlow.contract ||
+      eddFlow.failurePackets.length === 0
+    ) {
+      return;
+    }
+    setError(null);
+    setActivity("Creating bounded fix proposal.");
+    setIsFlowBusy(true);
+    try {
+      const fixProposal = await createFixProposal(
+        project.id,
+        selectedAgent.id,
+        eddFlow.baselineVersion.id,
+        eddFlow.failurePackets,
+        eddFlow.contract.id,
+        requiredPhrase.trim(),
+      );
+      setEddFlow((flow) => ({ ...flow, fixProposal }));
+      setActivity("Fix proposal linked to failure evidence.");
+      await refreshContext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create fix proposal.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  async function handleCreateCandidate() {
+    if (!project || !selectedAgent || !eddFlow.baselineVersion || !eddFlow.fixProposal) {
+      return;
+    }
+    setError(null);
+    setActivity("Creating candidate v1 from the fix.");
+    setIsFlowBusy(true);
+    try {
+      const candidateVersion = await createAgentVersion(project.id, selectedAgent.id, {
+        version_label: "v1",
+        parent_version_id: eddFlow.baselineVersion.id,
+        source_fix_proposal_id: eddFlow.fixProposal.id,
+        instructions: `${selectedAgent.intent} Include the phrase: ${requiredPhrase.trim()}.`,
+        status: "candidate",
+      });
+      setEddFlow((flow) => ({ ...flow, candidateVersion }));
+      setActivity("Candidate v1 is ready to run.");
+      await refreshContext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create candidate version.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  async function handleRunCandidate() {
+    if (!project || !selectedAgent || !eddFlow.candidateVersion || !eddFlow.scenario || !eddFlow.contract) {
+      return;
+    }
+    setError(null);
+    setActivity("Running candidate v1.");
+    setIsFlowBusy(true);
+    try {
+      const candidateRun = await createProjectRun(project.id, {
+        agent_design_id: selectedAgent.id,
+        agent_version_id: eddFlow.candidateVersion.id,
+        scenario_id: eddFlow.scenario.id,
+        eval_contract_id: eddFlow.contract.id,
+        mode: runMode,
+      });
+      setEddFlow((flow) => ({ ...flow, candidateRun }));
+      setActivity("Stored candidate run evidence.");
+      await refreshContext();
+      await reviewFirstArtifact(candidateRun.artifact_ids);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to run candidate.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  async function handleEvaluateCandidate() {
+    if (!project || !eddFlow.candidateRun) {
+      return;
+    }
+    setError(null);
+    setActivity("Evaluating candidate v1.");
+    setIsFlowBusy(true);
+    try {
+      const candidateEval = await evaluateRun(project.id, eddFlow.candidateRun.id);
+      setEddFlow((flow) => ({ ...flow, candidateEval }));
+      setActivity(candidateEval.passed ? "Candidate passed the contract." : "Candidate still fails.");
+      await refreshContext();
+      await reviewFirstArtifact(candidateEval.artifact_ids);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to evaluate candidate.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  async function handleCompareRuns() {
+    if (!project || !eddFlow.baselineRun || !eddFlow.candidateRun || !eddFlow.contract) {
+      return;
+    }
+    setError(null);
+    setActivity("Comparing baseline and candidate evidence.");
+    setIsFlowBusy(true);
+    try {
+      const comparison = await createComparison(
+        project.id,
+        eddFlow.baselineRun.id,
+        eddFlow.candidateRun.id,
+        eddFlow.contract.id,
+      );
+      setEddFlow((flow) => ({ ...flow, comparison }));
+      setActivity("Comparison evidence recorded.");
+      await refreshContext();
+      await reviewFirstArtifact(comparison.artifact_ids);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to compare runs.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  const loopSteps = [
+    {
+      label: "Setup",
+      done: Boolean(eddFlow.baselineVersion && eddFlow.scenario && eddFlow.contract),
+      detail: eddFlow.contract ? eddFlow.contract.name : "Create v0, scenario, and contract",
+    },
+    {
+      label: "Run v0",
+      done: Boolean(eddFlow.baselineRun),
+      detail: eddFlow.baselineRun?.id ?? "Baseline run evidence",
+    },
+    {
+      label: "Eval v0",
+      done: Boolean(eddFlow.baselineEval),
+      detail: eddFlow.baselineEval
+        ? `${eddFlow.baselineEval.score}/${eddFlow.baselineEval.checks.length} checks`
+        : "Failure packet evidence",
+    },
+    {
+      label: "Fix",
+      done: Boolean(eddFlow.fixProposal),
+      detail: eddFlow.fixProposal?.title ?? "Bounded proposal",
+    },
+    {
+      label: "Version v1",
+      done: Boolean(eddFlow.candidateVersion),
+      detail: eddFlow.candidateVersion?.version_label ?? "Candidate behavior",
+    },
+    {
+      label: "Run v1",
+      done: Boolean(eddFlow.candidateRun),
+      detail: eddFlow.candidateRun?.id ?? "Candidate run evidence",
+    },
+    {
+      label: "Eval v1",
+      done: Boolean(eddFlow.candidateEval),
+      detail: eddFlow.candidateEval
+        ? `${eddFlow.candidateEval.score}/${eddFlow.candidateEval.checks.length} checks`
+        : "Candidate result",
+    },
+    {
+      label: "Compare",
+      done: Boolean(eddFlow.comparison),
+      detail: eddFlow.comparison?.summary ?? "Improvement evidence",
+    },
+  ];
 
   return (
     <div
@@ -577,6 +1347,125 @@ function App() {
                   </button>
                   {activity ? <p className="activity-text">{activity}</p> : null}
                   {error ? <p className="error-text">{error}</p> : null}
+                </section>
+                <section className="edd-loop-panel">
+                  <div className="edd-loop-header">
+                    <div>
+                      <p className="artifact-type">Eval-driven design</p>
+                      <h3>Prove an improvement</h3>
+                      <p>
+                        Turn one failed baseline check into a bounded fix, candidate version,
+                        and comparison artifact.
+                      </p>
+                    </div>
+                    <label className="compact-label">
+                      Required phrase
+                      <input
+                        value={requiredPhrase}
+                        onChange={(event) => setRequiredPhrase(event.target.value)}
+                        disabled={Boolean(eddFlow.contract)}
+                      />
+                    </label>
+                  </div>
+                  <div className="loop-step-grid">
+                    {loopSteps.map((step) => (
+                      <div className={step.done ? "loop-step done" : "loop-step"} key={step.label}>
+                        <span>{step.done ? "✓" : ""}</span>
+                        <strong>{step.label}</strong>
+                        <small>{step.detail}</small>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="loop-actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleInitializeEddFlow}
+                      disabled={isFlowBusy || Boolean(eddFlow.contract)}
+                    >
+                      Create setup
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleRunBaseline}
+                      disabled={isFlowBusy || !eddFlow.contract || Boolean(eddFlow.baselineRun)}
+                    >
+                      Run v0
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleEvaluateBaseline}
+                      disabled={
+                        isFlowBusy || !eddFlow.baselineRun || Boolean(eddFlow.baselineEval)
+                      }
+                    >
+                      Evaluate v0
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleCreateFixProposal}
+                      disabled={
+                        isFlowBusy ||
+                        !eddFlow.baselineEval ||
+                        eddFlow.failurePackets.length === 0 ||
+                        Boolean(eddFlow.fixProposal)
+                      }
+                    >
+                      Create fix
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleCreateCandidate}
+                      disabled={isFlowBusy || !eddFlow.fixProposal || Boolean(eddFlow.candidateVersion)}
+                    >
+                      Create v1
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleRunCandidate}
+                      disabled={isFlowBusy || !eddFlow.candidateVersion || Boolean(eddFlow.candidateRun)}
+                    >
+                      Run v1
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleEvaluateCandidate}
+                      disabled={
+                        isFlowBusy || !eddFlow.candidateRun || Boolean(eddFlow.candidateEval)
+                      }
+                    >
+                      Evaluate v1
+                    </button>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={handleCompareRuns}
+                      disabled={
+                        isFlowBusy ||
+                        !eddFlow.baselineEval ||
+                        !eddFlow.candidateEval ||
+                        Boolean(eddFlow.comparison)
+                      }
+                    >
+                      Compare
+                    </button>
+                  </div>
+                  {eddFlow.comparison ? (
+                    <div className="comparison-summary">
+                      <strong>{eddFlow.comparison.summary}</strong>
+                      <span>
+                        Fixed {eddFlow.comparison.fixed_failure_packet_ids.length} · Remaining{" "}
+                        {eddFlow.comparison.remaining_failure_packet_ids.length} · New{" "}
+                        {eddFlow.comparison.new_failure_packet_ids.length}
+                      </span>
+                    </div>
+                  ) : null}
                 </section>
                 <div className="context-pack-meta">
                   <span>Context pack</span>
