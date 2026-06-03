@@ -1,0 +1,26 @@
+{
+  "skill_name": "edd-api-contract",
+  "evals": [
+    {
+      "id": "add-phase-2-endpoint",
+      "prompt": "Add the next Phase 2 API endpoint for fix proposals. Keep it contract-first and make sure OpenAPI is updated.",
+      "expected_output": "A scoped API implementation plan or patch that reads the product spine and API contract, adds FastAPI/Pydantic models and tests, updates OpenAPI lint paths, regenerates docs/openapi.json, and runs the repo test script.",
+      "assertions": [
+        "The response or changes reference docs/PRODUCT_SPINE.md and docs/API_CONTRACT.md as inputs.",
+        "The workflow includes API tests and OpenAPI regeneration.",
+        "The workflow keeps the endpoint project-scoped.",
+        "The workflow does not require provider API keys for tests."
+      ]
+    },
+    {
+      "id": "avoid-ui-before-contract",
+      "prompt": "Can you add UI controls for comparisons even though the comparison API does not exist yet?",
+      "expected_output": "A response that avoids feature UI implementation until the comparison API/evidence shape is defined, or explicitly updates the API contract first.",
+      "assertions": [
+        "The response identifies missing API/evidence shape as a blocker or prerequisite.",
+        "The response proposes contract/API work before UI polish.",
+        "The response does not silently create a mock UI disconnected from the product spine."
+      ]
+    }
+  ]
+}

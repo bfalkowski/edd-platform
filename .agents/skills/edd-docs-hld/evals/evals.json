@@ -1,0 +1,27 @@
+{
+  "skill_name": "edd-docs-hld",
+  "evals": [
+    {
+      "id": "check-hld-alignment",
+      "prompt": "Are our HLDs aligned with what we are building now?",
+      "expected_output": "A planning response that maps the question to PRODUCT_SPINE, checks HLD_COVERAGE_MATRIX and WORK_PLAN, identifies covered/partial/gap areas, and avoids feature code.",
+      "assertions": [
+        "The response starts from docs/PRODUCT_SPINE.md or docs/HLD_COVERAGE_MATRIX.md.",
+        "The response distinguishes covered, partial, planned, and gap states.",
+        "The response updates planning docs only if needed.",
+        "The response avoids implementation code unless explicitly requested."
+      ]
+    },
+    {
+      "id": "add-new-architecture-idea",
+      "prompt": "I have a new idea for storing human feedback as part of eval results. Where should this go?",
+      "expected_output": "A response that places the idea in the product spine/HLD coverage context, updates or proposes the smallest relevant HLD/API/work-plan change, and keeps docs portfolio-safe.",
+      "assertions": [
+        "The response maps human feedback to evidence artifacts or the eval loop.",
+        "The response identifies the correct docs to update.",
+        "The response keeps private context out of public docs.",
+        "The response avoids broad TODO churn."
+      ]
+    }
+  ]
+}

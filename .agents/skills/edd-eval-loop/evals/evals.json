@@ -1,0 +1,27 @@
+{
+  "skill_name": "edd-eval-loop",
+  "evals": [
+    {
+      "id": "prove-v0-v1-improvement",
+      "prompt": "Build the next slice that proves eval-driven design from v0 failure to v1 improvement.",
+      "expected_output": "A plan or patch that follows Scenario -> EvalContract -> Run -> EvalResult/JudgeOutput -> FailurePacket -> FixProposal -> AgentVersion -> Comparison, with evidence artifacts and deterministic tests.",
+      "assertions": [
+        "The response includes baseline and candidate versions.",
+        "The response includes failure packets and bounded fixes.",
+        "The response requires comparison evidence rather than a single good run.",
+        "The response keeps deterministic CI behavior without provider keys."
+      ]
+    },
+    {
+      "id": "diagnose-agent-failure",
+      "prompt": "The agent answered fluently but skipped the required tool. What should the platform create?",
+      "expected_output": "A diagnosis centered on failed EvalContract checks, JudgeOutput, FailurePacket evidence, and a bounded FixProposal that addresses the tool-use failure.",
+      "assertions": [
+        "The response treats missing tool use as evidence, not just a bad answer.",
+        "The response creates or references a FailurePacket.",
+        "The response links the fix proposal to the failed check/evidence.",
+        "The response does not jump directly to broad prompt rewriting."
+      ]
+    }
+  ]
+}

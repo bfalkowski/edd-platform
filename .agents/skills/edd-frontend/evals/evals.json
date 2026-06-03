@@ -1,0 +1,26 @@
+{
+  "skill_name": "edd-frontend",
+  "evals": [
+    {
+      "id": "make-workflow-less-clunky",
+      "prompt": "The builder screen is clunky. Make the eval loop easier to understand.",
+      "expected_output": "A UI plan or patch that follows the frontend guide, keeps the left rail/main workspace/right review panel model, and makes expectation/run/eval/failure/fix/comparison relationships visible without dashboard clutter.",
+      "assertions": [
+        "The response reads or follows docs/design/FRONTEND_GUIDE.md.",
+        "The response avoids disconnected wizard buttons and duplicated headers.",
+        "The response keeps controls near the artifact or stage they affect.",
+        "The response calls for browser verification after visual changes."
+      ]
+    },
+    {
+      "id": "avoid-ui-without-api",
+      "prompt": "Add comparison cards to the UI even though comparisons are not implemented in the API.",
+      "expected_output": "A response that avoids disconnected mock UI or clearly limits work to a design sketch until the Comparison API exists.",
+      "assertions": [
+        "The response identifies the missing Comparison API as relevant.",
+        "The response does not create a misleading functional UI.",
+        "The response preserves the product spine and evidence model."
+      ]
+    }
+  ]
+}
