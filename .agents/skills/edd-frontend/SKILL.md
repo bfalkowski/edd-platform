@@ -20,6 +20,11 @@ The console should feel like a focused agent workspace:
 - main workspace for the selected workflow and evidence;
 - right review panel for selected artifacts and run/eval details.
 
+## Use Case References
+
+- keeping UI aligned with the EDD workflow: `references/workflow-ui.md`
+- reviewing visual changes before handoff: `references/visual-verification.md`
+
 ## Workflow
 
 1. Identify the user workflow being improved.

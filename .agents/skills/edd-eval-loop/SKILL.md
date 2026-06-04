@@ -23,6 +23,11 @@ AgentDesign
   -> GateDecision
 ```
 
+## Use Case References
+
+- proving v0 to v1 improvement: `references/prove-improvement.md`
+- calibrating or reviewing judges: `references/judge-reliability.md`
+
 ## Workflow
 
 1. Start from the selected agent design and version.

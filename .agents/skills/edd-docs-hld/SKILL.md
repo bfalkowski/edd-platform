@@ -18,6 +18,11 @@ Start with:
 
 Read the relevant HLD after identifying the product area.
 
+## Use Case References
+
+- checking whether HLDs are aligned: `references/hld-alignment.md`
+- creating or updating an HLD: `references/hld-authoring.md`
+
 ## Workflow
 
 1. Map the question to the product spine.

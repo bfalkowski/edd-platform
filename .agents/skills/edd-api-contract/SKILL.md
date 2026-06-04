@@ -16,6 +16,11 @@ Read these before coding:
 - `docs/hld/HLD-004-eval-contracts-runs-judges-and-fixes.md`
 - `docs/WORK_PLAN.md`
 
+## Use Case References
+
+- adding or changing API contracts: `references/contract-first-api.md`
+- managing OpenAPI drift: `references/openapi-drift.md`
+
 ## Workflow
 
 1. Identify the product spine object being changed.
