@@ -326,6 +326,8 @@ class AgentRunResult(BaseModel):
     response: str
     tool_calls: List[Dict[str, str]]
     evidence: List[str]
+    trace_id: Optional[str] = None
+    trace_url: Optional[str] = None
     artifact: ArtifactRecord
     created_at: datetime
 
@@ -597,12 +599,15 @@ default_tool = ToolDefinition(
         "required": ["zip_code"],
     },
     output_description="Current temperature and conditions.",
-    implementation_key="local_weather_fixture",
+    implementation_key="open_meteo_weather",
     status="approved",
     created_at=seeded_at,
     updated_at=seeded_at,
 )
 if default_tool.id not in _tool_definitions:
+    _tool_definitions[default_tool.id] = default_tool
+    store.save_record("tool_definitions", default_tool.id, default_tool)
+elif _tool_definitions[default_tool.id].implementation_key == "local_weather_fixture":
     _tool_definitions[default_tool.id] = default_tool
     store.save_record("tool_definitions", default_tool.id, default_tool)
 
@@ -2899,6 +2904,8 @@ def run_agent_design(
         response=runner_result.response,
         tool_calls=[tool.model_dump() for tool in runner_result.tool_calls],
         evidence=runner_result.evidence,
+        trace_id=runner_result.trace_id,
+        trace_url=runner_result.trace_url,
         artifact=artifact,
         created_at=runner_result.created_at,
     )

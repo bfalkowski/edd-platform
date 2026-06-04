@@ -520,6 +520,17 @@ dd {
   margin: 0;
 }
 
+.panel-run-playground {
+  grid-template-columns: 1fr;
+}
+
+.run-playground.panel-run-playground .primary-button,
+.run-playground.panel-run-playground .secondary-button,
+.run-playground.panel-run-playground .activity-text,
+.run-playground.panel-run-playground .error-text {
+  grid-column: auto;
+}
+
 .run-mode-control,
 .run-playground .primary-button,
 .run-playground .secondary-button,

@@ -89,6 +89,8 @@ type AgentRunResult = {
   response: string;
   tool_calls: { name: string; output: string }[];
   evidence: string[];
+  trace_id: string | null;
+  trace_url: string | null;
   artifact: ArtifactRecord;
   created_at: string;
 };
@@ -857,6 +859,7 @@ function App() {
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
+  const [scratchPanelOpen, setScratchPanelOpen] = useState(false);
   const [openAgentMenuId, setOpenAgentMenuId] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<AgentDesign | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -871,6 +874,7 @@ function App() {
   const [scratchActivity, setScratchActivity] = useState<string | null>(null);
   const [scratchError, setScratchError] = useState<string | null>(null);
   const [scratchArtifact, setScratchArtifact] = useState<ArtifactRecord | null>(null);
+  const [scratchTraceUrl, setScratchTraceUrl] = useState<string | null>(null);
 
   useEffect(() => {
     listProjects()
@@ -987,9 +991,11 @@ function App() {
       setReviewArtifact(null);
       setReviewLinks([]);
       setToolsPanelOpen(false);
+      setScratchPanelOpen(false);
       setScratchActivity(null);
       setScratchError(null);
       setScratchArtifact(null);
+      setScratchTraceUrl(null);
       setName("");
       setIntent("");
     } catch (err) {
@@ -1011,10 +1017,12 @@ function App() {
         setReviewArtifact(null);
         setReviewLinks([]);
         setToolsPanelOpen(false);
+        setScratchPanelOpen(false);
         setActivity(null);
         setScratchActivity(null);
         setScratchError(null);
         setScratchArtifact(null);
+        setScratchTraceUrl(null);
       }
       setDeleteCandidate(null);
       setOpenAgentMenuId(null);
@@ -1062,6 +1070,7 @@ function App() {
     setScratchError(null);
     setScratchActivity(runMode === "live" ? "Running live OpenAI scenario." : "Running mock scenario.");
     setScratchArtifact(null);
+    setScratchTraceUrl(null);
     setIsRunning(true);
     try {
       const run = await runAgentDesign(
@@ -1077,6 +1086,7 @@ function App() {
           : pack,
       );
       setScratchArtifact(run.artifact);
+      setScratchTraceUrl(run.trace_url);
       setScratchActivity("Scratch run saved.");
     } catch (err) {
       setScratchError(err instanceof Error ? err.message : "Unable to run agent scenario.");
@@ -1123,6 +1133,7 @@ function App() {
       setReviewArtifact(artifact);
       setReviewLinks(links);
       setToolsPanelOpen(false);
+      setScratchPanelOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load artifact.");
     }
@@ -1568,7 +1579,7 @@ function App() {
     <div
       className={[
         sidebarOpen ? "app-shell" : "app-shell sidebar-collapsed",
-        reviewArtifact || toolsPanelOpen ? "review-open" : "",
+        reviewArtifact || toolsPanelOpen || scratchPanelOpen ? "review-open" : "",
       ].join(" ")}
     >
       <aside className="sidebar">
@@ -1594,6 +1605,7 @@ function App() {
               setReviewArtifact(null);
               setReviewLinks([]);
               setToolsPanelOpen(false);
+              setScratchPanelOpen(false);
               setActivity(null);
             }}
           >
@@ -1629,9 +1641,11 @@ function App() {
                     setReviewArtifact(null);
                     setReviewLinks([]);
                     setToolsPanelOpen(false);
+                    setScratchPanelOpen(false);
                     setScratchActivity(null);
                     setScratchError(null);
                     setScratchArtifact(null);
+                    setScratchTraceUrl(null);
                   }}
                 >
                   <span>{agent.name}</span>
@@ -1648,6 +1662,22 @@ function App() {
                 </button>
                 {openAgentMenuId === agent.id ? (
                   <div className="agent-menu" role="menu">
+                    <button
+                      className="agent-menu-item"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setSelectedId(agent.id);
+                        setScratchPanelOpen(true);
+                        setReviewArtifact(null);
+                        setReviewLinks([]);
+                        setToolsPanelOpen(false);
+                        setOpenAgentMenuId(null);
+                      }}
+                    >
+                      <Play size={18} />
+                      Run scratch
+                    </button>
                     <button
                       className="agent-menu-item danger"
                       type="button"
@@ -1778,6 +1808,7 @@ function App() {
                         setToolsPanelOpen(true);
                         setReviewArtifact(null);
                         setReviewLinks([]);
+                        setScratchPanelOpen(false);
                       }}
                     >
                       Manage tools
@@ -1931,51 +1962,79 @@ function App() {
                     )}
                   </div>
                 </section>
-                <section className="supporting-workspace">
-                  <section className="run-playground">
-                    <div>
-                      <p className="artifact-type">Scratch run</p>
-                      <h3>Try the agent without changing the test</h3>
-                      <p>
-                        Use the page run mode above. This saves evidence but does not advance the
-                        before/after improvement loop.
-                      </p>
-                    </div>
-                    <label>
-                      Scenario input
-                      <textarea
-                        value={scenarioInput}
-                        onChange={(event) => setScenarioInput(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      className="primary-button"
-                      type="button"
-                      onClick={handleRunAgent}
-                      disabled={isRunning}
-                    >
-                      <Play size={18} />
-                      {isRunning ? "Running" : "Run scratch"}
-                    </button>
-                    {scratchActivity ? <p className="activity-text">{scratchActivity}</p> : null}
-                    {scratchError ? <p className="error-text">{scratchError}</p> : null}
-                    {scratchArtifact ? (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() => handleReviewArtifact(scratchArtifact.id)}
-                      >
-                        <PanelRight size={18} />
-                        View result
-                      </button>
-                    ) : null}
-                  </section>
-                </section>
               </div>
             ) : null}
           </section>
         </section>
       </main>
+      {scratchPanelOpen && selectedAgent ? (
+        <aside className="review-panel" aria-label="Scratch run">
+          <div className="review-panel-header">
+            <div>
+              <p className="eyebrow">Scratch run</p>
+              <h2>{selectedAgent.name}</h2>
+            </div>
+            <button
+              className="icon-button review-toggle-button"
+              type="button"
+              aria-label="Close scratch run panel"
+              onClick={() => setScratchPanelOpen(false)}
+            >
+              <PanelRight size={22} />
+            </button>
+          </div>
+
+          <div className="review-panel-body">
+            <section className="run-playground panel-run-playground">
+              <div>
+                <h3>Try a scenario</h3>
+                <p>
+                  Uses the page run mode above. This saves evidence but does not advance the
+                  before/after improvement loop.
+                </p>
+              </div>
+              <label>
+                Scenario input
+                <textarea
+                  value={scenarioInput}
+                  onChange={(event) => setScenarioInput(event.target.value)}
+                />
+              </label>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={handleRunAgent}
+                disabled={isRunning}
+              >
+                <Play size={18} />
+                {isRunning ? "Running" : "Run scratch"}
+              </button>
+              {scratchActivity ? <p className="activity-text">{scratchActivity}</p> : null}
+              {scratchError ? <p className="error-text">{scratchError}</p> : null}
+              {scratchArtifact ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => handleReviewArtifact(scratchArtifact.id)}
+                >
+                  <PanelRight size={18} />
+                  View result
+                </button>
+              ) : null}
+              {scratchTraceUrl ? (
+                <a
+                  className="secondary-button trace-link"
+                  href={scratchTraceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open trace
+                </a>
+              ) : null}
+            </section>
+          </div>
+        </aside>
+      ) : null}
       {toolsPanelOpen && selectedAgent ? (
         <aside className="review-panel" aria-label="Tool marketplace">
           <div className="review-panel-header">

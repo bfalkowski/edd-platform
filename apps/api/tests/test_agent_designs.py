@@ -1,3 +1,5 @@
+import json
+import sys
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
@@ -11,6 +13,8 @@ from edd_runner import (
     extract_response_text,
 )
 from edd_platform_api.main import app  # noqa: E402
+
+edd_runner = sys.modules["edd_runner"]
 
 
 def test_create_and_list_agent_designs() -> None:
@@ -249,7 +253,7 @@ def test_list_tool_definitions_includes_approved_weather_tool() -> None:
     tools = response.json()
     assert tools[0]["name"] == "get_weather"
     assert tools[0]["status"] == "approved"
-    assert tools[0]["implementation_key"] == "local_weather_fixture"
+    assert tools[0]["implementation_key"] == "open_meteo_weather"
 
 
 def test_update_agent_design_tool_allowlist() -> None:
@@ -321,7 +325,26 @@ def test_update_agent_design_rejects_unknown_tools() -> None:
     assert response.status_code == 400
 
 
-def test_approved_weather_tool_adapts_to_langchain_tool() -> None:
+def test_approved_weather_tool_adapts_to_langchain_tool(monkeypatch) -> None:
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {"current": {"temperature_2m": 76.2, "weather_code": 0}}
+            ).encode("utf-8")
+
+    monkeypatch.setattr(
+        edd_runner,
+        "get_zip_location",
+        lambda zip_code: ("41.3083", "-72.9279", "New Haven", "CT"),
+    )
+    monkeypatch.setattr(edd_runner, "urlopen", lambda request, timeout: FakeResponse())
+
     tools = build_langchain_tools(
         [
             RunnerToolDefinition(
@@ -329,14 +352,15 @@ def test_approved_weather_tool_adapts_to_langchain_tool() -> None:
                 description="Get current weather for a US ZIP code.",
                 input_schema={"type": "object"},
                 output_description="Current temperature and conditions.",
-                implementation_key="local_weather_fixture",
+                implementation_key="open_meteo_weather",
                 status="approved",
             )
         ]
     )
 
     assert tools[0].invoke({"zip_code": "06511"}) == (
-        "Current weather for 06511 New Haven, CT: 41°F and cloudy."
+        "Current weather for 06511 New Haven, CT: 76°F and clear sky. "
+        "Source: Open-Meteo current forecast."
     )
 
 
@@ -1863,7 +1887,7 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
                     "required": ["zip_code"],
                 },
                 output_description="Current temperature and conditions.",
-                implementation_key="local_weather_fixture",
+                implementation_key="open_meteo_weather",
                 status="approved",
             )
         ]
@@ -1874,9 +1898,14 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
             scenario_input=scenario.input,
             response="Live response with evidence, assumptions, and a safe next action.",
             tool_calls=[
-                RunnerToolCall(name="get_weather", output="Current weather: 41°F and cloudy."),
+                RunnerToolCall(
+                    name="get_weather",
+                    output="Current weather: 76°F and clear sky.",
+                ),
             ],
             evidence=["Used fake OpenAI provider in test."],
+            trace_id="trace_scratch_fake",
+            trace_url="https://cloud.langfuse.com/project/demo/traces/trace_scratch_fake",
             created_at=datetime.now(timezone.utc),
         )
 
@@ -1896,7 +1925,9 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
     assert run["mode"] == "live"
     assert run["artifact"]["source"] == "runner:live"
     assert run["tool_calls"][0]["name"] == "get_weather"
-    assert "41°F" in run["artifact"]["body"]
+    assert "76°F" in run["artifact"]["body"]
+    assert run["trace_id"] == "trace_scratch_fake"
+    assert run["trace_url"] == "https://cloud.langfuse.com/project/demo/traces/trace_scratch_fake"
 
 
 def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) -> None:

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -92,12 +93,80 @@ def run_mock_agent(agent: RunnerAgentDesign, scenario: RunnerScenario) -> Runner
     )
 
 
-def get_weather(zip_code: str) -> str:
-    """Return deterministic weather data for local EDD tool-calling runs."""
+def weather_code_label(code: int | None) -> str:
+    labels = {
+        0: "clear sky",
+        1: "mainly clear",
+        2: "partly cloudy",
+        3: "overcast",
+        45: "fog",
+        48: "depositing rime fog",
+        51: "light drizzle",
+        53: "moderate drizzle",
+        55: "dense drizzle",
+        61: "slight rain",
+        63: "moderate rain",
+        65: "heavy rain",
+        71: "slight snow",
+        73: "moderate snow",
+        75: "heavy snow",
+        80: "slight rain showers",
+        81: "moderate rain showers",
+        82: "violent rain showers",
+        95: "thunderstorm",
+    }
+    return labels.get(code, "unknown conditions")
+
+
+def get_zip_location(zip_code: str) -> tuple[str, str, str, str]:
     normalized = zip_code.strip()
-    if normalized == "06511":
-        return "Current weather for 06511 New Haven, CT: 41°F and cloudy."
-    return f"Current weather for {normalized}: 55°F and clear. Source: deterministic local fixture."
+    if not normalized:
+        raise RuntimeError("ZIP code is required.")
+    request = Request(f"https://api.zippopotam.us/us/{quote(normalized)}")
+    with urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    places = payload.get("places") if isinstance(payload, dict) else None
+    if not isinstance(places, list) or not places:
+        raise RuntimeError(f"No location found for ZIP {normalized}.")
+    place = places[0]
+    return (
+        str(place["latitude"]),
+        str(place["longitude"]),
+        str(place.get("place name", normalized)),
+        str(place.get("state abbreviation", "")),
+    )
+
+
+def get_weather(zip_code: str) -> str:
+    """Return current weather for a US ZIP code using public weather APIs."""
+    normalized = zip_code.strip()
+    try:
+        latitude, longitude, place_name, state = get_zip_location(normalized)
+        query = urlencode(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "current": "temperature_2m,weather_code",
+                "temperature_unit": "fahrenheit",
+                "timezone": "auto",
+            }
+        )
+        request = Request(f"https://api.open-meteo.com/v1/forecast?{query}")
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        current = payload.get("current") if isinstance(payload, dict) else None
+        if not isinstance(current, dict):
+            raise RuntimeError("Open-Meteo response did not include current conditions.")
+        temperature = current.get("temperature_2m")
+        weather_code = current.get("weather_code")
+        location = f"{place_name}, {state}".strip().rstrip(",")
+        return (
+            f"Current weather for {normalized} {location}: "
+            f"{round(float(temperature))}°F and {weather_code_label(weather_code)}. "
+            "Source: Open-Meteo current forecast."
+        )
+    except (HTTPError, URLError, KeyError, TypeError, ValueError, RuntimeError) as exc:
+        return f"Weather lookup unavailable for ZIP {normalized}: {exc}"
 
 
 def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
@@ -110,7 +179,7 @@ def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
     for definition in tool_definitions:
         if definition.status != "approved":
             continue
-        if definition.implementation_key == "local_weather_fixture":
+        if definition.implementation_key in {"open_meteo_weather", "local_weather_fixture"}:
 
             @tool("get_weather")
             def weather_tool(zip_code: str) -> str:
