@@ -296,6 +296,8 @@ type EddFlowState = {
 };
 
 const apiBase = "/api";
+const defaultScenarioInput =
+  "A customer reports a failed deployment and asks what to do next.";
 
 async function responseError(response: Response, fallback: string): Promise<Error> {
   try {
@@ -768,6 +770,55 @@ function traceUrlFromArtifact(artifact: ArtifactRecord): string | null {
   return match?.[1]?.trim() ?? null;
 }
 
+function parseArtifactFields(body: string): { label: string; value: string }[] {
+  const fields = body
+    .split(/\n{2,}/)
+    .map((block) => {
+      const [label, ...valueLines] = block.split("\n");
+      return {
+        label: label.trim(),
+        value: valueLines.join("\n").trim(),
+      };
+    })
+    .filter((field) => field.label && field.value);
+
+  return fields.length >= 2 ? fields : [];
+}
+
+function artifactRoleLabel(artifactType: string): string {
+  const labels: Record<string, string> = {
+    AGENT_DESIGN: "Agent design",
+    AGENT_VERSION: "Agent version",
+    COMPARISON: "Comparison",
+    EVAL_CONTRACT: "Success criteria",
+    EVAL_RESULT: "Eval result",
+    FAILURE_PACKET: "Failure",
+    FIX_PROPOSAL: "Fix proposal",
+    GATE_DECISION: "Gate decision",
+    JUDGE_OUTPUT: "Judge output",
+    RUN_RESULT: "Run output",
+    SCENARIO: "Scenario",
+    TRACE_REF: "Trace",
+  };
+  return labels[artifactType] ?? artifactType.replaceAll("_", " ").toLowerCase();
+}
+
+function evidenceSummary(artifacts: ArtifactRecord[]): string {
+  const hasRun = artifacts.some((artifact) => artifact.artifact_type === "RUN_RESULT");
+  const hasEval = artifacts.some((artifact) => artifact.artifact_type === "EVAL_RESULT");
+  const hasFailure = artifacts.some((artifact) => artifact.artifact_type === "FAILURE_PACKET");
+  const hasFix = artifacts.some((artifact) => artifact.artifact_type === "FIX_PROPOSAL");
+  const hasComparison = artifacts.some((artifact) => artifact.artifact_type === "COMPARISON");
+  const parts = [
+    hasRun ? "runs" : null,
+    hasEval ? "checks" : null,
+    hasFailure ? "failures" : null,
+    hasFix ? "fixes" : null,
+    hasComparison ? "comparison" : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "No proof evidence yet";
+}
+
 function inferExpectedResponse(agent: AgentDesign): string {
   const intent = agent.intent.trim();
   const patterns = [
@@ -847,9 +898,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [intent, setIntent] = useState("");
-  const [scenarioInput, setScenarioInput] = useState(
-    "A customer reports a failed deployment and asks what to do next.",
-  );
+  const [scenarioInput, setScenarioInput] = useState(defaultScenarioInput);
   const [requiredPhrase, setRequiredPhrase] = useState("");
   const [runMode, setRunMode] = useState<"mock" | "live">("mock");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
@@ -925,13 +974,19 @@ function App() {
     (artifact, index, artifacts) =>
       artifacts.findIndex((candidate) => candidate.id === artifact.id) === index,
   ).slice(0, 4);
+  const proofEvidenceSummary = evidenceSummary(visibleArtifacts);
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
+  const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
   const savedExpectedPhrase = eddFlow.contract?.checks.find((check) => check.value)?.value ?? "";
+  const savedScenarioInput = eddFlow.scenario?.input ?? "";
   const testOutOfSync = Boolean(
     eddFlow.contract &&
-      requiredPhrase.trim() &&
-      savedExpectedPhrase &&
-      savedExpectedPhrase !== requiredPhrase.trim(),
+      ((requiredPhrase.trim() &&
+        savedExpectedPhrase &&
+        savedExpectedPhrase !== requiredPhrase.trim()) ||
+        (scenarioInput.trim() &&
+          savedScenarioInput &&
+          savedScenarioInput !== scenarioInput.trim())),
   );
 
   useEffect(() => {
@@ -960,6 +1015,7 @@ function App() {
         setEddFlow(flow);
         setGates(loadedGates);
         setGateDecisions(loadedGateDecisions);
+        setScenarioInput(flow.scenario?.input ?? defaultScenarioInput);
         const phrase = flow.contract?.checks.find((check) => check.value)?.value;
         const inferredPhrase = selectedAgent ? inferExpectedResponse(selectedAgent) : "";
         if (phrase && phrase !== "bounded resolution") {
@@ -1474,12 +1530,16 @@ function App() {
       detail: eddFlow.comparison?.summary ?? "Did the candidate improve?",
     },
   ];
+  const activeLoopStepIndex = Math.max(
+    0,
+    loopSteps.findIndex((step) => !step.done),
+  );
   const currentLoopAction = (() => {
     if (!eddFlow.contract) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Define the test",
-        detail: "Save the scenario and the success criteria this agent will be judged against.",
+        detail: "Save the scenario and success criteria before running the original agent.",
         label: "Define test",
         onClick: handleInitializeEddFlow,
         disabled: isFlowBusy || !requiredPhrase.trim(),
@@ -1487,9 +1547,9 @@ function App() {
     }
     if (testOutOfSync) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Redefine the test",
-        detail: "The saved success criteria do not match the expected answer shown above.",
+        detail: "The saved test does not match the scenario or criteria shown above.",
         label: "Redefine test",
         onClick: handleInitializeEddFlow,
         disabled: isFlowBusy || !requiredPhrase.trim(),
@@ -1497,7 +1557,7 @@ function App() {
     }
     if (!eddFlow.baselineRun) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Run the original agent",
         detail: "Capture how the current instructions answer the scenario before any fix.",
         label: "Run original",
@@ -1507,7 +1567,7 @@ function App() {
     }
     if (!eddFlow.baselineEval) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Check the original answer",
         detail: "Judge the response against the success criteria and record what failed.",
         label: "Check answer",
@@ -1517,7 +1577,7 @@ function App() {
     }
     if (!eddFlow.fixProposal && eddFlow.failurePackets.length > 0) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Propose one fix",
         detail: "Use the failure evidence to suggest one targeted instruction change.",
         label: "Create fix",
@@ -1527,7 +1587,7 @@ function App() {
     }
     if (!eddFlow.candidateVersion && eddFlow.fixProposal) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Create the candidate",
         detail: "Apply the proposed fix to create a new agent version.",
         label: "Create candidate",
@@ -1537,7 +1597,7 @@ function App() {
     }
     if (!eddFlow.candidateRun && eddFlow.candidateVersion) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Run the candidate",
         detail: "Run the improved version against the same scenario.",
         label: "Run candidate",
@@ -1547,7 +1607,7 @@ function App() {
     }
     if (!eddFlow.candidateEval && eddFlow.candidateRun) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Check the candidate answer",
         detail: "Judge the new response against the same success criteria.",
         label: "Check candidate",
@@ -1557,7 +1617,7 @@ function App() {
     }
     if (!eddFlow.comparison && eddFlow.baselineEval && eddFlow.candidateEval) {
       return {
-        eyebrow: "Next",
+        eyebrow: "Next action",
         title: "Compare original vs candidate",
         detail: "Show whether the new version fixed the failure or still needs work.",
         label: "Compare",
@@ -1818,20 +1878,30 @@ function App() {
                 <section className="edd-loop-panel primary-workflow-panel">
                   <div className="edd-loop-header">
                     <div>
-                      <p className="artifact-type">Before and after</p>
-                      <h3>Run one scenario, fix one failure, compare the result.</h3>
+                      <p className="artifact-type">Proof loop</p>
+                      <h3>Run one scenario. Fix one failure. Compare the result.</h3>
                       <p>
-                        The platform saves each run, check, failure, and fix as evidence so you
-                        can see whether the agent actually improved.
+                        Define what good looks like, capture the original behavior, make one
+                        targeted change, and verify whether the candidate improved.
                       </p>
                     </div>
-                    <label className="compact-label">
-                      <span>Success criteria</span>
-                      <small>The answer should include this text.</small>
-                      <input
-                        value={requiredPhrase}
-                        onChange={(event) => setRequiredPhrase(event.target.value)}
-                      />
+                    <div className="proof-setup-grid">
+                      <label className="compact-label">
+                        <span>Scenario</span>
+                        <small>The same input is used for original and candidate runs.</small>
+                        <textarea
+                          value={scenarioInput}
+                          onChange={(event) => setScenarioInput(event.target.value)}
+                        />
+                      </label>
+                      <label className="compact-label">
+                        <span>Success criteria</span>
+                        <small>The answer should include this text.</small>
+                        <input
+                          value={requiredPhrase}
+                          onChange={(event) => setRequiredPhrase(event.target.value)}
+                        />
+                      </label>
                       {eddFlow.contract ? (
                         <button
                           className="secondary-button compact-button"
@@ -1842,12 +1912,19 @@ function App() {
                           Redefine test
                         </button>
                       ) : null}
-                    </label>
+                    </div>
                   </div>
                   <div className="loop-step-grid">
-                    {loopSteps.map((step) => (
-                      <div className={step.done ? "loop-step done" : "loop-step"} key={step.label}>
-                        <span>{step.done ? "✓" : ""}</span>
+                    {loopSteps.map((step, index) => (
+                      <div
+                        className={[
+                          "loop-step",
+                          step.done ? "done" : "",
+                          index === activeLoopStepIndex && !step.done ? "current" : "",
+                        ].join(" ")}
+                        key={step.label}
+                      >
+                        <span>{step.done ? "✓" : index + 1}</span>
                         <strong>{step.label}</strong>
                         <small>{step.detail}</small>
                       </div>
@@ -1885,8 +1962,11 @@ function App() {
                   <div className="workflow-evidence-panel">
                     <div>
                       <p className="artifact-type">Saved evidence</p>
-                      <h4>{visibleArtifacts.length} records</h4>
-                      <p>Open the scenario, success criteria, run output, eval result, or trace.</p>
+                      <h4>{proofEvidenceSummary}</h4>
+                      <p>
+                        The platform stores the test setup, run outputs, eval decisions, fixes,
+                        comparisons, and traces as inspectable evidence.
+                      </p>
                     </div>
                     <div className="workflow-evidence-list">
                       {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
@@ -1902,7 +1982,7 @@ function App() {
                               type="button"
                               onClick={() => handleReviewArtifact(artifact.id)}
                             >
-                              <span>{artifact.artifact_type.replaceAll("_", " ")}</span>
+                              <span>{artifactRoleLabel(artifact.artifact_type)}</span>
                               <strong>{artifact.title}</strong>
                               <PanelRight size={17} />
                             </button>
@@ -2056,8 +2136,8 @@ function App() {
             <section>
               <h3>Enabled for this agent</h3>
               <p>
-                Pick the approved tools this agent may call during live runs. Tool calls still
-                execute through platform policy, not from the browser.
+                Pick the approved platform tools this agent may call during live runs. Each tool
+                should eventually carry input/output schemas, mock behavior, and execution policy.
               </p>
             </section>
             <section className="tool-marketplace-list">
@@ -2090,7 +2170,7 @@ function App() {
         <aside className="review-panel" aria-label="Artifact review">
           <div className="review-panel-header">
             <div>
-              <p className="eyebrow">{reviewArtifact.artifact_type.replaceAll("_", " ")}</p>
+              <p className="eyebrow">{artifactRoleLabel(reviewArtifact.artifact_type)}</p>
               <h2>{reviewArtifact.title}</h2>
             </div>
             <button
@@ -2108,8 +2188,19 @@ function App() {
 
           <div className="review-panel-body">
             <section>
-              <h3>Record</h3>
-              <p>{reviewArtifact.body}</p>
+              <h3>Contents</h3>
+              {reviewFields.length > 0 ? (
+                <dl className="record-fields">
+                  {reviewFields.map((field) => (
+                    <div key={field.label}>
+                      <dt>{field.label}</dt>
+                      <dd>{field.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p>{reviewArtifact.body}</p>
+              )}
               {reviewTraceUrl ? (
                 <a
                   className="secondary-button trace-link"

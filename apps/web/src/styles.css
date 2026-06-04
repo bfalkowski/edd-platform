@@ -744,6 +744,19 @@ dd {
   margin: 0;
 }
 
+.proof-setup-grid {
+  background: #f7f7f8;
+  border: 1px solid #ececf1;
+  border-radius: 16px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.proof-setup-grid textarea {
+  min-height: 92px;
+}
+
 .compact-label input {
   min-height: 48px;
 }
@@ -775,11 +788,21 @@ dd {
   padding: 13px;
 }
 
+.loop-step.current {
+  background: #ffffff;
+  border-color: #202123;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 6%);
+}
+
+.loop-step.done {
+  background: #ffffff;
+}
+
 .loop-step span {
   align-items: center;
   border: 1px solid #d5d7df;
   border-radius: 999px;
-  color: #ffffff;
+  color: #737684;
   display: flex;
   font-size: 13px;
   font-weight: 900;
@@ -788,9 +811,15 @@ dd {
   width: 24px;
 }
 
+.loop-step.current span {
+  border-color: #202123;
+  color: #202123;
+}
+
 .loop-step.done span {
   background: #202123;
   border-color: #202123;
+  color: #ffffff;
 }
 
 .loop-step strong {
@@ -862,6 +891,7 @@ dd {
   font-size: 20px;
   line-height: 1.15;
   margin: 0 0 6px;
+  text-transform: capitalize;
 }
 
 .workflow-evidence-panel p {
@@ -1189,6 +1219,37 @@ dd {
   color: #4f5260;
   line-height: 1.55;
   margin: 0;
+  white-space: pre-line;
+}
+
+.record-fields {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.record-fields div {
+  background: #ffffff;
+  border: 1px solid #ececf1;
+  border-radius: 14px;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.record-fields dt {
+  color: #737684;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.record-fields dd {
+  color: #202123;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
   white-space: pre-line;
 }
 

@@ -61,6 +61,12 @@ Do this before adding more workflow UI.
 - [x] Add agent-level approved tool allowlists.
 - [x] Adapt approved platform tools into LangChain/LangGraph tool primitives.
 - [x] Store tool calls and tool results as run evidence.
+- [ ] Build a schema-first tool registry so user-created tools define input
+      JSON Schema, output schema or output description, implementation kind
+      (`http`, `python`, `mcp`, `builtin`, `mock`), auth/config requirements,
+      deterministic mock behavior, approval status, and adapters for
+      LangChain/LangGraph, OpenAI tool calling, MCP, OpenAPI docs, and eval
+      validation.
 - [x] Synthesize `HLD-004: Eval Contracts, Runs, Judges, and Fixes`.
 - [x] Define planned OpenAPI contracts for `EvalContract`, `Run`, `EvalResult`,
       `FailurePacket`, `FixProposal`, `AgentVersion`, and `Comparison`.
