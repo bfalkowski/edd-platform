@@ -30,13 +30,13 @@ Statuses:
 | Runs | HLD-002, HLD-003, HLD-004 | partial | partial | partial | Canonical project-scoped run API exists; contract-driven evaluation is missing. |
 | Tool call evidence | HLD-004 | partial | partial | partial | Stored in run artifact body; should become first-class evidence. |
 | Eval results | HLD-003, HLD-004 | partial | partial | partial | Contract-driven run evaluation API exists; failure packets are next. |
-| Judge prompts | HLD-002, HLD-003, HLD-004 | gap | gap | gap | Mentioned in docs, not modeled in API yet. |
-| Judge outputs | HLD-001, HLD-004 | partial | gap | partial | Deterministic judge output artifacts are created during run evaluation. |
+| Judge prompts | HLD-002, HLD-003, HLD-004 | covered | gap | partial | Prompt templates are stored as artifacts and can be linked to eval contracts. |
+| Judge outputs | HLD-001, HLD-004 | partial | gap | partial | Deterministic and optional live judge output artifacts are created during run evaluation. |
 | Failure packets | HLD-001, HLD-003, HLD-004 | partial | gap | partial | API and automatic failed-eval creation exist; UI is missing. |
 | Fix proposals | HLD-001, HLD-003, HLD-004 | partial | gap | partial | API and evidence artifact links exist; UI is missing. |
 | Comparisons | HLD-001, HLD-004 | partial | gap | partial | API and comparison artifacts exist; UI is missing. |
-| Gates | HLD-002, HLD-003 | gap | gap | partial | Concept exists, implementation is later. |
-| Gate decisions | HLD-001, HLD-002 | gap | gap | partial | Later readiness milestone. |
+| Gates | HLD-002, HLD-003 | covered | partial | partial | Gate definitions are stored as artifacts and can be created from the EDD loop. |
+| Gate decisions | HLD-001, HLD-002 | covered | partial | partial | Gate decisions create readiness artifacts linked to gate and supporting evidence. |
 | Langfuse trace refs | HLD-001, HLD-002 | gap | gap | partial | Boundary is clear; adapter remains future work. |
 | Frontend design language | Frontend guide | n/a | covered | covered | Use `docs/design/FRONTEND_GUIDE.md`. |
 | AI-agent development guardrails | Engineering guide | n/a | n/a | covered | Use `docs/engineering/AI_AGENT_DEVELOPMENT.md`. |

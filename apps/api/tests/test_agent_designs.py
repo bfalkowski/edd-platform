@@ -119,6 +119,75 @@ def test_list_tool_definitions_includes_approved_weather_tool() -> None:
     assert tools[0]["implementation_key"] == "local_weather_fixture"
 
 
+def test_update_agent_design_tool_allowlist() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Tool Policy Agent",
+            "intent": "Use approved tools only.",
+            "allowed_tool_names": [],
+        },
+    )
+    agent = create_response.json()["agent"]
+    assert agent["allowed_tool_names"] == ["get_weather"]
+
+    response = client.patch(
+        f"/api/projects/project_default/agent-designs/{agent['id']}",
+        json={"allowed_tool_names": []},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["allowed_tool_names"] == []
+    artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"]},
+    )
+    design_artifact = next(
+        artifact
+        for artifact in artifacts_response.json()
+        if artifact["artifact_type"] == "AGENT_DESIGN"
+    )
+    assert "Allowed tools: none" in design_artifact["body"]
+
+    response = client.patch(
+        f"/api/projects/project_default/agent-designs/{agent['id']}",
+        json={"allowed_tool_names": ["get_weather"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["allowed_tool_names"] == ["get_weather"]
+    artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"]},
+    )
+    design_artifact = next(
+        artifact
+        for artifact in artifacts_response.json()
+        if artifact["artifact_type"] == "AGENT_DESIGN"
+    )
+    assert "Allowed tools: get_weather" in design_artifact["body"]
+
+
+def test_update_agent_design_rejects_unknown_tools() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Unknown Tool Agent",
+            "intent": "Use approved tools only.",
+        },
+    )
+    agent = create_response.json()["agent"]
+
+    response = client.patch(
+        f"/api/projects/project_default/agent-designs/{agent['id']}",
+        json={"allowed_tool_names": ["secret_tool"]},
+    )
+
+    assert response.status_code == 400
+
+
 def test_approved_weather_tool_adapts_to_langchain_tool() -> None:
     tools = build_langchain_tools(
         [
@@ -348,6 +417,296 @@ def test_eval_contract_requires_matching_scenario_agent() -> None:
     )
 
     assert response.status_code == 400
+
+
+def test_judge_prompt_template_links_to_eval_contract_artifact() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Judge Prompt Agent",
+            "intent": "Answer with evidence.",
+        },
+    )
+    agent = create_response.json()["agent"]
+    template_response = client.post(
+        "/api/projects/project_default/judge-prompt-templates",
+        json={
+            "name": "Evidence Judge",
+            "description": "Scores grounded answers.",
+            "template": "Score the response against the contract evidence.",
+        },
+    )
+
+    assert template_response.status_code == 201
+    template = template_response.json()
+
+    contract_response = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Evidence contract",
+            "judge_prompt_template_id": template["id"],
+        },
+    )
+
+    assert contract_response.status_code == 201
+    contract = contract_response.json()
+    assert contract["judge_prompt_template_id"] == template["id"]
+
+    artifacts_response = client.get("/api/projects/project_default/artifacts")
+    artifacts = artifacts_response.json()
+    prompt_artifact = next(
+        artifact
+        for artifact in artifacts
+        if artifact["artifact_type"] == "JUDGE_PROMPT_TEMPLATE"
+        and artifact["artifact_id"] == template["id"]
+    )
+    contract_artifact = next(
+        artifact
+        for artifact in artifacts
+        if artifact["artifact_type"] == "EVAL_CONTRACT"
+        and artifact["artifact_id"] == contract["id"]
+    )
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{contract_artifact['id']}/links"
+    )
+
+    assert links_response.status_code == 200
+    assert any(
+        link["relationship_type"] == "USES"
+        and link["target_artifact_id"] == prompt_artifact["id"]
+        for link in links_response.json()
+    )
+
+
+def test_eval_contract_requires_known_judge_prompt_template() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Missing Judge Prompt Agent", "intent": "Answer with evidence."},
+    )
+    agent = create_response.json()["agent"]
+
+    response = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Broken contract",
+            "judge_prompt_template_id": "judge_prompt_missing",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_create_gate_definition_creates_gate_artifact() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Gate Agent", "intent": "Improve only with evidence."},
+    )
+    agent = create_response.json()["agent"]
+    design_artifact = create_response.json()["artifact"]
+
+    gate_response = client.post(
+        "/api/projects/project_default/gates",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Promotion readiness",
+            "criteria": ["candidate passes eval", "no open failures"],
+            "required_artifact_types": ["EVAL_RESULT", "COMPARISON"],
+            "threshold": "all_criteria_met",
+            "approval_mode": "manual",
+        },
+    )
+
+    assert gate_response.status_code == 201
+    gate = gate_response.json()
+    assert gate["agent_design_id"] == agent["id"]
+    assert gate["criteria"] == ["candidate passes eval", "no open failures"]
+    assert gate["required_artifact_types"] == ["EVAL_RESULT", "COMPARISON"]
+
+    list_response = client.get(
+        "/api/projects/project_default/gates",
+        params={"agent_design_id": agent["id"]},
+    )
+    get_response = client.get(f"/api/projects/project_default/gates/{gate['id']}")
+    artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "GATE"},
+    )
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["id"] == gate["id"]
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == gate["id"]
+    gate_artifact = artifacts_response.json()[0]
+    assert gate_artifact["artifact_type"] == "GATE"
+    assert gate_artifact["artifact_id"] == gate["id"]
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{gate_artifact['id']}/links"
+    )
+    assert any(
+        link["target_artifact_id"] == design_artifact["id"]
+        and link["relationship_type"] == "GENERATED_FROM"
+        for link in links_response.json()
+    )
+
+
+def test_gate_definition_requires_known_agent_design() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/projects/project_default/gates",
+        json={
+            "agent_design_id": "agent_missing",
+            "name": "Missing agent gate",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_gate_decision_passes_with_required_eval_evidence() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Passing Gate Agent", "intent": "Gather evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Passing gate scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Passing gate contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "mentions_evidence",
+                    "type": "output_contains",
+                    "value": "evidence",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+    eval_result = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    ).json()
+    gate = client.post(
+        "/api/projects/project_default/gates",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Passing promotion gate",
+            "required_artifact_types": ["EVAL_RESULT"],
+            "blocking_failure_statuses": ["open"],
+        },
+    ).json()
+
+    decision_response = client.post(
+        f"/api/projects/project_default/gates/{gate['id']}/decisions",
+        json={"eval_result_id": eval_result["id"]},
+    )
+
+    assert decision_response.status_code == 201
+    decision = decision_response.json()
+    assert decision["decision"] == "passed"
+    assert decision["missing_artifact_types"] == []
+    assert decision["blocking_failure_packet_ids"] == []
+    assert eval_result["artifact_ids"][0] in decision["evidence_artifact_ids"]
+    decisions_response = client.get(
+        "/api/projects/project_default/gate-decisions",
+        params={"agent_design_id": agent["id"]},
+    )
+    assert decisions_response.json()[0]["id"] == decision["id"]
+    artifact_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "GATE_DECISION"},
+    )
+    assert artifact_response.json()[0]["artifact_id"] == decision["id"]
+
+
+def test_gate_decision_blocks_on_open_failure_packet() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Blocking Gate Agent", "intent": "Gather evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Blocking gate scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Blocking gate contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "requires_missing_phrase",
+                    "type": "output_contains",
+                    "value": "purple elephant",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+    eval_result = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    ).json()
+    failure_packet = client.get(
+        "/api/projects/project_default/failure-packets",
+        params={"agent_design_id": agent["id"]},
+    ).json()[0]
+    gate = client.post(
+        "/api/projects/project_default/gates",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Blocking promotion gate",
+            "required_artifact_types": ["EVAL_RESULT"],
+            "blocking_failure_statuses": ["open"],
+        },
+    ).json()
+
+    decision_response = client.post(
+        f"/api/projects/project_default/gates/{gate['id']}/decisions",
+        json={"eval_result_id": eval_result["id"]},
+    )
+
+    assert decision_response.status_code == 201
+    decision = decision_response.json()
+    assert decision["decision"] == "blocked"
+    assert decision["blocking_failure_packet_ids"] == [failure_packet["id"]]
+    assert "Blocking failure packets remain" in decision["rationale"]
 
 
 def test_create_agent_versions_for_baseline_and_candidate() -> None:
@@ -606,6 +965,130 @@ def test_contract_driven_run_evaluation_creates_eval_result() -> None:
     relationship_types = {link["relationship_type"] for link in links_response.json()}
     assert "GENERATED_FROM" in relationship_types
     assert "SUPPORTED_BY" in relationship_types
+
+
+def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
+    client = TestClient(app)
+    seen_prompt = {}
+    monkeypatch.setenv("EDD_OPENAI_INPUT_COST_PER_1M", "1.00")
+    monkeypatch.setenv("EDD_OPENAI_OUTPUT_COST_PER_1M", "2.00")
+
+    def fake_live_judge(prompt: str):
+        seen_prompt["value"] = prompt
+        return "Live judge explanation cites the provided evidence.", "test-judge-model", {
+            "input_tokens": 10,
+            "output_tokens": 5,
+        }
+
+    monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Live Judge Agent", "intent": "Answer with evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Live judge scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    prompt_template = client.post(
+        "/api/projects/project_default/judge-prompt-templates",
+        json={
+            "name": "Live evidence judge",
+            "template": "Use this stored judge prompt and cite only supplied evidence.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Live judge contract",
+            "scenario_id": scenario["id"],
+            "judge_prompt_template_id": prompt_template["id"],
+            "checks": [
+                {
+                    "id": "mentions_evidence",
+                    "type": "output_contains",
+                    "value": "evidence",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "live"},
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    assert eval_result["mode"] == "live"
+    assert "stored judge prompt" in seen_prompt["value"]
+    assert run["output"] in seen_prompt["value"]
+    judge_output = api_main._judge_outputs[eval_result["judge_output_ids"][0]]
+    assert judge_output.model == "test-judge-model"
+    assert judge_output.token_usage == {"input_tokens": 10, "output_tokens": 5}
+    assert judge_output.cost_estimate == 0.00002
+    judge_artifact = client.get(
+        f"/api/projects/project_default/artifacts/{eval_result['artifact_ids'][1]}"
+    ).json()
+    assert judge_artifact["source"] == "judge:live"
+    assert "Live judge explanation" in judge_artifact["body"]
+
+
+def test_live_judge_requires_openai_api_key(monkeypatch) -> None:
+    client = TestClient(app)
+
+    def fake_live_judge(prompt: str):
+        raise RuntimeError("OPENAI_API_KEY is required for live OpenAI runs.")
+
+    monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Missing Live Judge Key", "intent": "Answer with evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Missing key scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Missing key contract",
+            "scenario_id": scenario["id"],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "live"},
+    )
+
+    assert eval_response.status_code == 400
+    assert "OPENAI_API_KEY" in eval_response.json()["detail"]
 
 
 def test_contract_driven_run_evaluation_can_fail() -> None:

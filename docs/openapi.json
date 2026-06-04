@@ -96,6 +96,59 @@
         "title": "AgentDesignCreated",
         "type": "object"
       },
+      "AgentDesignUpdate": {
+        "properties": {
+          "allowed_tool_names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Tool Names"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "AgentDesignUpdate",
+        "type": "object"
+      },
       "AgentRunCreate": {
         "properties": {
           "mode": {
@@ -1604,6 +1657,277 @@
         "title": "FixProposalUpdate",
         "type": "object"
       },
+      "GateDecision": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "blocking_failure_packet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Failure Packet Ids",
+            "type": "array"
+          },
+          "comparison_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_by": {
+            "title": "Decided By",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "passed",
+              "blocked"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "eval_result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Result Id"
+          },
+          "evidence_artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Artifact Ids",
+            "type": "array"
+          },
+          "gate_id": {
+            "title": "Gate Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "missing_artifact_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Artifact Types",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "gate_id",
+          "agent_design_id",
+          "decision",
+          "rationale",
+          "missing_artifact_types",
+          "blocking_failure_packet_ids",
+          "evidence_artifact_ids",
+          "decided_by",
+          "created_at"
+        ],
+        "title": "GateDecision",
+        "type": "object"
+      },
+      "GateDecisionCreate": {
+        "properties": {
+          "comparison_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Id"
+          },
+          "decided_by": {
+            "default": "platform",
+            "title": "Decided By",
+            "type": "string"
+          },
+          "eval_result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Result Id"
+          }
+        },
+        "title": "GateDecisionCreate",
+        "type": "object"
+      },
+      "GateDefinition": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "approval_mode": {
+            "title": "Approval Mode",
+            "type": "string"
+          },
+          "blocking_failure_statuses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Failure Statuses",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Criteria",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "required_artifact_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Artifact Types",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "name",
+          "criteria",
+          "required_artifact_types",
+          "threshold",
+          "blocking_failure_statuses",
+          "approval_mode",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GateDefinition",
+        "type": "object"
+      },
+      "GateDefinitionCreate": {
+        "properties": {
+          "agent_design_id": {
+            "minLength": 1,
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "approval_mode": {
+            "default": "manual",
+            "enum": [
+              "automatic",
+              "manual"
+            ],
+            "title": "Approval Mode",
+            "type": "string"
+          },
+          "blocking_failure_statuses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocking Failure Statuses",
+            "type": "array"
+          },
+          "criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Criteria",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "required_artifact_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Artifact Types",
+            "type": "array"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "threshold": {
+            "default": "all_required_artifacts_present",
+            "title": "Threshold",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "name"
+        ],
+        "title": "GateDefinitionCreate",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1615,6 +1939,96 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "JudgePromptTemplate": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "description",
+          "template",
+          "version",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JudgePromptTemplate",
+        "type": "object"
+      },
+      "JudgePromptTemplateCreate": {
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          },
+          "template": {
+            "minLength": 1,
+            "title": "Template",
+            "type": "string"
+          },
+          "version": {
+            "default": "v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "template"
+        ],
+        "title": "JudgePromptTemplateCreate",
         "type": "object"
       },
       "Project": {
@@ -1717,8 +2131,11 @@
             "title": "Eval Contract Id"
           },
           "judge_mode": {
-            "const": "deterministic",
             "default": "deterministic",
+            "enum": [
+              "deterministic",
+              "live"
+            ],
             "title": "Judge Mode",
             "type": "string"
           }
@@ -2315,6 +2732,62 @@
           }
         },
         "summary": "Get Agent Design"
+      },
+      "patch": {
+        "operationId": "update_agent_design_api_projects__project_id__agent_designs__agent_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentDesignUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentDesign"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Agent Design"
       }
     },
     "/api/projects/{project_id}/agent-designs/{agent_id}/runs": {
@@ -3779,6 +4252,479 @@
           }
         },
         "summary": "Update Fix Proposal"
+      }
+    },
+    "/api/projects/{project_id}/gate-decisions": {
+      "get": {
+        "operationId": "list_gate_decisions_api_projects__project_id__gate_decisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "gate_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Gate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GateDecision"
+                  },
+                  "title": "Response List Gate Decisions Api Projects  Project Id  Gate Decisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Gate Decisions"
+      }
+    },
+    "/api/projects/{project_id}/gate-decisions/{decision_id}": {
+      "get": {
+        "operationId": "get_gate_decision_api_projects__project_id__gate_decisions__decision_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "decision_id",
+            "required": true,
+            "schema": {
+              "title": "Decision Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateDecision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Gate Decision"
+      }
+    },
+    "/api/projects/{project_id}/gates": {
+      "get": {
+        "operationId": "list_gate_definitions_api_projects__project_id__gates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GateDefinition"
+                  },
+                  "title": "Response List Gate Definitions Api Projects  Project Id  Gates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Gate Definitions"
+      },
+      "post": {
+        "operationId": "create_gate_definition_api_projects__project_id__gates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GateDefinitionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateDefinition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Gate Definition"
+      }
+    },
+    "/api/projects/{project_id}/gates/{gate_id}": {
+      "get": {
+        "operationId": "get_gate_definition_api_projects__project_id__gates__gate_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "gate_id",
+            "required": true,
+            "schema": {
+              "title": "Gate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateDefinition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Gate Definition"
+      }
+    },
+    "/api/projects/{project_id}/gates/{gate_id}/decisions": {
+      "post": {
+        "operationId": "create_gate_decision_api_projects__project_id__gates__gate_id__decisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "gate_id",
+            "required": true,
+            "schema": {
+              "title": "Gate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GateDecisionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateDecision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Gate Decision"
+      }
+    },
+    "/api/projects/{project_id}/judge-prompt-templates": {
+      "get": {
+        "operationId": "list_judge_prompt_templates_api_projects__project_id__judge_prompt_templates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JudgePromptTemplate"
+                  },
+                  "title": "Response List Judge Prompt Templates Api Projects  Project Id  Judge Prompt Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Judge Prompt Templates"
+      },
+      "post": {
+        "operationId": "create_judge_prompt_template_api_projects__project_id__judge_prompt_templates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JudgePromptTemplateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JudgePromptTemplate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Judge Prompt Template"
+      }
+    },
+    "/api/projects/{project_id}/judge-prompt-templates/{judge_prompt_template_id}": {
+      "get": {
+        "operationId": "get_judge_prompt_template_api_projects__project_id__judge_prompt_templates__judge_prompt_template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "judge_prompt_template_id",
+            "required": true,
+            "schema": {
+              "title": "Judge Prompt Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JudgePromptTemplate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Judge Prompt Template"
       }
     },
     "/api/projects/{project_id}/runs": {

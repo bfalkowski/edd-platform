@@ -80,6 +80,32 @@ EvalContract
   -> Comparison
 ```
 
+### Agent Designs
+
+Agent designs hold the user intent and the platform-approved tool policy that
+future versions inherit.
+
+```text
+GET    /api/projects/{project_id}/agent-designs
+POST   /api/projects/{project_id}/agent-designs
+GET    /api/projects/{project_id}/agent-designs/{agent_design_id}
+PATCH  /api/projects/{project_id}/agent-designs/{agent_design_id}
+DELETE /api/projects/{project_id}/agent-designs/{agent_design_id}
+```
+
+Minimum response fields:
+
+```text
+id
+project_id
+name
+intent
+status
+allowed_tool_names
+created_at
+updated_at
+```
+
 ### Eval Contracts
 
 Eval contracts are where expectations live.
@@ -113,6 +139,87 @@ pass_criteria
 status
 created_at
 updated_at
+```
+
+### Judge Prompt Templates
+
+Judge prompt templates are platform-owned prompts used by optional judge
+execution. Eval contracts reference them by id.
+
+```text
+GET  /api/projects/{project_id}/judge-prompt-templates
+POST /api/projects/{project_id}/judge-prompt-templates
+GET  /api/projects/{project_id}/judge-prompt-templates/{judge_prompt_template_id}
+```
+
+Minimum response fields:
+
+```text
+id
+project_id
+name
+description
+template
+version
+status
+created_at
+updated_at
+```
+
+### Gates
+
+Gates define promotion/readiness criteria over stored evidence artifacts.
+
+```text
+GET  /api/projects/{project_id}/gates
+POST /api/projects/{project_id}/gates
+GET  /api/projects/{project_id}/gates/{gate_id}
+```
+
+Minimum response fields:
+
+```text
+id
+project_id
+agent_design_id
+name
+criteria
+required_artifact_types
+threshold
+blocking_failure_statuses
+approval_mode
+status
+created_at
+updated_at
+```
+
+### Gate Decisions
+
+Gate decisions evaluate a gate against current evidence and create a durable
+readiness artifact.
+
+```text
+GET  /api/projects/{project_id}/gate-decisions
+POST /api/projects/{project_id}/gates/{gate_id}/decisions
+GET  /api/projects/{project_id}/gate-decisions/{decision_id}
+```
+
+Minimum response fields:
+
+```text
+id
+project_id
+gate_id
+agent_design_id
+eval_result_id
+comparison_id
+decision
+rationale
+missing_artifact_types
+blocking_failure_packet_ids
+evidence_artifact_ids
+decided_by
+created_at
 ```
 
 ### Scenarios
@@ -227,9 +334,13 @@ Evaluation request:
 ```json
 {
   "evalContractId": "contract_123",
-  "judgeMode": "deterministic"
+  "judgeMode": "deterministic | live"
 }
 ```
+
+Live judge mode records provider token usage on the judge output. Cost estimates
+are calculated only when `EDD_OPENAI_INPUT_COST_PER_1M` and
+`EDD_OPENAI_OUTPUT_COST_PER_1M` are configured.
 
 Minimum response fields:
 

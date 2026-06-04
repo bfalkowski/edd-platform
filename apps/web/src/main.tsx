@@ -32,6 +32,19 @@ type Project = {
   updated_at: string;
 };
 
+type ToolDefinition = {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  output_description: string;
+  implementation_key: string;
+  status: "draft" | "approved";
+  created_at: string;
+  updated_at: string;
+};
+
 type ArtifactRecord = {
   id: string;
   project_id: string;
@@ -236,6 +249,37 @@ type Comparison = {
   created_at: string;
 };
 
+type GateDefinition = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  name: string;
+  criteria: string[];
+  required_artifact_types: string[];
+  threshold: string;
+  blocking_failure_statuses: string[];
+  approval_mode: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type GateDecision = {
+  id: string;
+  project_id: string;
+  gate_id: string;
+  agent_design_id: string;
+  eval_result_id: string | null;
+  comparison_id: string | null;
+  decision: "passed" | "blocked";
+  rationale: string;
+  missing_artifact_types: string[];
+  blocking_failure_packet_ids: string[];
+  evidence_artifact_ids: string[];
+  decided_by: string;
+  created_at: string;
+};
+
 type EddFlowState = {
   baselineVersion?: AgentVersion;
   candidateVersion?: AgentVersion;
@@ -304,6 +348,30 @@ async function deleteAgentDesign(projectId: string, agentDesignId: string): Prom
   if (!response.ok) {
     throw await responseError(response, "Unable to delete agent design.");
   }
+}
+
+async function listToolDefinitions(projectId: string): Promise<ToolDefinition[]> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/tools`);
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load tools.");
+  }
+  return response.json();
+}
+
+async function updateAgentDesignToolAllowlist(
+  projectId: string,
+  agentDesignId: string,
+  allowedToolNames: string[],
+): Promise<AgentDesign> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ allowed_tool_names: allowedToolNames }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update agent tools.");
+  }
+  return response.json();
 }
 
 async function buildContextPack(projectId: string, agentDesignId?: string): Promise<ContextPack> {
@@ -582,6 +650,71 @@ async function listRuns(projectId: string, agentDesignId: string): Promise<RunRe
   return response.json();
 }
 
+async function listGateDefinitions(
+  projectId: string,
+  agentDesignId: string,
+): Promise<GateDefinition[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/gates?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load gates.");
+  }
+  return response.json();
+}
+
+async function createGateDefinition(
+  projectId: string,
+  agentDesignId: string,
+): Promise<GateDefinition> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/gates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_design_id: agentDesignId,
+      name: "Promotion readiness",
+      criteria: ["candidate eval evidence exists", "comparison evidence exists", "no open failures"],
+      required_artifact_types: ["EVAL_RESULT", "COMPARISON"],
+      threshold: "all_criteria_met",
+      blocking_failure_statuses: ["open"],
+      approval_mode: "manual",
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create gate.");
+  }
+  return response.json();
+}
+
+async function listGateDecisions(
+  projectId: string,
+  agentDesignId: string,
+): Promise<GateDecision[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/gate-decisions?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load gate decisions.");
+  }
+  return response.json();
+}
+
+async function createGateDecision(
+  projectId: string,
+  gateId: string,
+  payload: { eval_result_id?: string; comparison_id?: string },
+): Promise<GateDecision> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/gates/${gateId}/decisions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to run gate.");
+  }
+  return response.json();
+}
+
 async function listEvalResults(projectId: string, runId: string): Promise<EvalResult[]> {
   const response = await fetch(`${apiBase}/projects/${projectId}/eval-results?run_id=${runId}`);
   if (!response.ok) {
@@ -683,6 +816,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
   const [agents, setAgents] = useState<AgentDesign[]>([]);
+  const [tools, setTools] = useState<ToolDefinition[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [intent, setIntent] = useState("");
@@ -693,6 +827,8 @@ function App() {
   const [runMode, setRunMode] = useState<"mock" | "live">("mock");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
   const [eddFlow, setEddFlow] = useState<EddFlowState>({ failurePackets: [] });
+  const [gates, setGates] = useState<GateDefinition[]>([]);
+  const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
   const [openAgentMenuId, setOpenAgentMenuId] = useState<string | null>(null);
@@ -701,6 +837,8 @@ function App() {
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isFlowBusy, setIsFlowBusy] = useState(false);
+  const [isGateBusy, setIsGateBusy] = useState(false);
+  const [updatingTools, setUpdatingTools] = useState(false);
   const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -723,10 +861,26 @@ function App() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!project) {
+      setTools([]);
+      return;
+    }
+    listToolDefinitions(project.id)
+      .then(setTools)
+      .catch((err: Error) => setError(err.message));
+  }, [project]);
+
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedId) ?? null,
     [agents, selectedId],
   );
+  const approvedTools = useMemo(
+    () => tools.filter((tool) => tool.status === "approved"),
+    [tools],
+  );
+  const latestGate = gates[0] ?? null;
+  const latestGateDecision = gateDecisions[0] ?? null;
   const artifactsById = useMemo(() => {
     return new Map((contextPack?.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
   }, [contextPack]);
@@ -734,6 +888,8 @@ function App() {
   useEffect(() => {
     if (!project) {
       setContextPack(null);
+      setGates([]);
+      setGateDecisions([]);
       return;
     }
     let isCurrent = true;
@@ -744,13 +900,17 @@ function App() {
       selectedAgent
         ? hydrateEddFlow(project.id, selectedAgent)
         : Promise.resolve({ failurePackets: [] } as EddFlowState),
+      selectedAgent ? listGateDefinitions(project.id, selectedAgent.id) : Promise.resolve([]),
+      selectedAgent ? listGateDecisions(project.id, selectedAgent.id) : Promise.resolve([]),
     ])
-      .then(([pack, flow]) => {
+      .then(([pack, flow, loadedGates, loadedGateDecisions]) => {
         if (!isCurrent) {
           return;
         }
         setContextPack(pack);
         setEddFlow(flow);
+        setGates(loadedGates);
+        setGateDecisions(loadedGateDecisions);
         const phrase = flow.contract?.checks.find((check) => check.value)?.value;
         if (phrase) {
           setRequiredPhrase(phrase);
@@ -802,6 +962,36 @@ function App() {
       setOpenAgentMenuId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete agent design.");
+    }
+  }
+
+  async function handleToggleTool(toolName: string) {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    const allowed = new Set(selectedAgent.allowed_tool_names);
+    if (allowed.has(toolName)) {
+      allowed.delete(toolName);
+    } else {
+      allowed.add(toolName);
+    }
+    setError(null);
+    setUpdatingTools(true);
+    try {
+      const updated = await updateAgentDesignToolAllowlist(
+        project.id,
+        selectedAgent.id,
+        [...allowed],
+      );
+      setAgents((items) =>
+        items.map((agent) => (agent.id === updated.id ? updated : agent)),
+      );
+      setContextPack(await buildContextPack(project.id, updated.id));
+      setActivity("Tool policy updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update agent tools.");
+    } finally {
+      setUpdatingTools(false);
     }
   }
 
@@ -883,9 +1073,65 @@ function App() {
     setContextPack(pack);
   }
 
+  async function refreshReadiness() {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    const [loadedGates, loadedDecisions] = await Promise.all([
+      listGateDefinitions(project.id, selectedAgent.id),
+      listGateDecisions(project.id, selectedAgent.id),
+    ]);
+    setGates(loadedGates);
+    setGateDecisions(loadedDecisions);
+  }
+
   async function reviewFirstArtifact(artifactIds: string[]) {
     if (artifactIds[0]) {
       await handleReviewArtifact(artifactIds[0]);
+    }
+  }
+
+  async function handleCreatePromotionGate() {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    setError(null);
+    setActivity("Creating promotion gate.");
+    setIsGateBusy(true);
+    try {
+      const gate = await createGateDefinition(project.id, selectedAgent.id);
+      setGates((items) => [gate, ...items]);
+      setActivity("Promotion gate created.");
+      await refreshContext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create gate.");
+      setActivity(null);
+    } finally {
+      setIsGateBusy(false);
+    }
+  }
+
+  async function handleRunPromotionGate() {
+    if (!project || !latestGate || !eddFlow.candidateEval || !eddFlow.comparison) {
+      return;
+    }
+    setError(null);
+    setActivity("Running promotion gate.");
+    setIsGateBusy(true);
+    try {
+      const decision = await createGateDecision(project.id, latestGate.id, {
+        eval_result_id: eddFlow.candidateEval.id,
+        comparison_id: eddFlow.comparison.id,
+      });
+      setGateDecisions((items) => [decision, ...items]);
+      setActivity("Promotion readiness recorded.");
+      await refreshReadiness();
+      await refreshContext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to run gate.");
+      setActivity(null);
+    } finally {
+      setIsGateBusy(false);
     }
   }
 
@@ -1150,6 +1396,96 @@ function App() {
       detail: eddFlow.comparison?.summary ?? "Improvement evidence",
     },
   ];
+  const currentLoopAction = (() => {
+    if (!eddFlow.contract) {
+      return {
+        eyebrow: "Next",
+        title: "Create the proof setup",
+        detail: "Create v0, a scenario, and an eval contract from the current inputs.",
+        label: "Create setup",
+        onClick: handleInitializeEddFlow,
+        disabled: isFlowBusy,
+      };
+    }
+    if (!eddFlow.baselineRun) {
+      return {
+        eyebrow: "Next",
+        title: "Run baseline v0",
+        detail: "Capture the baseline behavior before applying any fix.",
+        label: "Run v0",
+        onClick: handleRunBaseline,
+        disabled: isFlowBusy,
+      };
+    }
+    if (!eddFlow.baselineEval) {
+      return {
+        eyebrow: "Next",
+        title: "Evaluate baseline",
+        detail: "Judge v0 against the contract and record failure evidence.",
+        label: "Evaluate v0",
+        onClick: handleEvaluateBaseline,
+        disabled: isFlowBusy,
+      };
+    }
+    if (!eddFlow.fixProposal && eddFlow.failurePackets.length > 0) {
+      return {
+        eyebrow: "Next",
+        title: "Create a bounded fix",
+        detail: "Link a fix proposal to the baseline failure packet.",
+        label: "Create fix",
+        onClick: handleCreateFixProposal,
+        disabled: isFlowBusy,
+      };
+    }
+    if (!eddFlow.candidateVersion && eddFlow.fixProposal) {
+      return {
+        eyebrow: "Next",
+        title: "Create candidate v1",
+        detail: "Turn the bounded fix into a candidate agent version.",
+        label: "Create v1",
+        onClick: handleCreateCandidate,
+        disabled: isFlowBusy,
+      };
+    }
+    if (!eddFlow.candidateRun && eddFlow.candidateVersion) {
+      return {
+        eyebrow: "Next",
+        title: "Run candidate v1",
+        detail: "Capture candidate behavior against the same scenario.",
+        label: "Run v1",
+        onClick: handleRunCandidate,
+        disabled: isFlowBusy,
+      };
+    }
+    if (!eddFlow.candidateEval && eddFlow.candidateRun) {
+      return {
+        eyebrow: "Next",
+        title: "Evaluate candidate",
+        detail: "Judge v1 against the same eval contract.",
+        label: "Evaluate v1",
+        onClick: handleEvaluateCandidate,
+        disabled: isFlowBusy,
+      };
+    }
+    if (!eddFlow.comparison && eddFlow.baselineEval && eddFlow.candidateEval) {
+      return {
+        eyebrow: "Next",
+        title: "Compare evidence",
+        detail: "Show whether v1 fixed, regressed, or left failures behind.",
+        label: "Compare",
+        onClick: handleCompareRuns,
+        disabled: isFlowBusy,
+      };
+    }
+    return {
+      eyebrow: "Complete",
+      title: "Improvement evidence recorded",
+      detail: eddFlow.comparison?.summary ?? "The comparison artifact is ready to review.",
+      label: "Done",
+      onClick: undefined,
+      disabled: true,
+    };
+  })();
 
   return (
     <div
@@ -1309,9 +1645,6 @@ function App() {
                     <p>
                       Execute this design in mock mode or live OpenAI mode and store the output as run evidence.
                     </p>
-                    <p className="tool-list">
-                      Tools: {selectedAgent.allowed_tool_names.join(", ") || "none"}
-                    </p>
                   </div>
                   <div className="run-mode-control" aria-label="Run mode">
                     <button
@@ -1348,6 +1681,39 @@ function App() {
                   {activity ? <p className="activity-text">{activity}</p> : null}
                   {error ? <p className="error-text">{error}</p> : null}
                 </section>
+                <section className="tool-policy-panel">
+                  <div>
+                    <p className="artifact-type">Tool policy</p>
+                    <h3>Approved tools</h3>
+                    <p>
+                      Choose which platform-approved tools this design may call during live
+                      execution.
+                    </p>
+                  </div>
+                  <div className="tool-toggle-list">
+                    {approvedTools.length === 0 ? (
+                      <p className="muted-copy">No approved tools are available yet.</p>
+                    ) : (
+                      approvedTools.map((tool) => {
+                        const isAllowed = selectedAgent.allowed_tool_names.includes(tool.name);
+                        return (
+                          <button
+                            className={isAllowed ? "tool-toggle active" : "tool-toggle"}
+                            type="button"
+                            key={tool.id}
+                            onClick={() => handleToggleTool(tool.name)}
+                            disabled={updatingTools}
+                            aria-pressed={isAllowed}
+                          >
+                            <span>{isAllowed ? "✓" : ""}</span>
+                            <strong>{tool.name}</strong>
+                            <small>{tool.description}</small>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </section>
                 <section className="edd-loop-panel">
                   <div className="edd-loop-header">
                     <div>
@@ -1376,85 +1742,22 @@ function App() {
                       </div>
                     ))}
                   </div>
-                  <div className="loop-actions">
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleInitializeEddFlow}
-                      disabled={isFlowBusy || Boolean(eddFlow.contract)}
-                    >
-                      Create setup
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleRunBaseline}
-                      disabled={isFlowBusy || !eddFlow.contract || Boolean(eddFlow.baselineRun)}
-                    >
-                      Run v0
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleEvaluateBaseline}
-                      disabled={
-                        isFlowBusy || !eddFlow.baselineRun || Boolean(eddFlow.baselineEval)
-                      }
-                    >
-                      Evaluate v0
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleCreateFixProposal}
-                      disabled={
-                        isFlowBusy ||
-                        !eddFlow.baselineEval ||
-                        eddFlow.failurePackets.length === 0 ||
-                        Boolean(eddFlow.fixProposal)
-                      }
-                    >
-                      Create fix
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleCreateCandidate}
-                      disabled={isFlowBusy || !eddFlow.fixProposal || Boolean(eddFlow.candidateVersion)}
-                    >
-                      Create v1
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleRunCandidate}
-                      disabled={isFlowBusy || !eddFlow.candidateVersion || Boolean(eddFlow.candidateRun)}
-                    >
-                      Run v1
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleEvaluateCandidate}
-                      disabled={
-                        isFlowBusy || !eddFlow.candidateRun || Boolean(eddFlow.candidateEval)
-                      }
-                    >
-                      Evaluate v1
-                    </button>
-                    <button
-                      className="primary-button"
-                      type="button"
-                      onClick={handleCompareRuns}
-                      disabled={
-                        isFlowBusy ||
-                        !eddFlow.baselineEval ||
-                        !eddFlow.candidateEval ||
-                        Boolean(eddFlow.comparison)
-                      }
-                    >
-                      Compare
-                    </button>
+                  <div className="next-action-panel">
+                    <div>
+                      <p className="artifact-type">{currentLoopAction.eyebrow}</p>
+                      <h4>{currentLoopAction.title}</h4>
+                      <p>{currentLoopAction.detail}</p>
+                    </div>
+                    {currentLoopAction.onClick ? (
+                      <button
+                        className="primary-button"
+                        type="button"
+                        onClick={currentLoopAction.onClick}
+                        disabled={currentLoopAction.disabled}
+                      >
+                        {currentLoopAction.label}
+                      </button>
+                    ) : null}
                   </div>
                   {eddFlow.comparison ? (
                     <div className="comparison-summary">
@@ -1466,6 +1769,46 @@ function App() {
                       </span>
                     </div>
                   ) : null}
+                  <div className="readiness-panel">
+                    <div>
+                      <p className="artifact-type">Promotion readiness</p>
+                      <h4>
+                        {latestGateDecision
+                          ? latestGateDecision.decision === "passed"
+                            ? "Ready"
+                            : "Blocked"
+                          : latestGate
+                            ? "Gate ready"
+                            : "No gate yet"}
+                      </h4>
+                      <p>
+                        {latestGateDecision
+                          ? latestGateDecision.rationale
+                          : latestGate
+                            ? "Run the gate after comparison evidence exists."
+                            : "Create a gate to turn eval evidence into an explicit readiness decision."}
+                      </p>
+                    </div>
+                    {!latestGate ? (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={handleCreatePromotionGate}
+                        disabled={isGateBusy}
+                      >
+                        Create gate
+                      </button>
+                    ) : (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={handleRunPromotionGate}
+                        disabled={isGateBusy || !eddFlow.candidateEval || !eddFlow.comparison}
+                      >
+                        {latestGateDecision ? "Run again" : "Run gate"}
+                      </button>
+                    )}
+                  </div>
                 </section>
                 <div className="context-pack-meta">
                   <span>Context pack</span>

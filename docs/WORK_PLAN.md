@@ -135,7 +135,7 @@ This phase makes the backbone usable without hiding the system model.
 - [x] Show the selected eval contract beside the playground run controls.
 - [x] Add UI to create scenario inputs.
 - [x] Add UI to create eval contracts.
-- [ ] Add UI to edit agent tool allowlists.
+- [x] Add UI to edit agent tool allowlists.
 - [x] Add UI to run v0 against a selected contract.
 - [x] Add UI to evaluate a selected run against a selected contract.
 - [x] Add UI to inspect failure packets and bounded fix proposals.
@@ -145,17 +145,17 @@ This phase makes the backbone usable without hiding the system model.
       failure packets, fixes, and pass/fail movement.
 - [x] Reconstruct the selected agent's EDD loop from platform records after
       refresh or agent switch.
-- [ ] Keep every generated or edited output represented as an artifact.
+- [x] Keep every generated or edited output represented as an artifact.
 
 ## Phase 4: Judges and Gates
 
-- [ ] Store judge prompts in the platform and link them to contracts.
-- [ ] Add mock judge execution for local/CI mode.
-- [ ] Add optional LLM-as-judge execution for live mode.
-- [ ] Add gate definitions.
-- [ ] Add gate decision artifacts.
-- [ ] Track token and cost telemetry for live judge calls.
-- [ ] Add promotion readiness views backed by gate decisions.
+- [x] Store judge prompts in the platform and link them to contracts.
+- [x] Add mock judge execution for local/CI mode.
+- [x] Add optional LLM-as-judge execution for live mode.
+- [x] Add gate definitions.
+- [x] Add gate decision artifacts.
+- [x] Track token and cost telemetry for live judge calls.
+- [x] Add promotion readiness views backed by gate decisions.
 
 ## Phase 5: Langfuse Adapter
 

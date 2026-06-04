@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Response
@@ -20,6 +24,8 @@ from edd_runner import (  # noqa: E402
     RunnerAgentDesign,
     RunnerScenario,
     RunnerToolDefinition,
+    describe_empty_response,
+    extract_response_text,
     openai_config_from_env,
     run_mock_agent,
     run_openai_agent,
@@ -30,6 +36,13 @@ class AgentDesignCreate(BaseModel):
     name: str = Field(min_length=1)
     intent: str = Field(min_length=1)
     allowed_tool_names: List[str] = Field(default_factory=list)
+
+
+class AgentDesignUpdate(BaseModel):
+    name: Optional[str] = None
+    intent: Optional[str] = None
+    allowed_tool_names: Optional[List[str]] = None
+    status: Optional[str] = None
 
 
 class Project(BaseModel):
@@ -113,6 +126,74 @@ class EvalContract(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class JudgePromptTemplateCreate(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = ""
+    template: str = Field(min_length=1)
+    version: str = "v1"
+    status: str = "draft"
+
+
+class JudgePromptTemplate(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    description: str
+    template: str
+    version: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class GateDefinitionCreate(BaseModel):
+    agent_design_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    criteria: List[str] = Field(default_factory=list)
+    required_artifact_types: List[str] = Field(default_factory=list)
+    threshold: str = "all_required_artifacts_present"
+    blocking_failure_statuses: List[str] = Field(default_factory=lambda: ["open"])
+    approval_mode: Literal["automatic", "manual"] = "manual"
+    status: str = "draft"
+
+
+class GateDefinition(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    name: str
+    criteria: List[str]
+    required_artifact_types: List[str]
+    threshold: str
+    blocking_failure_statuses: List[str]
+    approval_mode: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class GateDecisionCreate(BaseModel):
+    eval_result_id: Optional[str] = None
+    comparison_id: Optional[str] = None
+    decided_by: str = "platform"
+
+
+class GateDecision(BaseModel):
+    id: str
+    project_id: str
+    gate_id: str
+    agent_design_id: str
+    eval_result_id: Optional[str] = None
+    comparison_id: Optional[str] = None
+    decision: Literal["passed", "blocked"]
+    rationale: str
+    missing_artifact_types: List[str]
+    blocking_failure_packet_ids: List[str]
+    evidence_artifact_ids: List[str]
+    decided_by: str
+    created_at: datetime
 
 
 class AgentVersionCreate(BaseModel):
@@ -244,7 +325,7 @@ class EvalCheckResult(BaseModel):
 
 class RunEvaluateCreate(BaseModel):
     eval_contract_id: Optional[str] = None
-    judge_mode: Literal["deterministic"] = "deterministic"
+    judge_mode: Literal["deterministic", "live"] = "deterministic"
 
 
 class EvalResult(BaseModel):
@@ -424,6 +505,18 @@ _projects: Dict[str, Project] = store.load_collection("projects", Project)
 _agent_designs: Dict[str, AgentDesign] = store.load_collection("agent_designs", AgentDesign)
 _scenarios: Dict[str, Scenario] = store.load_collection("scenarios", Scenario)
 _eval_contracts: Dict[str, EvalContract] = store.load_collection("eval_contracts", EvalContract)
+_judge_prompt_templates: Dict[str, JudgePromptTemplate] = store.load_collection(
+    "judge_prompt_templates",
+    JudgePromptTemplate,
+)
+_gate_definitions: Dict[str, GateDefinition] = store.load_collection(
+    "gate_definitions",
+    GateDefinition,
+)
+_gate_decisions: Dict[str, GateDecision] = store.load_collection(
+    "gate_decisions",
+    GateDecision,
+)
 _agent_versions: Dict[str, AgentVersion] = store.load_collection("agent_versions", AgentVersion)
 _runs: Dict[str, RunRecord] = store.load_collection("runs", RunRecord)
 _eval_results: Dict[str, EvalResult] = store.load_collection("eval_results", EvalResult)
@@ -501,6 +594,30 @@ def get_eval_contract_or_404(project_id: str, contract_id: str) -> EvalContract:
     return contract
 
 
+def get_judge_prompt_template_or_404(
+    project_id: str,
+    judge_prompt_template_id: str,
+) -> JudgePromptTemplate:
+    template = _judge_prompt_templates.get(judge_prompt_template_id)
+    if template is None or template.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Judge prompt template not found.")
+    return template
+
+
+def get_gate_definition_or_404(project_id: str, gate_id: str) -> GateDefinition:
+    gate = _gate_definitions.get(gate_id)
+    if gate is None or gate.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Gate definition not found.")
+    return gate
+
+
+def get_gate_decision_or_404(project_id: str, decision_id: str) -> GateDecision:
+    decision = _gate_decisions.get(decision_id)
+    if decision is None or decision.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Gate decision not found.")
+    return decision
+
+
 def get_agent_version_or_404(project_id: str, version_id: str) -> AgentVersion:
     version = _agent_versions.get(version_id)
     if version is None or version.project_id != project_id:
@@ -541,6 +658,39 @@ def find_agent_design_artifact(agent_id: str) -> Optional[ArtifactRecord]:
         if artifact.artifact_type == "AGENT_DESIGN" and artifact.artifact_id == agent_id:
             return artifact
     return None
+
+
+def agent_design_artifact_body(agent: AgentDesign) -> str:
+    tools = ", ".join(agent.allowed_tool_names) if agent.allowed_tool_names else "none"
+    return f"{agent.intent}\n\nAllowed tools: {tools}"
+
+
+def sync_agent_design_artifact(agent: AgentDesign, now: datetime) -> ArtifactRecord:
+    artifact = find_agent_design_artifact(agent.id)
+    if artifact is None:
+        artifact = ArtifactRecord(
+            id=f"artifact_{uuid4().hex[:12]}",
+            project_id=agent.project_id,
+            artifact_type="AGENT_DESIGN",
+            artifact_id=agent.id,
+            title=agent.name,
+            body=agent_design_artifact_body(agent),
+            source="intent",
+            agent_design_id=agent.id,
+            created_at=now,
+            updated_at=now,
+        )
+    else:
+        artifact = artifact.model_copy(
+            update={
+                "title": agent.name,
+                "body": agent_design_artifact_body(agent),
+                "updated_at": now,
+            }
+        )
+    _artifacts[artifact.id] = artifact
+    store.save_record("artifacts", artifact.id, artifact)
+    return artifact
 
 
 def find_artifact_by_type_and_artifact_id(
@@ -620,6 +770,140 @@ def link_to_agent_design(
         )
 
 
+def artifacts_for_agent_by_type(
+    *,
+    project_id: str,
+    agent_design_id: str,
+    artifact_type: str,
+) -> List[ArtifactRecord]:
+    return [
+        artifact
+        for artifact in _artifacts.values()
+        if artifact.project_id == project_id
+        and artifact.agent_design_id == agent_design_id
+        and artifact.artifact_type == artifact_type
+    ]
+
+
+def create_gate_decision_record(
+    *,
+    project_id: str,
+    gate: GateDefinition,
+    payload: GateDecisionCreate,
+    now: datetime,
+) -> GateDecision:
+    evidence_artifact_ids: List[str] = []
+    missing_artifact_types: List[str] = []
+    for artifact_type in gate.required_artifact_types:
+        matching_artifacts = artifacts_for_agent_by_type(
+            project_id=project_id,
+            agent_design_id=gate.agent_design_id,
+            artifact_type=artifact_type,
+        )
+        if matching_artifacts:
+            evidence_artifact_ids.extend(artifact.id for artifact in matching_artifacts)
+        else:
+            missing_artifact_types.append(artifact_type)
+
+    if payload.eval_result_id is not None:
+        eval_result = get_eval_result_or_404(project_id, payload.eval_result_id)
+        if eval_result.run_id:
+            run = get_run_or_404(project_id, eval_result.run_id)
+            if run.agent_design_id != gate.agent_design_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Gate decision eval result must belong to the same agent design.",
+                )
+        evidence_artifact_ids.extend(eval_result.artifact_ids)
+
+    if payload.comparison_id is not None:
+        comparison = get_comparison_or_404(project_id, payload.comparison_id)
+        if comparison.agent_design_id != gate.agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Gate decision comparison must belong to the same agent design.",
+            )
+        evidence_artifact_ids.extend(comparison.artifact_ids)
+
+    blocking_failure_packet_ids = [
+        failure.id
+        for failure in _failure_packets.values()
+        if failure.project_id == project_id
+        and failure.agent_design_id == gate.agent_design_id
+        and failure.status in gate.blocking_failure_statuses
+    ]
+    for failure_id in blocking_failure_packet_ids:
+        failure_artifact = find_artifact_by_type_and_artifact_id("FAILURE_PACKET", failure_id)
+        if failure_artifact is not None:
+            evidence_artifact_ids.append(failure_artifact.id)
+
+    evidence_artifact_ids = sorted(set(evidence_artifact_ids))
+    passed = not missing_artifact_types and not blocking_failure_packet_ids
+    decision_value: Literal["passed", "blocked"] = "passed" if passed else "blocked"
+    rationale_parts = []
+    if missing_artifact_types:
+        rationale_parts.append(f"Missing required artifacts: {', '.join(missing_artifact_types)}.")
+    if blocking_failure_packet_ids:
+        rationale_parts.append(
+            f"Blocking failure packets remain: {', '.join(blocking_failure_packet_ids)}."
+        )
+    if not rationale_parts:
+        rationale_parts.append("Required evidence is present and no blocking failures remain.")
+    decision = GateDecision(
+        id=f"gate_decision_{uuid4().hex[:12]}",
+        project_id=project_id,
+        gate_id=gate.id,
+        agent_design_id=gate.agent_design_id,
+        eval_result_id=payload.eval_result_id,
+        comparison_id=payload.comparison_id,
+        decision=decision_value,
+        rationale=" ".join(rationale_parts),
+        missing_artifact_types=missing_artifact_types,
+        blocking_failure_packet_ids=blocking_failure_packet_ids,
+        evidence_artifact_ids=evidence_artifact_ids,
+        decided_by=payload.decided_by.strip(),
+        created_at=now,
+    )
+    _gate_decisions[decision.id] = decision
+    store.save_record("gate_decisions", decision.id, decision)
+
+    gate_artifact = find_artifact_by_type_and_artifact_id("GATE", gate.id)
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="GATE_DECISION",
+        artifact_id=decision.id,
+        title=f"Gate decision: {gate.name}",
+        body=(
+            f"Decision\n{decision.decision}\n\n"
+            f"Rationale\n{decision.rationale}\n\n"
+            f"Missing artifacts\n"
+            + ("\n".join(f"- {item}" for item in missing_artifact_types) or "None")
+            + "\n\nBlocking failures\n"
+            + ("\n".join(f"- {item}" for item in blocking_failure_packet_ids) or "None")
+        ),
+        source="gate-decision",
+        agent_design_id=gate.agent_design_id,
+        now=now,
+    )
+    if gate_artifact is not None:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=gate_artifact.id,
+            relationship_type="GENERATED_FROM",
+            now=now,
+        )
+    for evidence_artifact_id in evidence_artifact_ids:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=evidence_artifact_id,
+            relationship_type="SUPPORTED_BY",
+            now=now,
+        )
+    return decision
+
+
 def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[RunnerToolDefinition]:
     allowed = set(agent.allowed_tool_names)
     return [
@@ -634,6 +918,119 @@ def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[Runner
         for tool in _tool_definitions.values()
         if tool.project_id == project_id and tool.status == "approved" and tool.name in allowed
     ]
+
+
+def validate_allowed_tool_names(project_id: str, allowed_tool_names: List[str]) -> None:
+    approved_tool_names = {
+        tool.name
+        for tool in _tool_definitions.values()
+        if tool.project_id == project_id and tool.status == "approved"
+    }
+    unknown_tools = sorted(set(allowed_tool_names) - approved_tool_names)
+    if unknown_tools:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown or unapproved tools: {', '.join(unknown_tools)}.",
+        )
+
+
+def build_live_judge_prompt(
+    *,
+    contract: EvalContract,
+    run: RunRecord,
+    checks: List[EvalCheckResult],
+    template: Optional[JudgePromptTemplate],
+) -> str:
+    check_lines = "\n".join(
+        f"- {check.check_id}: {'pass' if check.passed else 'fail'}; "
+        f"expected={check.expected}; observed={check.observed}; comment={check.comment}"
+        for check in checks
+    )
+    template_text = (
+        template.template
+        if template is not None
+        else "Explain whether the response satisfies the eval contract. Cite the provided evidence only."
+    )
+    return (
+        f"{template_text}\n\n"
+        f"Eval contract: {contract.name}\n"
+        f"Expected behavior:\n" + "\n".join(f"- {item}" for item in contract.expected_behavior)
+        + "\n\n"
+        f"Run input:\n{run.input}\n\n"
+        f"Run output:\n{run.output}\n\n"
+        f"Deterministic check results:\n{check_lines or 'No deterministic checks defined.'}\n\n"
+        "Return a concise judge explanation. Do not invent evidence not shown above."
+    )
+
+
+def run_live_judge(prompt: str) -> tuple[str, str, Dict[str, object]]:
+    config = openai_config_from_env()
+    body = {
+        "model": config.model,
+        "reasoning": {"effort": "minimal"},
+        "text": {"verbosity": "low"},
+        "input": [
+            {
+                "role": "system",
+                "content": "You are an eval judge for an eval-driven design platform.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        "max_output_tokens": 1200,
+    }
+    request = Request(
+        f"{config.base_url}/responses",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=60) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"OpenAI judge request failed with status {exc.code}: {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"OpenAI judge request failed: {exc.reason}") from exc
+
+    response_text = extract_response_text(payload)
+    if not response_text:
+        raise RuntimeError(describe_empty_response(payload))
+    token_usage = payload.get("usage", {})
+    if not isinstance(token_usage, dict):
+        token_usage = {}
+    return response_text, config.model, token_usage
+
+
+def token_count(token_usage: Dict[str, object], key: str) -> int:
+    value = token_usage.get(key, 0)
+    return value if isinstance(value, int) else 0
+
+
+def estimate_live_judge_cost(token_usage: Dict[str, object]) -> Optional[float]:
+    input_rate = os.environ.get("EDD_OPENAI_INPUT_COST_PER_1M", "").strip()
+    output_rate = os.environ.get("EDD_OPENAI_OUTPUT_COST_PER_1M", "").strip()
+    if not input_rate or not output_rate:
+        return None
+    try:
+        input_cost_per_1m = float(input_rate)
+        output_cost_per_1m = float(output_rate)
+    except ValueError:
+        return None
+
+    input_tokens = token_count(token_usage, "input_tokens")
+    output_tokens = token_count(token_usage, "output_tokens")
+    return round(
+        (input_tokens / 1_000_000 * input_cost_per_1m)
+        + (output_tokens / 1_000_000 * output_cost_per_1m),
+        8,
+    )
 
 
 def run_agent_with_runner(
@@ -1103,6 +1500,16 @@ def delete_agent_design_records(project_id: str, agent_id: str) -> None:
             _eval_contracts.pop(contract_id, None)
             store.delete_record("eval_contracts", contract_id)
 
+    for gate_id, gate in list(_gate_definitions.items()):
+        if gate.project_id == project_id and gate.agent_design_id == agent_id:
+            _gate_definitions.pop(gate_id, None)
+            store.delete_record("gate_definitions", gate_id)
+
+    for decision_id, decision in list(_gate_decisions.items()):
+        if decision.project_id == project_id and decision.agent_design_id == agent_id:
+            _gate_decisions.pop(decision_id, None)
+            store.delete_record("gate_decisions", decision_id)
+
     for version_id, version in list(_agent_versions.items()):
         if version.project_id == project_id and version.agent_design_id == agent_id:
             _agent_versions.pop(version_id, None)
@@ -1183,20 +1590,7 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
     _agent_designs[agent.id] = agent
     store.save_record("agent_designs", agent.id, agent)
 
-    artifact = ArtifactRecord(
-        id=f"artifact_{uuid4().hex[:12]}",
-        project_id=project_id,
-        artifact_type="AGENT_DESIGN",
-        artifact_id=agent.id,
-        title=agent.name,
-        body=agent.intent,
-        source="intent",
-        agent_design_id=agent.id,
-        created_at=now,
-        updated_at=now,
-    )
-    _artifacts[artifact.id] = artifact
-    store.save_record("artifacts", artifact.id, artifact)
+    artifact = sync_agent_design_artifact(agent, now)
 
     return AgentDesignCreated(agent=agent, artifact=artifact)
 
@@ -1205,6 +1599,34 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
 def get_agent_design(project_id: str, agent_id: str) -> AgentDesign:
     get_project_or_404(project_id)
     return get_agent_design_or_404(project_id, agent_id)
+
+
+@app.patch("/api/projects/{project_id}/agent-designs/{agent_id}")
+def update_agent_design(
+    project_id: str,
+    agent_id: str,
+    payload: AgentDesignUpdate,
+) -> AgentDesign:
+    get_project_or_404(project_id)
+    existing = get_agent_design_or_404(project_id, agent_id)
+    allowed_tool_names = existing.allowed_tool_names
+    if payload.allowed_tool_names is not None:
+        validate_allowed_tool_names(project_id, payload.allowed_tool_names)
+        allowed_tool_names = payload.allowed_tool_names
+
+    updated = existing.model_copy(
+        update={
+            "name": payload.name.strip() if payload.name is not None else existing.name,
+            "intent": payload.intent.strip() if payload.intent is not None else existing.intent,
+            "allowed_tool_names": allowed_tool_names,
+            "status": payload.status.strip() if payload.status is not None else existing.status,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    _agent_designs[updated.id] = updated
+    store.save_record("agent_designs", updated.id, updated)
+    sync_agent_design_artifact(updated, updated.updated_at)
+    return updated
 
 
 @app.delete("/api/projects/{project_id}/agent-designs/{agent_id}", status_code=204)
@@ -1283,6 +1705,172 @@ def get_scenario(project_id: str, scenario_id: str) -> Scenario:
     return get_scenario_or_404(project_id, scenario_id)
 
 
+@app.get("/api/projects/{project_id}/judge-prompt-templates")
+def list_judge_prompt_templates(project_id: str) -> List[JudgePromptTemplate]:
+    get_project_or_404(project_id)
+    templates = [
+        template
+        for template in _judge_prompt_templates.values()
+        if template.project_id == project_id
+    ]
+    return sorted(templates, key=lambda template: template.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/judge-prompt-templates", status_code=201)
+def create_judge_prompt_template(
+    project_id: str,
+    payload: JudgePromptTemplateCreate,
+) -> JudgePromptTemplate:
+    get_project_or_404(project_id)
+    now = datetime.now(timezone.utc)
+    template = JudgePromptTemplate(
+        id=f"judge_prompt_{uuid4().hex[:12]}",
+        project_id=project_id,
+        name=payload.name.strip(),
+        description=payload.description.strip(),
+        template=payload.template.strip(),
+        version=payload.version.strip(),
+        status=payload.status.strip(),
+        created_at=now,
+        updated_at=now,
+    )
+    _judge_prompt_templates[template.id] = template
+    store.save_record("judge_prompt_templates", template.id, template)
+    create_artifact(
+        project_id=project_id,
+        artifact_type="JUDGE_PROMPT_TEMPLATE",
+        artifact_id=template.id,
+        title=template.name,
+        body=(
+            f"Description\n{template.description or 'None'}\n\n"
+            f"Version\n{template.version}\n\n"
+            f"Template\n{template.template}"
+        ),
+        source="judge-prompt-template",
+        agent_design_id=None,
+        now=now,
+    )
+    return template
+
+
+@app.get("/api/projects/{project_id}/judge-prompt-templates/{judge_prompt_template_id}")
+def get_judge_prompt_template(
+    project_id: str,
+    judge_prompt_template_id: str,
+) -> JudgePromptTemplate:
+    get_project_or_404(project_id)
+    return get_judge_prompt_template_or_404(project_id, judge_prompt_template_id)
+
+
+@app.get("/api/projects/{project_id}/gates")
+def list_gate_definitions(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+) -> List[GateDefinition]:
+    get_project_or_404(project_id)
+    gates = [
+        gate
+        for gate in _gate_definitions.values()
+        if gate.project_id == project_id
+        and (agent_design_id is None or gate.agent_design_id == agent_design_id)
+    ]
+    return sorted(gates, key=lambda gate: gate.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/gates", status_code=201)
+def create_gate_definition(project_id: str, payload: GateDefinitionCreate) -> GateDefinition:
+    get_project_or_404(project_id)
+    get_agent_design_or_404(project_id, payload.agent_design_id)
+    now = datetime.now(timezone.utc)
+    gate = GateDefinition(
+        id=f"gate_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        name=payload.name.strip(),
+        criteria=payload.criteria,
+        required_artifact_types=payload.required_artifact_types,
+        threshold=payload.threshold.strip(),
+        blocking_failure_statuses=payload.blocking_failure_statuses,
+        approval_mode=payload.approval_mode,
+        status=payload.status.strip(),
+        created_at=now,
+        updated_at=now,
+    )
+    _gate_definitions[gate.id] = gate
+    store.save_record("gate_definitions", gate.id, gate)
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="GATE",
+        artifact_id=gate.id,
+        title=gate.name,
+        body=(
+            "Criteria\n"
+            + ("\n".join(f"- {criterion}" for criterion in gate.criteria) or "None")
+            + "\n\nRequired artifacts\n"
+            + (
+                "\n".join(f"- {artifact_type}" for artifact_type in gate.required_artifact_types)
+                or "None"
+            )
+            + f"\n\nThreshold\n{gate.threshold}\n\nApproval mode\n{gate.approval_mode}"
+        ),
+        source="gate-definition",
+        agent_design_id=gate.agent_design_id,
+        now=now,
+    )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=gate.agent_design_id,
+        artifact=artifact,
+        now=now,
+    )
+    return gate
+
+
+@app.get("/api/projects/{project_id}/gates/{gate_id}")
+def get_gate_definition(project_id: str, gate_id: str) -> GateDefinition:
+    get_project_or_404(project_id)
+    return get_gate_definition_or_404(project_id, gate_id)
+
+
+@app.get("/api/projects/{project_id}/gate-decisions")
+def list_gate_decisions(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+    gate_id: Optional[str] = None,
+) -> List[GateDecision]:
+    get_project_or_404(project_id)
+    decisions = [
+        decision
+        for decision in _gate_decisions.values()
+        if decision.project_id == project_id
+        and (agent_design_id is None or decision.agent_design_id == agent_design_id)
+        and (gate_id is None or decision.gate_id == gate_id)
+    ]
+    return sorted(decisions, key=lambda decision: decision.created_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/gates/{gate_id}/decisions", status_code=201)
+def create_gate_decision(
+    project_id: str,
+    gate_id: str,
+    payload: GateDecisionCreate,
+) -> GateDecision:
+    get_project_or_404(project_id)
+    gate = get_gate_definition_or_404(project_id, gate_id)
+    return create_gate_decision_record(
+        project_id=project_id,
+        gate=gate,
+        payload=payload,
+        now=datetime.now(timezone.utc),
+    )
+
+
+@app.get("/api/projects/{project_id}/gate-decisions/{decision_id}")
+def get_gate_decision(project_id: str, decision_id: str) -> GateDecision:
+    get_project_or_404(project_id)
+    return get_gate_decision_or_404(project_id, decision_id)
+
+
 @app.get("/api/projects/{project_id}/eval-contracts")
 def list_eval_contracts(
     project_id: str,
@@ -1309,6 +1897,8 @@ def create_eval_contract(project_id: str, payload: EvalContractCreate) -> EvalCo
                 status_code=400,
                 detail="Eval contract scenario must belong to the same agent design.",
             )
+    if payload.judge_prompt_template_id is not None:
+        get_judge_prompt_template_or_404(project_id, payload.judge_prompt_template_id)
 
     now = datetime.now(timezone.utc)
     contract = EvalContract(
@@ -1364,6 +1954,19 @@ def create_eval_contract(project_id: str, payload: EvalContractCreate) -> EvalCo
         artifact=artifact,
         now=now,
     )
+    if contract.judge_prompt_template_id is not None:
+        prompt_artifact = find_artifact_by_type_and_artifact_id(
+            "JUDGE_PROMPT_TEMPLATE",
+            contract.judge_prompt_template_id,
+        )
+        if prompt_artifact is not None:
+            link_artifacts(
+                project_id=project_id,
+                source_artifact_id=artifact.id,
+                target_artifact_id=prompt_artifact.id,
+                relationship_type="USES",
+                now=now,
+            )
     return contract
 
 
@@ -1629,6 +2232,29 @@ def evaluate_run(
         f"{check.check_id}: {'pass' if check.passed else 'fail'} ({check.comment})"
         for check in checks
     ) or "No deterministic checks defined."
+    judge_model: Optional[str] = None
+    token_usage: Dict[str, object] = {}
+    cost_estimate: Optional[float] = None
+    if payload.judge_mode == "live":
+        template = (
+            get_judge_prompt_template_or_404(project_id, contract.judge_prompt_template_id)
+            if contract.judge_prompt_template_id is not None
+            else None
+        )
+        prompt = build_live_judge_prompt(
+            contract=contract,
+            run=run,
+            checks=checks,
+            template=template,
+        )
+        try:
+            judge_output_text, judge_model, token_usage = run_live_judge(prompt)
+        except RuntimeError as exc:
+            detail = str(exc)
+            status_code = 400 if "OPENAI_API_KEY" in detail else 502
+            raise HTTPException(status_code=status_code, detail=detail) from exc
+        cost_estimate = estimate_live_judge_cost(token_usage)
+
     judge_artifact = create_artifact(
         project_id=project_id,
         artifact_type="JUDGE_OUTPUT",
@@ -1652,11 +2278,11 @@ def evaluate_run(
         eval_result_id=eval_id,
         judge_prompt_template_id=contract.judge_prompt_template_id,
         mode=payload.judge_mode,
-        model=None,
+        model=judge_model,
         input_summary=f"Run {run.id} evaluated against {contract.id}.",
         output=judge_output_text,
-        token_usage={},
-        cost_estimate=None,
+        token_usage=token_usage,
+        cost_estimate=cost_estimate,
         artifact_ids=[judge_artifact.id],
         created_at=now,
     )
