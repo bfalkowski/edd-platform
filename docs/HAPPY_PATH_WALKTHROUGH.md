@@ -109,8 +109,16 @@ Expected result:
 
 - An eval result is created against the contract.
 - A judge output is created.
-- If the run does not satisfy the success criteria, a failure packet is created.
-- The next action advances to proposing a fix.
+- If the original answer passes, the proof loop is complete and no fix is
+  required.
+- If the original answer fails, a failure packet is created and the next action
+  advances to proposing a fix.
+- In live mode, the saved evidence should show an **Open trace** link for the
+  run when Langfuse is configured. This should be true whether the check passes
+  or fails.
+
+The remaining improvement steps are only required when the original answer
+fails the contract.
 
 ### 6. Propose One Fix
 
@@ -311,16 +319,17 @@ The happy path is healthy when a user can:
 2. Define a scenario and success criteria.
 3. Run the original behavior.
 4. Evaluate the original behavior.
-5. Produce a failure packet.
-6. Produce one bounded fix.
-7. Create a candidate version.
-8. Run and evaluate the candidate.
-9. Compare original vs candidate.
-10. Inspect all generated evidence artifacts.
-11. Create a draft tool.
-12. Approve and assign the tool to the selected agent.
-13. Run an ad hoc scenario.
-14. In live mode, open a linked Langfuse trace.
+5. Complete the loop when the original answer passes.
+6. Produce a failure packet when the original answer fails.
+7. Produce one bounded fix for a failing original answer.
+8. Create a candidate version.
+9. Run and evaluate the candidate.
+10. Compare original vs candidate.
+11. Inspect all generated evidence artifacts.
+12. Create a draft tool.
+13. Approve and assign the tool to the selected agent.
+14. Run an ad hoc scenario.
+15. In live mode, open a linked Langfuse trace.
 
 If any step fails, update this document or the product. Do not let the
 walkthrough drift from the actual UI.

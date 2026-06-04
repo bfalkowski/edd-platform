@@ -924,20 +924,39 @@ function artifactRoleLabel(artifactType: string): string {
   return labels[artifactType] ?? artifactType.replaceAll("_", " ").toLowerCase();
 }
 
-function evidenceSummary(artifacts: ArtifactRecord[]): string {
-  const hasRun = artifacts.some((artifact) => artifact.artifact_type === "RUN_RESULT");
-  const hasEval = artifacts.some((artifact) => artifact.artifact_type === "EVAL_RESULT");
-  const hasFailure = artifacts.some((artifact) => artifact.artifact_type === "FAILURE_PACKET");
-  const hasFix = artifacts.some((artifact) => artifact.artifact_type === "FIX_PROPOSAL");
-  const hasComparison = artifacts.some((artifact) => artifact.artifact_type === "COMPARISON");
+function proofFlowSummary(flow: EddFlowState): string {
   const parts = [
-    hasRun ? "runs" : null,
-    hasEval ? "checks" : null,
-    hasFailure ? "failures" : null,
-    hasFix ? "fixes" : null,
-    hasComparison ? "comparison" : null,
+    flow.scenario ? "scenario" : null,
+    flow.contract ? "success criteria" : null,
+    flow.baselineVersion ? "original version" : null,
+    flow.baselineRun ? "original run" : null,
+    flow.baselineEval ? "original check" : null,
+    flow.failurePackets.length > 0 ? "failure" : null,
+    flow.fixProposal ? "fix" : null,
+    flow.candidateVersion ? "candidate version" : null,
+    flow.candidateRun ? "candidate run" : null,
+    flow.candidateEval ? "candidate check" : null,
+    flow.comparison ? "comparison" : null,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : "No proof evidence yet";
+}
+
+function proofArtifactIds(flow: EddFlowState): string[] {
+  return [
+    ...(flow.baselineRun?.artifact_ids ?? []),
+    ...(flow.baselineEval?.artifact_ids ?? []),
+    ...(flow.failurePackets.flatMap((packet) => packet.evidence_artifact_ids) ?? []),
+    ...(flow.candidateRun?.artifact_ids ?? []),
+    ...(flow.candidateEval?.artifact_ids ?? []),
+    ...(flow.comparison?.artifact_ids ?? []),
+  ];
+}
+
+function proofRunIds(flow: EddFlowState): string[] {
+  return [
+    flow.baselineRun?.id,
+    flow.candidateRun?.id,
+  ].filter((id): id is string => Boolean(id));
 }
 
 function inferExpectedResponse(agent: AgentDesign): string {
@@ -1098,14 +1117,28 @@ function App() {
     return new Map((contextPack?.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
   }, [contextPack]);
   const visibleArtifacts = contextPack?.artifacts ?? [];
+  const currentProofArtifactIds = proofArtifactIds(eddFlow);
+  const currentProofRunIdSet = new Set(proofRunIds(eddFlow));
+  const currentProofArtifacts = currentProofArtifactIds
+    .map((artifactId) => artifactsById.get(artifactId))
+    .filter((artifact): artifact is ArtifactRecord => Boolean(artifact));
+  const currentTraceArtifacts = visibleArtifacts.filter((artifact) => {
+    if (artifact.artifact_type !== "TRACE_REF") {
+      return false;
+    }
+    const runMatch = artifact.body.match(/Run\n(.+)/);
+    return runMatch ? currentProofRunIdSet.has(runMatch[1].trim()) : false;
+  });
   const evidencePreviewArtifacts = [
+    ...currentTraceArtifacts,
+    ...currentProofArtifacts,
     ...visibleArtifacts.filter((artifact) => artifact.artifact_type === "TRACE_REF"),
     ...visibleArtifacts.filter((artifact) => artifact.artifact_type !== "TRACE_REF"),
   ].filter(
     (artifact, index, artifacts) =>
       artifacts.findIndex((candidate) => candidate.id === artifact.id) === index,
   ).slice(0, 4);
-  const proofEvidenceSummary = evidenceSummary(visibleArtifacts);
+  const proofEvidenceSummary = proofFlowSummary(eddFlow);
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
   const savedExpectedPhrase = eddFlow.contract?.checks.find((check) => check.value)?.value ?? "";
@@ -1682,6 +1715,8 @@ function App() {
     }
   }
 
+  const baselinePassed = eddFlow.baselineEval?.passed === true;
+  const improvementNeeded = eddFlow.baselineEval?.passed === false;
   const loopSteps = [
     {
       label: "Define test",
@@ -1700,33 +1735,37 @@ function App() {
         ? `${eddFlow.baselineEval.score}/${eddFlow.baselineEval.checks.length} checks`
         : "Judge against the success criteria",
     },
-    {
-      label: "Propose fix",
-      done: Boolean(eddFlow.fixProposal),
-      detail: eddFlow.fixProposal ? "Fix linked to the failure" : "Suggest one targeted change",
-    },
-    {
-      label: "Create candidate",
-      done: Boolean(eddFlow.candidateVersion),
-      detail: eddFlow.candidateVersion ? "New version ready" : "Apply the proposed fix",
-    },
-    {
-      label: "Run candidate",
-      done: Boolean(eddFlow.candidateRun),
-      detail: eddFlow.candidateRun ? "Candidate response saved" : "Run the same scenario again",
-    },
-    {
-      label: "Check candidate",
-      done: Boolean(eddFlow.candidateEval),
-      detail: eddFlow.candidateEval
-        ? `${eddFlow.candidateEval.score}/${eddFlow.candidateEval.checks.length} checks`
-        : "Judge the new response",
-    },
-    {
-      label: "Compare",
-      done: Boolean(eddFlow.comparison),
-      detail: eddFlow.comparison?.summary ?? "Did the candidate improve?",
-    },
+    ...(improvementNeeded
+      ? [
+          {
+            label: "Propose fix",
+            done: Boolean(eddFlow.fixProposal),
+            detail: eddFlow.fixProposal ? "Fix linked to the failure" : "Suggest one targeted change",
+          },
+          {
+            label: "Create candidate",
+            done: Boolean(eddFlow.candidateVersion),
+            detail: eddFlow.candidateVersion ? "New version ready" : "Apply the proposed fix",
+          },
+          {
+            label: "Run candidate",
+            done: Boolean(eddFlow.candidateRun),
+            detail: eddFlow.candidateRun ? "Candidate response saved" : "Run the same scenario again",
+          },
+          {
+            label: "Check candidate",
+            done: Boolean(eddFlow.candidateEval),
+            detail: eddFlow.candidateEval
+              ? `${eddFlow.candidateEval.score}/${eddFlow.candidateEval.checks.length} checks`
+              : "Judge the new response",
+          },
+          {
+            label: "Compare",
+            done: Boolean(eddFlow.comparison),
+            detail: eddFlow.comparison?.summary ?? "Did the candidate improve?",
+          },
+        ]
+      : []),
   ];
   const activeLoopStepIndex = Math.max(
     0,
@@ -1771,6 +1810,16 @@ function App() {
         label: "Check answer",
         onClick: handleEvaluateBaseline,
         disabled: isFlowBusy,
+      };
+    }
+    if (baselinePassed) {
+      return {
+        eyebrow: "Complete",
+        title: "Original answer passed",
+        detail: "No fix is needed for this contract. Open the saved evidence to inspect the result.",
+        label: "Done",
+        onClick: undefined,
+        disabled: true,
       };
     }
     if (!eddFlow.fixProposal && eddFlow.failurePackets.length > 0) {
@@ -2182,7 +2231,11 @@ function App() {
                     <div className="workflow-evidence-list">
                       {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
                       {!isLoadingContext && evidencePreviewArtifacts.length === 0 ? (
-                        <p className="muted-copy">No artifacts yet.</p>
+                        <p className="muted-copy">
+                          {proofEvidenceSummary === "No proof evidence yet"
+                            ? "No artifacts yet."
+                            : "Evidence exists for this proof loop; refresh if artifact cards are still loading."}
+                        </p>
                       ) : null}
                       {evidencePreviewArtifacts.map((artifact) => {
                         const traceUrl = traceUrlFromArtifact(artifact);
