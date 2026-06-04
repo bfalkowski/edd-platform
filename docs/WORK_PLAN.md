@@ -159,11 +159,11 @@ This phase makes the backbone usable without hiding the system model.
 
 ## Phase 5: Langfuse Adapter
 
-- [ ] Define trace reference artifact shape.
-- [ ] Add Langfuse adapter package implementation.
-- [ ] Import or link Langfuse traces as evidence artifacts.
-- [ ] Show trace links inside evidence context.
-- [ ] Keep platform artifacts as the source of truth.
+- [x] Define trace reference artifact shape.
+- [x] Add Langfuse adapter package implementation.
+- [x] Import or link Langfuse traces as evidence artifacts.
+- [x] Show trace links inside evidence context.
+- [x] Keep platform artifacts as the source of truth.
 
 ## Phase 6: Context Intelligence
 

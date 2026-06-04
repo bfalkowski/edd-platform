@@ -771,6 +771,7 @@ dd {
   gap: 8px;
   font-weight: 700;
   padding: 10px 14px;
+  text-decoration: none;
 }
 
 .secondary-button:hover {
@@ -895,6 +896,10 @@ dd {
   line-height: 1.55;
   margin: 0;
   white-space: pre-line;
+}
+
+.trace-link {
+  margin-top: 16px;
 }
 
 .related-list {

@@ -1091,6 +1091,110 @@ def test_live_judge_requires_openai_api_key(monkeypatch) -> None:
     assert "OPENAI_API_KEY" in eval_response.json()["detail"]
 
 
+def test_create_trace_ref_links_langfuse_trace_to_run_and_eval_artifacts() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Trace Agent", "intent": "Gather evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Trace scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Trace contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "mentions_evidence",
+                    "type": "output_contains",
+                    "value": "evidence",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+    eval_result = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    ).json()
+
+    trace_response = client.post(
+        "/api/projects/project_default/trace-refs",
+        json={
+            "provider": "langfuse",
+            "external_trace_id": "trace_abc123",
+            "run_id": run["id"],
+            "url": "https://cloud.langfuse.com/project/demo/traces/trace_abc123",
+            "metadata": {"environment": "local"},
+            "related_artifact_ids": eval_result["artifact_ids"],
+        },
+    )
+
+    assert trace_response.status_code == 201
+    trace_ref = trace_response.json()
+    assert trace_ref["agent_design_id"] == agent["id"]
+    assert trace_ref["provider"] == "langfuse"
+    assert trace_ref["external_trace_id"] == "trace_abc123"
+    assert trace_ref["metadata"] == {"environment": "local"}
+
+    list_response = client.get(
+        "/api/projects/project_default/trace-refs",
+        params={"agent_design_id": agent["id"]},
+    )
+    get_response = client.get(
+        f"/api/projects/project_default/trace-refs/{trace_ref['id']}"
+    )
+    artifact_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "TRACE_REF"},
+    )
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["id"] == trace_ref["id"]
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == trace_ref["id"]
+    trace_artifact = artifact_response.json()[0]
+    assert trace_artifact["artifact_id"] == trace_ref["id"]
+    assert "cloud.langfuse.com" in trace_artifact["body"]
+
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{trace_artifact['id']}/links"
+    )
+    relationship_types = {link["relationship_type"] for link in links_response.json()}
+    assert "OBSERVES" in relationship_types
+    assert "SUPPORTS" in relationship_types
+
+
+def test_trace_ref_requires_known_run() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/projects/project_default/trace-refs",
+        json={
+            "external_trace_id": "trace_missing",
+            "run_id": "run_missing",
+            "url": "https://cloud.langfuse.com/project/demo/traces/trace_missing",
+        },
+    )
+
+    assert response.status_code == 404
+
+
 def test_contract_driven_run_evaluation_can_fail() -> None:
     client = TestClient(app)
     create_response = client.post(

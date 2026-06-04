@@ -37,7 +37,7 @@ Statuses:
 | Comparisons | HLD-001, HLD-004 | partial | gap | partial | API and comparison artifacts exist; UI is missing. |
 | Gates | HLD-002, HLD-003 | covered | partial | partial | Gate definitions are stored as artifacts and can be created from the EDD loop. |
 | Gate decisions | HLD-001, HLD-002 | covered | partial | partial | Gate decisions create readiness artifacts linked to gate and supporting evidence. |
-| Langfuse trace refs | HLD-001, HLD-002 | gap | gap | partial | Boundary is clear; adapter remains future work. |
+| Langfuse trace refs | HLD-001, HLD-002 | covered | partial | covered | Trace refs are stored as artifacts with links to external Langfuse traces; adapter package builds platform payloads. |
 | Frontend design language | Frontend guide | n/a | covered | covered | Use `docs/design/FRONTEND_GUIDE.md`. |
 | AI-agent development guardrails | Engineering guide | n/a | n/a | covered | Use `docs/engineering/AI_AGENT_DEVELOPMENT.md`. |
 

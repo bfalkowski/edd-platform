@@ -294,6 +294,28 @@ class RunRecord(BaseModel):
     completed_at: datetime
 
 
+class TraceRefCreate(BaseModel):
+    provider: str = "langfuse"
+    external_trace_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    url: str = Field(min_length=1)
+    metadata: Dict[str, object] = Field(default_factory=dict)
+    related_artifact_ids: List[str] = Field(default_factory=list)
+
+
+class TraceRef(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    provider: str
+    external_trace_id: str
+    run_id: str
+    url: str
+    metadata: Dict[str, object]
+    artifact_ids: List[str]
+    created_at: datetime
+
+
 class AgentRunResult(BaseModel):
     id: str
     project_id: str
@@ -519,6 +541,7 @@ _gate_decisions: Dict[str, GateDecision] = store.load_collection(
 )
 _agent_versions: Dict[str, AgentVersion] = store.load_collection("agent_versions", AgentVersion)
 _runs: Dict[str, RunRecord] = store.load_collection("runs", RunRecord)
+_trace_refs: Dict[str, TraceRef] = store.load_collection("trace_refs", TraceRef)
 _eval_results: Dict[str, EvalResult] = store.load_collection("eval_results", EvalResult)
 _judge_outputs: Dict[str, JudgeOutput] = store.load_collection("judge_outputs", JudgeOutput)
 _failure_packets: Dict[str, FailurePacket] = store.load_collection("failure_packets", FailurePacket)
@@ -630,6 +653,13 @@ def get_eval_result_or_404(project_id: str, eval_result_id: str) -> EvalResult:
     if eval_result is None or eval_result.project_id != project_id:
         raise HTTPException(status_code=404, detail="Eval result not found.")
     return eval_result
+
+
+def get_trace_ref_or_404(project_id: str, trace_ref_id: str) -> TraceRef:
+    trace_ref = _trace_refs.get(trace_ref_id)
+    if trace_ref is None or trace_ref.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Trace reference not found.")
+    return trace_ref
 
 
 def get_failure_packet_or_404(project_id: str, failure_packet_id: str) -> FailurePacket:
@@ -902,6 +932,74 @@ def create_gate_decision_record(
             now=now,
         )
     return decision
+
+
+def create_trace_ref_record(
+    *,
+    project_id: str,
+    payload: TraceRefCreate,
+    now: datetime,
+) -> TraceRef:
+    run = get_run_or_404(project_id, payload.run_id)
+    related_artifacts = [
+        get_artifact_or_404(project_id, artifact_id)
+        for artifact_id in payload.related_artifact_ids
+    ]
+    trace_ref = TraceRef(
+        id=f"trace_ref_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=run.agent_design_id,
+        provider=payload.provider.strip(),
+        external_trace_id=payload.external_trace_id.strip(),
+        run_id=run.id,
+        url=payload.url.strip(),
+        metadata=payload.metadata,
+        artifact_ids=[],
+        created_at=now,
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="TRACE_REF",
+        artifact_id=trace_ref.id,
+        title=f"{trace_ref.provider} trace: {trace_ref.external_trace_id}",
+        body=(
+            f"Provider\n{trace_ref.provider}\n\n"
+            f"External trace id\n{trace_ref.external_trace_id}\n\n"
+            f"Run\n{trace_ref.run_id}\n\n"
+            f"URL\n{trace_ref.url}\n\n"
+            f"Metadata\n{json.dumps(trace_ref.metadata, sort_keys=True)}"
+        ),
+        source=f"trace-ref:{trace_ref.provider}",
+        agent_design_id=run.agent_design_id,
+        now=now,
+    )
+    trace_ref = trace_ref.model_copy(update={"artifact_ids": [artifact.id]})
+    _trace_refs[trace_ref.id] = trace_ref
+    store.save_record("trace_refs", trace_ref.id, trace_ref)
+
+    for run_artifact_id in run.artifact_ids:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=run_artifact_id,
+            relationship_type="OBSERVES",
+            now=now,
+        )
+    for related_artifact in related_artifacts:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=related_artifact.id,
+            relationship_type="SUPPORTS",
+            now=now,
+        )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=run.agent_design_id,
+        artifact=artifact,
+        now=now,
+    )
+    return trace_ref
 
 
 def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[RunnerToolDefinition]:
@@ -1521,6 +1619,11 @@ def delete_agent_design_records(project_id: str, agent_id: str) -> None:
             deleted_run_ids.append(run_id)
             _runs.pop(run_id, None)
             store.delete_record("runs", run_id)
+
+    for trace_ref_id, trace_ref in list(_trace_refs.items()):
+        if trace_ref.project_id == project_id and trace_ref.agent_design_id == agent_id:
+            _trace_refs.pop(trace_ref_id, None)
+            store.delete_record("trace_refs", trace_ref_id)
 
     deleted_eval_result_ids: List[str] = []
     for eval_result_id, eval_result in list(_eval_results.items()):
@@ -2144,6 +2247,39 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
 def get_run(project_id: str, run_id: str) -> RunRecord:
     get_project_or_404(project_id)
     return get_run_or_404(project_id, run_id)
+
+
+@app.get("/api/projects/{project_id}/trace-refs")
+def list_trace_refs(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+) -> List[TraceRef]:
+    get_project_or_404(project_id)
+    trace_refs = [
+        trace_ref
+        for trace_ref in _trace_refs.values()
+        if trace_ref.project_id == project_id
+        and (agent_design_id is None or trace_ref.agent_design_id == agent_design_id)
+        and (run_id is None or trace_ref.run_id == run_id)
+    ]
+    return sorted(trace_refs, key=lambda trace_ref: trace_ref.created_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/trace-refs", status_code=201)
+def create_trace_ref(project_id: str, payload: TraceRefCreate) -> TraceRef:
+    get_project_or_404(project_id)
+    return create_trace_ref_record(
+        project_id=project_id,
+        payload=payload,
+        now=datetime.now(timezone.utc),
+    )
+
+
+@app.get("/api/projects/{project_id}/trace-refs/{trace_ref_id}")
+def get_trace_ref(project_id: str, trace_ref_id: str) -> TraceRef:
+    get_project_or_404(project_id)
+    return get_trace_ref_or_404(project_id, trace_ref_id)
 
 
 @app.post("/api/projects/{project_id}/runs/{run_id}/evaluate", status_code=201)

@@ -760,6 +760,14 @@ function latestRunForVersion(
   );
 }
 
+function traceUrlFromArtifact(artifact: ArtifactRecord): string | null {
+  if (artifact.artifact_type !== "TRACE_REF") {
+    return null;
+  }
+  const match = artifact.body.match(/URL\n(.+)/);
+  return match?.[1]?.trim() ?? null;
+}
+
 async function hydrateEddFlow(projectId: string, agent: AgentDesign): Promise<EddFlowState> {
   const [versions, scenarios, contracts, runs, failurePackets, fixProposals, comparisons] =
     await Promise.all([
@@ -884,6 +892,7 @@ function App() {
   const artifactsById = useMemo(() => {
     return new Map((contextPack?.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
   }, [contextPack]);
+  const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
 
   useEffect(() => {
     if (!project) {
@@ -1818,45 +1827,58 @@ function App() {
                 {!isLoadingContext && (contextPack?.artifacts.length ?? 0) === 0 ? (
                   <p className="muted-copy">No artifacts recorded for this design yet.</p>
                 ) : null}
-                {(contextPack?.artifacts ?? []).map((artifact) => (
-                  <article className="artifact-card" key={artifact.id}>
-                    <div>
-                      <p className="artifact-type">{artifact.artifact_type.replaceAll("_", " ")}</p>
-                      <h3>{artifact.title}</h3>
-                      <p>{artifact.body}</p>
-                    </div>
-                    <div className="artifact-actions">
-                      {artifact.artifact_type === "RUN_RESULT" ? (
+                {(contextPack?.artifacts ?? []).map((artifact) => {
+                  const traceUrl = traceUrlFromArtifact(artifact);
+                  return (
+                    <article className="artifact-card" key={artifact.id}>
+                      <div>
+                        <p className="artifact-type">{artifact.artifact_type.replaceAll("_", " ")}</p>
+                        <h3>{artifact.title}</h3>
+                        <p>{artifact.body}</p>
+                      </div>
+                      <div className="artifact-actions">
+                        {artifact.artifact_type === "RUN_RESULT" ? (
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={() => handleEvaluateArtifact(artifact)}
+                            disabled={evaluatingArtifactId === artifact.id}
+                          >
+                            {evaluatingArtifactId === artifact.id ? "Evaluating" : "Evaluate"}
+                          </button>
+                        ) : null}
+                        {traceUrl ? (
+                          <a
+                            className="secondary-button"
+                            href={traceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open trace
+                          </a>
+                        ) : null}
                         <button
                           className="secondary-button"
                           type="button"
-                          onClick={() => handleEvaluateArtifact(artifact)}
-                          disabled={evaluatingArtifactId === artifact.id}
+                          onClick={() => handleReviewArtifact(artifact.id)}
                         >
-                          {evaluatingArtifactId === artifact.id ? "Evaluating" : "Evaluate"}
+                          <PanelRight size={18} />
+                          Review
                         </button>
-                      ) : null}
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() => handleReviewArtifact(artifact.id)}
-                      >
-                        <PanelRight size={18} />
-                        Review
-                      </button>
-                    </div>
-                    <dl>
-                      <div>
-                        <dt>Source</dt>
-                        <dd>{artifact.source}</dd>
                       </div>
-                      <div>
-                        <dt>Updated</dt>
-                        <dd>{new Date(artifact.updated_at).toLocaleString()}</dd>
-                      </div>
-                    </dl>
-                  </article>
-                ))}
+                      <dl>
+                        <div>
+                          <dt>Source</dt>
+                          <dd>{artifact.source}</dd>
+                        </div>
+                        <div>
+                          <dt>Updated</dt>
+                          <dd>{new Date(artifact.updated_at).toLocaleString()}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  );
+                })}
               </div>
             ) : null}
           </section>
@@ -1886,6 +1908,16 @@ function App() {
             <section>
               <h3>Evidence</h3>
               <p>{reviewArtifact.body}</p>
+              {reviewTraceUrl ? (
+                <a
+                  className="secondary-button trace-link"
+                  href={reviewTraceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open trace
+                </a>
+              ) : null}
             </section>
             <section>
               <h3>Related evidence</h3>

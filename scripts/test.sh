@@ -12,6 +12,12 @@ echo "Running API tests"
   uv run --extra dev pytest
 )
 
+echo "Running Langfuse adapter tests"
+(
+  cd "$ROOT_DIR/packages/langfuse-adapter"
+  uv run --extra dev pytest
+)
+
 echo "Linting OpenAPI contract"
 (
   cd "$ROOT_DIR/apps/api"

@@ -320,6 +320,33 @@ artifact_ids
 The existing agent-scoped run endpoint can remain temporarily as a convenience,
 but the project-scoped run contract is the canonical direction.
 
+### Trace References
+
+Trace references link platform run/eval evidence to Langfuse or another
+observability source. Langfuse remains the source of truth for raw traces; the
+platform stores references and evidence links.
+
+```text
+GET  /api/projects/{project_id}/trace-refs
+POST /api/projects/{project_id}/trace-refs
+GET  /api/projects/{project_id}/trace-refs/{trace_ref_id}
+```
+
+Minimum response fields:
+
+```text
+id
+project_id
+agent_design_id
+provider
+external_trace_id
+run_id
+url
+metadata
+artifact_ids
+created_at
+```
+
 ### Evaluation
 
 Evaluation judges a run against an eval contract.
