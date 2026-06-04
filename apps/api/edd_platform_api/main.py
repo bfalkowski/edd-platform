@@ -345,11 +345,12 @@ class AgentRunResult(BaseModel):
     mode: str
     scenario_input: str
     response: str
-    tool_calls: List[Dict[str, str]]
+    tool_calls: List[Dict[str, object]]
     evidence: List[str]
     trace_id: Optional[str] = None
     trace_url: Optional[str] = None
     artifact: ArtifactRecord
+    artifact_ids: List[str]
     created_at: datetime
 
 
@@ -906,6 +907,62 @@ def link_to_agent_design(
         )
 
 
+def create_tool_evidence_artifacts(
+    *,
+    project_id: str,
+    agent_design_id: str,
+    run_artifact: ArtifactRecord,
+    runner_result: object,
+    now: datetime,
+) -> List[ArtifactRecord]:
+    artifacts: List[ArtifactRecord] = []
+    for index, tool_call in enumerate(runner_result.tool_calls, start=1):
+        call_artifact = create_artifact(
+            project_id=project_id,
+            artifact_type="TOOL_CALL",
+            artifact_id=f"{runner_result.id}:tool-call:{index}",
+            title=f"Tool call: {tool_call.name}",
+            body=(
+                f"Run\n{runner_result.id}\n\n"
+                f"Tool\n{tool_call.name}\n\n"
+                f"Input\n{tool_call.input or 'not captured'}"
+            ),
+            source=f"runner:{runner_result.mode}",
+            agent_design_id=agent_design_id,
+            now=now,
+        )
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=call_artifact.id,
+            target_artifact_id=run_artifact.id,
+            relationship_type="GENERATED_FROM",
+            now=now,
+        )
+        result_artifact = create_artifact(
+            project_id=project_id,
+            artifact_type="TOOL_RESULT",
+            artifact_id=f"{runner_result.id}:tool-result:{index}",
+            title=f"Tool result: {tool_call.name}",
+            body=(
+                f"Run\n{runner_result.id}\n\n"
+                f"Tool\n{tool_call.name}\n\n"
+                f"Output\n{tool_call.output}"
+            ),
+            source=f"runner:{runner_result.mode}",
+            agent_design_id=agent_design_id,
+            now=now,
+        )
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=result_artifact.id,
+            target_artifact_id=call_artifact.id,
+            relationship_type="GENERATED_FROM",
+            now=now,
+        )
+        artifacts.extend([call_artifact, result_artifact])
+    return artifacts
+
+
 def artifacts_for_agent_by_type(
     *,
     project_id: str,
@@ -1308,7 +1365,7 @@ def run_agent_with_runner(
     instructions: str,
     scenario_input: str,
     mode: Literal["mock", "live"],
-) -> tuple[object, ArtifactRecord]:
+) -> tuple[object, ArtifactRecord, List[ArtifactRecord]]:
     runner_agent = RunnerAgentDesign(
         id=agent.id,
         name=agent.name,
@@ -1355,7 +1412,14 @@ def run_agent_with_runner(
         artifact=artifact,
         now=now,
     )
-    return runner_result, artifact
+    tool_artifacts = create_tool_evidence_artifacts(
+        project_id=project_id,
+        agent_design_id=agent.id,
+        run_artifact=artifact,
+        runner_result=runner_result,
+        now=now,
+    )
+    return runner_result, artifact, tool_artifacts
 
 
 def evaluate_run_text(body: str) -> List[EvalCheck]:
@@ -2384,7 +2448,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
             )
 
     instructions = version.instructions if version is not None else agent.intent
-    runner_result, artifact = run_agent_with_runner(
+    runner_result, artifact, tool_artifacts = run_agent_with_runner(
         project_id=project_id,
         agent=agent,
         instructions=instructions,
@@ -2404,7 +2468,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         input=runner_result.scenario_input,
         output=runner_result.response,
         status="completed",
-        artifact_ids=[artifact.id],
+        artifact_ids=[artifact.id] + [tool_artifact.id for tool_artifact in tool_artifacts],
         started_at=runner_result.created_at,
         completed_at=runner_result.created_at,
     )
@@ -2501,7 +2565,11 @@ def evaluate_run(
         else None
     )
     run_artifact_body = run_artifact.body if run_artifact is not None else run.output
-    evidence_artifact_ids = [run_artifact.id] if run_artifact is not None else []
+    evidence_artifact_ids = [
+        artifact_id
+        for artifact_id in run.artifact_ids
+        if _artifacts.get(artifact_id) is not None
+    ]
     checks = [
         evaluate_contract_check(
             check=check,
@@ -2535,11 +2603,11 @@ def evaluate_run(
         agent_design_id=run.agent_design_id,
         now=now,
     )
-    if run_artifact is not None:
+    for evidence_artifact_id in evidence_artifact_ids:
         link_artifacts(
             project_id=project_id,
             source_artifact_id=artifact.id,
-            target_artifact_id=run_artifact.id,
+            target_artifact_id=evidence_artifact_id,
             relationship_type="GENERATED_FROM",
             now=now,
         )
@@ -2975,7 +3043,7 @@ def run_agent_design(
 ) -> AgentRunResult:
     get_project_or_404(project_id)
     agent = get_agent_design_or_404(project_id, agent_id)
-    runner_result, artifact = run_agent_with_runner(
+    runner_result, artifact, tool_artifacts = run_agent_with_runner(
         project_id=project_id,
         agent=agent,
         instructions=agent.intent,
@@ -2990,11 +3058,12 @@ def run_agent_design(
         mode=runner_result.mode,
         scenario_input=runner_result.scenario_input,
         response=runner_result.response,
-        tool_calls=[tool.model_dump() for tool in runner_result.tool_calls],
+        tool_calls=[tool.model_dump(exclude_none=True) for tool in runner_result.tool_calls],
         evidence=runner_result.evidence,
         trace_id=runner_result.trace_id,
         trace_url=runner_result.trace_url,
         artifact=artifact,
+        artifact_ids=[artifact.id] + [tool_artifact.id for tool_artifact in tool_artifacts],
         created_at=runner_result.created_at,
     )
 

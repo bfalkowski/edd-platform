@@ -28,6 +28,7 @@ class RunnerScenario(BaseModel):
 
 class RunnerToolCall(BaseModel):
     name: str
+    input: Optional[str] = None
     output: str
 
 
@@ -69,10 +70,12 @@ def run_mock_agent(agent: RunnerAgentDesign, scenario: RunnerScenario) -> Runner
     tool_calls = [
         RunnerToolCall(
             name="collect_design_intent",
+            input="agent.intent",
             output=agent.intent,
         ),
         RunnerToolCall(
             name="classify_request",
+            input=scenario.input,
             output="scenario_requires_grounded_next_action",
         ),
     ]
@@ -431,6 +434,7 @@ def run_openai_agent_core(
         tool_calls=[
             RunnerToolCall(
                 name="openai.responses",
+                input=scenario.input,
                 output=config.model,
             )
         ],
@@ -509,6 +513,7 @@ def run_langchain_agent(
         tool_calls=tool_calls or [
             RunnerToolCall(
                 name="langchain.agent",
+                input=scenario.input,
                 output=config.model,
             )
         ],

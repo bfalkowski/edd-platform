@@ -621,6 +621,7 @@ def test_run_agent_design_creates_run_result_artifact() -> None:
     assert run["tool_calls"][0]["name"] == "collect_design_intent"
     assert run["artifact"]["artifact_type"] == "RUN_RESULT"
     assert run["artifact"]["source"] == "runner:mock"
+    assert run["artifact_ids"][0] == run["artifact"]["id"]
 
     artifacts_response = client.get(
         "/api/projects/project_default/artifacts",
@@ -636,6 +637,47 @@ def test_run_agent_design_creates_run_result_artifact() -> None:
     link = links_response.json()[0]
     assert link["relationship_type"] == "GENERATED_FROM"
     assert link["target_artifact_id"] == design_artifact["id"]
+
+    tool_call_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "TOOL_CALL"},
+    )
+    tool_result_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "TOOL_RESULT"},
+    )
+
+    assert tool_call_response.status_code == 200
+    assert tool_result_response.status_code == 200
+    tool_call = next(
+        artifact
+        for artifact in tool_call_response.json()
+        if "collect_design_intent" in artifact["title"]
+    )
+    tool_result = next(
+        artifact
+        for artifact in tool_result_response.json()
+        if "collect_design_intent" in artifact["title"]
+    )
+    assert "Input\nagent.intent" in tool_call["body"]
+    assert "Output\nGather evidence" in tool_result["body"]
+
+    tool_call_links = client.get(
+        f"/api/projects/project_default/artifacts/{tool_call['id']}/links"
+    ).json()
+    tool_result_links = client.get(
+        f"/api/projects/project_default/artifacts/{tool_result['id']}/links"
+    ).json()
+    assert any(
+        link["relationship_type"] == "GENERATED_FROM"
+        and link["target_artifact_id"] == run["artifact"]["id"]
+        for link in tool_call_links
+    )
+    assert any(
+        link["relationship_type"] == "GENERATED_FROM"
+        and link["target_artifact_id"] == tool_call["id"]
+        for link in tool_result_links
+    )
 
 
 def test_create_scenario_and_eval_contract_artifacts() -> None:
@@ -1140,7 +1182,7 @@ def test_project_scoped_run_references_version_scenario_and_contract() -> None:
     assert run["eval_contract_id"] == contract["id"]
     assert run["mode"] == "mock"
     assert run["status"] == "completed"
-    assert run["artifact_ids"]
+    assert len(run["artifact_ids"]) == 5
 
     list_response = client.get(
         "/api/projects/project_default/runs",
@@ -1157,6 +1199,13 @@ def test_project_scoped_run_references_version_scenario_and_contract() -> None:
     assert get_response.json()["id"] == run["id"]
     assert artifact_response.status_code == 200
     assert artifact_response.json()["artifact_type"] == "RUN_RESULT"
+
+    tool_artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "TOOL_CALL"},
+    )
+    assert tool_artifacts_response.status_code == 200
+    assert len(tool_artifacts_response.json()) == 2
 
 
 def test_project_scoped_run_requires_matching_contract_scenario() -> None:

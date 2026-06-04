@@ -88,7 +88,7 @@ Do this before adding more workflow UI.
       and pass/fail criteria.
 - [ ] Add run records that reference agent design/version, scenario, mode,
       tools, and optional eval contract.
-- [ ] Split tool calls and tool results into first-class evidence artifacts.
+- [x] Split tool calls and tool results into first-class evidence artifacts.
 - [ ] Replace hardcoded eval checks with contract-driven deterministic checks.
 - [x] Store eval results and judge outputs as evidence artifacts linked to runs
       and contracts.
