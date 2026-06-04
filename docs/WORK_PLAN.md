@@ -188,9 +188,10 @@ This phase makes the backbone usable without hiding the system model.
 
 - [x] Add GitHub Actions CI.
 - [ ] Add README screenshot.
-- [ ] Create a dedicated documentation repo, modeled after a product docs site
-      such as `langfuse/langfuse-docs`, for guides, concepts, API references,
-      architecture notes, and portfolio-ready walkthroughs.
+- [ ] Populate the dedicated documentation repo,
+      [`bfalkowski/edd-platform-docs`](https://github.com/bfalkowski/edd-platform-docs),
+      with guides, concepts, API references, architecture notes, and
+      portfolio-ready walkthroughs.
 - [x] Add a public demo-ready customer triage example.
 - [x] Add seeded sample data for local demo mode.
 - [ ] Refactor `apps/api/edd_platform_api/main.py` into focused modules instead
