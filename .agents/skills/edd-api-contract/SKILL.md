@@ -34,6 +34,8 @@ Read these before coding:
 - Keep routes project-scoped.
 - Keep CI deterministic and provider-key free; provider API keys must never be required for tests.
 - Do not hide expectations in code-only constants.
+- When API work touches Langfuse traces, prompts, datasets, or scores, use
+  `.agents/skills/langfuse/SKILL.md` and keep mutations explicit and reviewable.
 - Do not add UI until the API/evidence shape is clear.
 - Do not create mock UI from API work; define the contract and evidence shape first.
 - Do not mark the whole Phase 2 backbone done when only one object is implemented.

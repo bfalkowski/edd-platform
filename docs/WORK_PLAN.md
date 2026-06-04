@@ -182,6 +182,8 @@ This phase makes the backbone usable without hiding the system model.
 - [ ] Add README screenshot.
 - [x] Add a public demo-ready customer triage example.
 - [x] Add seeded sample data for local demo mode.
+- [ ] Refactor `apps/api/edd_platform_api/main.py` into focused modules instead
+      of keeping routes, models, services, and app wiring in one file.
 - [ ] Keep HLD index aligned with implementation.
 
 ## Current UI Status

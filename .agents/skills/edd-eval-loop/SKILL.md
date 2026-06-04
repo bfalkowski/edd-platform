@@ -41,6 +41,9 @@ AgentDesign
 - Treat tools, traces, judge outputs, and failure packets as evidence.
 - Prefer deterministic checks before LLM-as-judge behavior.
 - Keep live LLM calls optional and excluded from CI; provider-key env vars such as `OPENAI_API_KEY` must never be required for tests.
+- Do not trust an LLM judge because it passed one example; calibrate judges
+  against expected outputs or human labels before using them for gates.
+- Do not leak expected outputs into judge prompts.
 - Compare against a baseline; a single good run does not prove improvement.
 - Record human feedback as evidence when automated checks miss quality issues.
 - Do not jump directly to broad prompt rewriting; create evidence-backed failure packets and bounded fixes first.

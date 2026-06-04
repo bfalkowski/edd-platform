@@ -1,6 +1,6 @@
 ---
 name: langfuse
-description: Interact with Langfuse and access its documentation. Use when needing to (1) query or modify Langfuse data programmatically via the CLI — traces, prompts, datasets, scores, sessions, and any other API resource, (2) look up Langfuse documentation, concepts, integration guides, or SDK usage, or (3) understand how any Langfuse feature works. This skill covers CLI-based API access (via npx) and multiple documentation retrieval methods.
+description: Interact with Langfuse and access its documentation for EDD Platform work. Use when needing to (1) query or modify Langfuse data programmatically via the CLI — traces, prompts, datasets, scores, sessions, and any other API resource, (2) look up Langfuse documentation, concepts, integration guides, or SDK usage, or (3) understand how any Langfuse feature works. This skill covers CLI-based API access (via npx), multiple documentation retrieval methods, and EDD-specific source-of-truth guardrails.
 allowed-tools:
   - WebFetch(domain:langfuse.com)
   - Bash(curl *langfuse.com/*)
@@ -18,6 +18,24 @@ allowed-tools:
 
 This skill helps you use Langfuse effectively across all common workflows: instrumenting applications, migrating prompts, debugging traces, and accessing data programmatically.
 
+## EDD Platform Overlay
+
+Use the upstream Langfuse workflows below, but apply these project-specific
+rules first:
+
+1. **Platform artifacts are the EDD source of truth.** Langfuse is observability,
+   experiment infrastructure, and trace evidence. Store durable workflow state
+   as platform artifacts such as `RUN_RESULT`, `EVAL_RESULT`, `JUDGE_OUTPUT`,
+   `FAILURE_PACKET`, `FIX_PROPOSAL`, `GATE_DECISION`, and `TRACE_REF`.
+2. **Trace refs bridge the systems.** Live traces should create or update
+   platform `TRACE_REF` evidence that points back to Langfuse.
+3. **CI stays deterministic.** Langfuse and model-provider calls are opt-in
+   local/live workflows. Tests that run in CI must pass without provider keys.
+4. **Mutations are explicit.** Read traces first. Ask before creating or
+   modifying Langfuse prompts, datasets, scores, labels, or project settings.
+5. **Secrets stay local.** Never ask the user to paste Langfuse or provider
+   secret keys into chat, and never put secret keys in frontend code.
+
 ## Core Principles
 
 Follow these principles for ALL Langfuse work:
@@ -26,6 +44,8 @@ Follow these principles for ALL Langfuse work:
 2. **CLI for Data Access**: Use `langfuse-cli` when querying/modifying Langfuse data. See the section below on how to use the CLI. 
 3. **Best Practices by Use Case**: Check the relevant reference file below for use-case-specific guidelines before implementing
 4. **Use latest Langfuse versions**: Unless the user specified otherwise or there's a good reason, always use the latest version of Langfuse SDKs/APIs.
+5. **EDD Evidence Discipline**: When Langfuse data affects an EDD decision,
+   link it back to platform evidence instead of leaving it only in Langfuse.
 
 
 ## Use case specific references

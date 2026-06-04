@@ -19,7 +19,10 @@ Clean-room product repo for the consolidated EDD Platform.
 
 ## Local Skills
 
-- For Langfuse tracing, prompt/dataset management, scores, trace inspection, or judge calibration, consult `skills/langfuse/SKILL.md` before changing implementation or docs.
+- Project skills live in `.agents/skills`.
+- For Langfuse tracing, prompt/dataset management, scores, trace inspection, or
+  judge calibration, consult `.agents/skills/langfuse/SKILL.md` before changing
+  implementation or docs.
 
 ## Implementation Rules
 

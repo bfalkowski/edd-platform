@@ -29,6 +29,7 @@ Read the relevant HLD after identifying the product area.
    - Runner package, not product frontend.
    - Evidence context, not generic memory.
    - Agent design/version, not local draft.
+   - Langfuse observability, not Langfuse as the EDD source of truth.
 6. Update `docs/WORK_PLAN.md` only for active, executable milestones.
 7. Avoid feature code during planning hardening unless the user asks to build.
 
