@@ -17,6 +17,10 @@ Clean-room product repo for the consolidated EDD Platform.
 - Runner code belongs in `packages/runner` and returns evidence to the API.
 - Langfuse integration is optional trace evidence, not the source of truth.
 
+## Local Skills
+
+- For Langfuse tracing, prompt/dataset management, scores, trace inspection, or judge calibration, consult `skills/langfuse/SKILL.md` before changing implementation or docs.
+
 ## Implementation Rules
 
 - Keep changes small and directly tied to the active request.
