@@ -119,11 +119,14 @@ Set `EDD_PLATFORM_DATABASE_URL` to point at a different Postgres database.
 Tests use `EDD_PLATFORM_STORAGE_BACKEND=memory` so CI does not require a
 database service.
 
-Live OpenAI runs are opt-in. Set `OPENAI_API_KEY` before starting the API, then
-choose `Live OpenAI` in the playground. The default model is `gpt-5-nano`; set
-`EDD_OPENAI_MODEL` to use a different OpenAI model.
+Live OpenAI runs are opt-in. Copy `.env.example` to `.env.local`, add your
+`OPENAI_API_KEY`, then start the app with `./scripts/dev.sh`. The dev script
+loads `.env.local` or `.env` before starting the API. The default model is
+`gpt-5-nano`; set `EDD_OPENAI_MODEL` to use a different OpenAI model.
 
-Langfuse tracing is local-first. Start the local Langfuse stack with:
+Langfuse tracing is local-first. If local Langfuse is already running on
+`http://localhost:3001`, `./scripts/dev.sh` automatically uses the seeded local
+keys. To start Langfuse and the app together, run:
 
 ```bash
 ./scripts/dev_langfuse.sh
@@ -156,9 +159,10 @@ python scripts/seed_customer_triage_demo.py
 ```
 
 Run the live OpenAI plus local Langfuse E2E after `./scripts/dev_langfuse.sh`
-is running and `OPENAI_API_KEY` is exported:
+is running. If you use `.env.local`, load it into your shell first:
 
 ```bash
+set -a; source .env.local; set +a
 python scripts/live_langfuse_e2e.py
 ```
 

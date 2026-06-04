@@ -3,6 +3,29 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+load_env_file() {
+  local env_file
+  for env_file in "$ROOT_DIR/.env.local" "$ROOT_DIR/.env"; do
+    if [[ -f "$env_file" ]]; then
+      echo "Loading local environment from ${env_file#$ROOT_DIR/}"
+      set -a
+      # shellcheck source=/dev/null
+      source "$env_file"
+      set +a
+      return
+    fi
+  done
+}
+
+enable_local_langfuse_if_running() {
+  if curl -fsS http://127.0.0.1:3001/api/public/health >/dev/null 2>&1; then
+    export LANGFUSE_BASE_URL="${LANGFUSE_BASE_URL:-http://localhost:3001}"
+    export LANGFUSE_PUBLIC_KEY="${LANGFUSE_PUBLIC_KEY:-pk-lf-local-demo}"
+    export LANGFUSE_SECRET_KEY="${LANGFUSE_SECRET_KEY:-sk-lf-local-demo}"
+    echo "Using local Langfuse on ${LANGFUSE_BASE_URL}"
+  fi
+}
+
 stop_port() {
   local port="$1"
   local pids
@@ -26,6 +49,9 @@ stop_port() {
     kill -9 $pids >/dev/null 2>&1 || true
   fi
 }
+
+load_env_file
+enable_local_langfuse_if_running
 
 stop_port 8001
 stop_port 5173

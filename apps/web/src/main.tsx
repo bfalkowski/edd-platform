@@ -7,7 +7,6 @@ import {
   Play,
   Search,
   Trash2,
-  X,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -467,7 +466,7 @@ async function createScenario(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       agent_design_id: agentDesignId,
-      name: "EDD proof scenario",
+      name: "Test scenario",
       input,
     }),
   });
@@ -488,17 +487,16 @@ async function createEvalContract(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       agent_design_id: agentDesignId,
-      name: "EDD proof contract",
-      description: "Checks whether the candidate behavior includes the bounded fix.",
+      name: "Success criteria",
+      description: "Checks whether the response matches the expected agent behavior.",
       scenario_id: scenarioId,
       expected_behavior: [
-        "Use the scenario as evidence.",
-        `Include the bounded fix phrase: ${requiredPhrase}.`,
+        `Answer with: ${requiredPhrase}.`,
       ],
       required_evidence: ["scenario"],
       checks: [
         {
-          id: "includes_bounded_fix_phrase",
+          id: "includes_expected_response",
           type: "output_contains",
           value: requiredPhrase,
         },
@@ -571,12 +569,12 @@ async function createFixProposal(
     body: JSON.stringify({
       agent_design_id: agentDesignId,
       target_version_id: targetVersionId,
-      title: `Add bounded phrase: ${requiredPhrase}`,
-      rationale: "The baseline failed the explicit eval contract check.",
+      title: `Clarify expected response: ${requiredPhrase}`,
+      rationale: "The baseline failed the explicit success criteria.",
       proposed_changes: [
         {
           surface: "instructions",
-          change: `Include the phrase: ${requiredPhrase}.`,
+          change: candidateInstructions(requiredPhrase),
         },
       ],
       addressed_failure_packet_ids: failurePackets.map((packet) => packet.id),
@@ -768,6 +766,25 @@ function traceUrlFromArtifact(artifact: ArtifactRecord): string | null {
   return match?.[1]?.trim() ?? null;
 }
 
+function inferExpectedResponse(agent: AgentDesign): string {
+  const intent = agent.intent.trim();
+  const patterns = [
+    /^(?:always\s+)?(?:reply|respond|answer|say)\s+(?:with\s+)?["']?(.+?)["']?\.?$/i,
+    /^(?:always\s+)?(?:return|output)\s+["']?(.+?)["']?\.?$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = intent.match(pattern);
+    if (match?.[1]?.trim()) {
+      return match[1].trim();
+    }
+  }
+  return intent || agent.name;
+}
+
+function candidateInstructions(expectedResponse: string): string {
+  return `Respond with: ${expectedResponse.trim()}`;
+}
+
 async function hydrateEddFlow(projectId: string, agent: AgentDesign): Promise<EddFlowState> {
   const [versions, scenarios, contracts, runs, failurePackets, fixProposals, comparisons] =
     await Promise.all([
@@ -831,7 +848,7 @@ function App() {
   const [scenarioInput, setScenarioInput] = useState(
     "A customer reports a failed deployment and asks what to do next.",
   );
-  const [requiredPhrase, setRequiredPhrase] = useState("bounded resolution");
+  const [requiredPhrase, setRequiredPhrase] = useState("");
   const [runMode, setRunMode] = useState<"mock" | "live">("mock");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
   const [eddFlow, setEddFlow] = useState<EddFlowState>({ failurePackets: [] });
@@ -839,6 +856,7 @@ function App() {
   const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
+  const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const [openAgentMenuId, setOpenAgentMenuId] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<AgentDesign | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -850,6 +868,9 @@ function App() {
   const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scratchActivity, setScratchActivity] = useState<string | null>(null);
+  const [scratchError, setScratchError] = useState<string | null>(null);
+  const [scratchArtifact, setScratchArtifact] = useState<ArtifactRecord | null>(null);
 
   useEffect(() => {
     listProjects()
@@ -892,7 +913,22 @@ function App() {
   const artifactsById = useMemo(() => {
     return new Map((contextPack?.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
   }, [contextPack]);
+  const visibleArtifacts = contextPack?.artifacts ?? [];
+  const evidencePreviewArtifacts = [
+    ...visibleArtifacts.filter((artifact) => artifact.artifact_type === "TRACE_REF"),
+    ...visibleArtifacts.filter((artifact) => artifact.artifact_type !== "TRACE_REF"),
+  ].filter(
+    (artifact, index, artifacts) =>
+      artifacts.findIndex((candidate) => candidate.id === artifact.id) === index,
+  ).slice(0, 4);
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
+  const savedExpectedPhrase = eddFlow.contract?.checks.find((check) => check.value)?.value ?? "";
+  const testOutOfSync = Boolean(
+    eddFlow.contract &&
+      requiredPhrase.trim() &&
+      savedExpectedPhrase &&
+      savedExpectedPhrase !== requiredPhrase.trim(),
+  );
 
   useEffect(() => {
     if (!project) {
@@ -921,8 +957,13 @@ function App() {
         setGates(loadedGates);
         setGateDecisions(loadedGateDecisions);
         const phrase = flow.contract?.checks.find((check) => check.value)?.value;
-        if (phrase) {
+        const inferredPhrase = selectedAgent ? inferExpectedResponse(selectedAgent) : "";
+        if (phrase && phrase !== "bounded resolution") {
           setRequiredPhrase(phrase);
+        } else if (inferredPhrase) {
+          setRequiredPhrase(inferredPhrase);
+        } else if (selectedAgent) {
+          setRequiredPhrase(inferExpectedResponse(selectedAgent));
         }
       })
       .catch((err: Error) => setError(err.message))
@@ -945,6 +986,10 @@ function App() {
       setSelectedId(agent.id);
       setReviewArtifact(null);
       setReviewLinks([]);
+      setToolsPanelOpen(false);
+      setScratchActivity(null);
+      setScratchError(null);
+      setScratchArtifact(null);
       setName("");
       setIntent("");
     } catch (err) {
@@ -965,7 +1010,11 @@ function App() {
         setContextPack(null);
         setReviewArtifact(null);
         setReviewLinks([]);
+        setToolsPanelOpen(false);
         setActivity(null);
+        setScratchActivity(null);
+        setScratchError(null);
+        setScratchArtifact(null);
       }
       setDeleteCandidate(null);
       setOpenAgentMenuId(null);
@@ -1008,8 +1057,11 @@ function App() {
     if (!project || !selectedAgent) {
       return;
     }
+    setActivity(null);
     setError(null);
-    setActivity(runMode === "live" ? "Running live OpenAI scenario." : "Running mock scenario.");
+    setScratchError(null);
+    setScratchActivity(runMode === "live" ? "Running live OpenAI scenario." : "Running mock scenario.");
+    setScratchArtifact(null);
     setIsRunning(true);
     try {
       const run = await runAgentDesign(
@@ -1024,10 +1076,11 @@ function App() {
           ? { ...pack, artifacts: [run.artifact, ...pack.artifacts] }
           : pack,
       );
-      await handleReviewArtifact(run.artifact.id);
+      setScratchArtifact(run.artifact);
+      setScratchActivity("Scratch run saved.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to run agent scenario.");
-      setActivity("Run failed.");
+      setScratchError(err instanceof Error ? err.message : "Unable to run agent scenario.");
+      setScratchActivity(null);
     } finally {
       setIsRunning(false);
     }
@@ -1069,6 +1122,7 @@ function App() {
       ]);
       setReviewArtifact(artifact);
       setReviewLinks(links);
+      setToolsPanelOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load artifact.");
     }
@@ -1148,8 +1202,12 @@ function App() {
     if (!project || !selectedAgent) {
       return;
     }
+    if (!requiredPhrase.trim()) {
+      setError("Add the expected answer text before defining the test.");
+      return;
+    }
     setError(null);
-    setActivity("Creating baseline, scenario, and eval contract.");
+    setActivity("Saving the scenario and success criteria.");
     setIsFlowBusy(true);
     try {
       const baselineVersion = await createAgentVersion(project.id, selectedAgent.id, {
@@ -1165,7 +1223,7 @@ function App() {
         requiredPhrase.trim(),
       );
       setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
-      setActivity("EDD proof is ready for the baseline run.");
+      setActivity("Test is ready. Run the original agent next.");
       await refreshContext();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to initialize EDD flow.");
@@ -1180,7 +1238,7 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Running baseline v0.");
+    setActivity("Running the original agent.");
     setIsFlowBusy(true);
     try {
       const baselineRun = await createProjectRun(project.id, {
@@ -1191,7 +1249,7 @@ function App() {
         mode: runMode,
       });
       setEddFlow((flow) => ({ ...flow, baselineRun }));
-      setActivity("Stored baseline run evidence.");
+      setActivity("Original answer saved.");
       await refreshContext();
       await reviewFirstArtifact(baselineRun.artifact_ids);
     } catch (err) {
@@ -1207,14 +1265,14 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Evaluating baseline v0.");
+    setActivity("Checking the original answer.");
     setIsFlowBusy(true);
     try {
       const baselineEval = await evaluateRun(project.id, eddFlow.baselineRun.id);
       const failurePackets = await listFailurePackets(project.id, selectedAgent.id);
       setEddFlow((flow) => ({ ...flow, baselineEval, failurePackets }));
       setActivity(
-        baselineEval.passed ? "Baseline passed the contract." : "Baseline failure packet recorded.",
+        baselineEval.passed ? "Original answer passed." : "Original answer failed; evidence saved.",
       );
       await refreshContext();
       await reviewFirstArtifact(baselineEval.artifact_ids);
@@ -1237,7 +1295,7 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Creating bounded fix proposal.");
+    setActivity("Creating one targeted fix.");
     setIsFlowBusy(true);
     try {
       const fixProposal = await createFixProposal(
@@ -1264,14 +1322,14 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Creating candidate v1 from the fix.");
+    setActivity("Creating the candidate version.");
     setIsFlowBusy(true);
     try {
       const candidateVersion = await createAgentVersion(project.id, selectedAgent.id, {
         version_label: "v1",
         parent_version_id: eddFlow.baselineVersion.id,
         source_fix_proposal_id: eddFlow.fixProposal.id,
-        instructions: `${selectedAgent.intent} Include the phrase: ${requiredPhrase.trim()}.`,
+        instructions: candidateInstructions(requiredPhrase),
         status: "candidate",
       });
       setEddFlow((flow) => ({ ...flow, candidateVersion }));
@@ -1290,7 +1348,7 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Running candidate v1.");
+    setActivity("Running the candidate agent.");
     setIsFlowBusy(true);
     try {
       const candidateRun = await createProjectRun(project.id, {
@@ -1301,7 +1359,7 @@ function App() {
         mode: runMode,
       });
       setEddFlow((flow) => ({ ...flow, candidateRun }));
-      setActivity("Stored candidate run evidence.");
+      setActivity("Candidate answer saved.");
       await refreshContext();
       await reviewFirstArtifact(candidateRun.artifact_ids);
     } catch (err) {
@@ -1317,12 +1375,12 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Evaluating candidate v1.");
+    setActivity("Checking the candidate answer.");
     setIsFlowBusy(true);
     try {
       const candidateEval = await evaluateRun(project.id, eddFlow.candidateRun.id);
       setEddFlow((flow) => ({ ...flow, candidateEval }));
-      setActivity(candidateEval.passed ? "Candidate passed the contract." : "Candidate still fails.");
+      setActivity(candidateEval.passed ? "Candidate passed." : "Candidate still fails.");
       await refreshContext();
       await reviewFirstArtifact(candidateEval.artifact_ids);
     } catch (err) {
@@ -1338,7 +1396,7 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Comparing baseline and candidate evidence.");
+    setActivity("Comparing original and candidate evidence.");
     setIsFlowBusy(true);
     try {
       const comparison = await createComparison(
@@ -1361,67 +1419,77 @@ function App() {
 
   const loopSteps = [
     {
-      label: "Setup",
-      done: Boolean(eddFlow.baselineVersion && eddFlow.scenario && eddFlow.contract),
-      detail: eddFlow.contract ? eddFlow.contract.name : "Create v0, scenario, and contract",
+      label: "Define test",
+      done: Boolean(eddFlow.baselineVersion && eddFlow.scenario && eddFlow.contract && !testOutOfSync),
+      detail: testOutOfSync ? "Needs update" : "Scenario and success criteria",
     },
     {
-      label: "Run v0",
+      label: "Run original",
       done: Boolean(eddFlow.baselineRun),
-      detail: eddFlow.baselineRun?.id ?? "Baseline run evidence",
+      detail: eddFlow.baselineRun ? "Original response saved" : "Capture the starting behavior",
     },
     {
-      label: "Eval v0",
+      label: "Check original",
       done: Boolean(eddFlow.baselineEval),
       detail: eddFlow.baselineEval
         ? `${eddFlow.baselineEval.score}/${eddFlow.baselineEval.checks.length} checks`
-        : "Failure packet evidence",
+        : "Judge against the success criteria",
     },
     {
-      label: "Fix",
+      label: "Propose fix",
       done: Boolean(eddFlow.fixProposal),
-      detail: eddFlow.fixProposal?.title ?? "Bounded proposal",
+      detail: eddFlow.fixProposal ? "Fix linked to the failure" : "Suggest one targeted change",
     },
     {
-      label: "Version v1",
+      label: "Create candidate",
       done: Boolean(eddFlow.candidateVersion),
-      detail: eddFlow.candidateVersion?.version_label ?? "Candidate behavior",
+      detail: eddFlow.candidateVersion ? "New version ready" : "Apply the proposed fix",
     },
     {
-      label: "Run v1",
+      label: "Run candidate",
       done: Boolean(eddFlow.candidateRun),
-      detail: eddFlow.candidateRun?.id ?? "Candidate run evidence",
+      detail: eddFlow.candidateRun ? "Candidate response saved" : "Run the same scenario again",
     },
     {
-      label: "Eval v1",
+      label: "Check candidate",
       done: Boolean(eddFlow.candidateEval),
       detail: eddFlow.candidateEval
         ? `${eddFlow.candidateEval.score}/${eddFlow.candidateEval.checks.length} checks`
-        : "Candidate result",
+        : "Judge the new response",
     },
     {
       label: "Compare",
       done: Boolean(eddFlow.comparison),
-      detail: eddFlow.comparison?.summary ?? "Improvement evidence",
+      detail: eddFlow.comparison?.summary ?? "Did the candidate improve?",
     },
   ];
   const currentLoopAction = (() => {
     if (!eddFlow.contract) {
       return {
         eyebrow: "Next",
-        title: "Create the proof setup",
-        detail: "Create v0, a scenario, and an eval contract from the current inputs.",
-        label: "Create setup",
+        title: "Define the test",
+        detail: "Save the scenario and the success criteria this agent will be judged against.",
+        label: "Define test",
         onClick: handleInitializeEddFlow,
-        disabled: isFlowBusy,
+        disabled: isFlowBusy || !requiredPhrase.trim(),
+      };
+    }
+    if (testOutOfSync) {
+      return {
+        eyebrow: "Next",
+        title: "Redefine the test",
+        detail: "The saved success criteria do not match the expected answer shown above.",
+        label: "Redefine test",
+        onClick: handleInitializeEddFlow,
+        disabled: isFlowBusy || !requiredPhrase.trim(),
       };
     }
     if (!eddFlow.baselineRun) {
       return {
         eyebrow: "Next",
-        title: "Run baseline v0",
-        detail: "Capture the baseline behavior before applying any fix.",
-        label: "Run v0",
+        title: "Run the original agent",
+        detail: "Capture how the current instructions answer the scenario before any fix.",
+        label: "Run original",
         onClick: handleRunBaseline,
         disabled: isFlowBusy,
       };
@@ -1429,9 +1497,9 @@ function App() {
     if (!eddFlow.baselineEval) {
       return {
         eyebrow: "Next",
-        title: "Evaluate baseline",
-        detail: "Judge v0 against the contract and record failure evidence.",
-        label: "Evaluate v0",
+        title: "Check the original answer",
+        detail: "Judge the response against the success criteria and record what failed.",
+        label: "Check answer",
         onClick: handleEvaluateBaseline,
         disabled: isFlowBusy,
       };
@@ -1439,8 +1507,8 @@ function App() {
     if (!eddFlow.fixProposal && eddFlow.failurePackets.length > 0) {
       return {
         eyebrow: "Next",
-        title: "Create a bounded fix",
-        detail: "Link a fix proposal to the baseline failure packet.",
+        title: "Propose one fix",
+        detail: "Use the failure evidence to suggest one targeted instruction change.",
         label: "Create fix",
         onClick: handleCreateFixProposal,
         disabled: isFlowBusy,
@@ -1449,9 +1517,9 @@ function App() {
     if (!eddFlow.candidateVersion && eddFlow.fixProposal) {
       return {
         eyebrow: "Next",
-        title: "Create candidate v1",
-        detail: "Turn the bounded fix into a candidate agent version.",
-        label: "Create v1",
+        title: "Create the candidate",
+        detail: "Apply the proposed fix to create a new agent version.",
+        label: "Create candidate",
         onClick: handleCreateCandidate,
         disabled: isFlowBusy,
       };
@@ -1459,9 +1527,9 @@ function App() {
     if (!eddFlow.candidateRun && eddFlow.candidateVersion) {
       return {
         eyebrow: "Next",
-        title: "Run candidate v1",
-        detail: "Capture candidate behavior against the same scenario.",
-        label: "Run v1",
+        title: "Run the candidate",
+        detail: "Run the improved version against the same scenario.",
+        label: "Run candidate",
         onClick: handleRunCandidate,
         disabled: isFlowBusy,
       };
@@ -1469,9 +1537,9 @@ function App() {
     if (!eddFlow.candidateEval && eddFlow.candidateRun) {
       return {
         eyebrow: "Next",
-        title: "Evaluate candidate",
-        detail: "Judge v1 against the same eval contract.",
-        label: "Evaluate v1",
+        title: "Check the candidate answer",
+        detail: "Judge the new response against the same success criteria.",
+        label: "Check candidate",
         onClick: handleEvaluateCandidate,
         disabled: isFlowBusy,
       };
@@ -1479,8 +1547,8 @@ function App() {
     if (!eddFlow.comparison && eddFlow.baselineEval && eddFlow.candidateEval) {
       return {
         eyebrow: "Next",
-        title: "Compare evidence",
-        detail: "Show whether v1 fixed, regressed, or left failures behind.",
+        title: "Compare original vs candidate",
+        detail: "Show whether the new version fixed the failure or still needs work.",
         label: "Compare",
         onClick: handleCompareRuns,
         disabled: isFlowBusy,
@@ -1488,8 +1556,8 @@ function App() {
     }
     return {
       eyebrow: "Complete",
-      title: "Improvement evidence recorded",
-      detail: eddFlow.comparison?.summary ?? "The comparison artifact is ready to review.",
+      title: "Improvement check complete",
+      detail: eddFlow.comparison?.summary ?? "Open the saved evidence to inspect the result.",
       label: "Done",
       onClick: undefined,
       disabled: true,
@@ -1500,7 +1568,7 @@ function App() {
     <div
       className={[
         sidebarOpen ? "app-shell" : "app-shell sidebar-collapsed",
-        reviewArtifact ? "review-open" : "",
+        reviewArtifact || toolsPanelOpen ? "review-open" : "",
       ].join(" ")}
     >
       <aside className="sidebar">
@@ -1525,6 +1593,7 @@ function App() {
               setSelectedId(null);
               setReviewArtifact(null);
               setReviewLinks([]);
+              setToolsPanelOpen(false);
               setActivity(null);
             }}
           >
@@ -1557,6 +1626,12 @@ function App() {
                   onClick={() => {
                     setSelectedId(agent.id);
                     setOpenAgentMenuId(null);
+                    setReviewArtifact(null);
+                    setReviewLinks([]);
+                    setToolsPanelOpen(false);
+                    setScratchActivity(null);
+                    setScratchError(null);
+                    setScratchArtifact(null);
                   }}
                 >
                   <span>{agent.name}</span>
@@ -1596,14 +1671,35 @@ function App() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <h1>{selectedAgent?.name ?? "New agent"}</h1>
+            <h1>{selectedAgent ? "Agent workspace" : "New agent"}</h1>
             <p>
-              {selectedAgent?.intent ??
-                project?.description ??
+              {selectedAgent
+                ? "Create the agent, then test and improve it with saved evidence."
+                : project?.description ??
                 "Describe an agent and persist the first platform design."}
             </p>
           </div>
-          <span className="status-pill">Platform: local</span>
+          <div className="topbar-actions">
+            {selectedAgent ? (
+              <div className="run-mode-control topbar-run-mode" aria-label="Run mode">
+                <button
+                  className={runMode === "mock" ? "mode-option active" : "mode-option"}
+                  type="button"
+                  onClick={() => setRunMode("mock")}
+                >
+                  Mock
+                </button>
+                <button
+                  className={runMode === "live" ? "mode-option active" : "mode-option"}
+                  type="button"
+                  onClick={() => setRunMode("live")}
+                >
+                  Live OpenAI
+                </button>
+              </div>
+            ) : null}
+            <span className="status-pill">Platform: local</span>
+          </div>
         </header>
 
         <section className={selectedAgent ? "canvas canvas-workspace" : "canvas"}>
@@ -1637,8 +1733,8 @@ function App() {
           ) : null}
 
           <section className={selectedAgent ? "evidence-panel evidence-workspace" : "evidence-panel"}>
-            <p className="eyebrow">Evidence context</p>
-            <h2>{selectedAgent ? "Evidence artifacts" : "Ready for the first design"}</h2>
+            <p className="eyebrow">{selectedAgent ? "Agent test workflow" : "Evidence context"}</p>
+            <h2>{selectedAgent ? "Prove this agent gets better." : "Ready for the first design"}</h2>
             {!selectedAgent ? (
               <p className="muted-copy">
                 Create an agent design to begin collecting targets, judge prompts, gates, runs,
@@ -1647,99 +1743,74 @@ function App() {
             ) : null}
             {selectedAgent ? (
               <div className="artifact-stack">
-                <section className="run-playground">
+                <section className="agent-setup-panel">
                   <div>
-                    <p className="artifact-type">Agent playground</p>
-                    <h3>Run a scenario</h3>
-                    <p>
-                      Execute this design in mock mode or live OpenAI mode and store the output as run evidence.
-                    </p>
+                    <p className="artifact-type">Created agent</p>
+                    <h3>{selectedAgent.name}</h3>
+                    <p>{selectedAgent.intent}</p>
                   </div>
-                  <div className="run-mode-control" aria-label="Run mode">
+                  <div className="agent-setup-tools">
+                    <div>
+                      <p className="artifact-type">Tools</p>
+                      <p>
+                        {selectedAgent.allowed_tool_names.length === 0
+                          ? "No tools enabled for live execution."
+                          : `${selectedAgent.allowed_tool_names.length} tool${
+                              selectedAgent.allowed_tool_names.length === 1 ? "" : "s"
+                            } enabled for live execution.`}
+                      </p>
+                      <div className="tool-chip-row">
+                        {selectedAgent.allowed_tool_names.length === 0 ? (
+                          <span className="muted-chip">None enabled</span>
+                        ) : (
+                          selectedAgent.allowed_tool_names.map((toolName) => (
+                            <span className="tool-chip" key={toolName}>
+                              {toolName}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
                     <button
-                      className={runMode === "mock" ? "mode-option active" : "mode-option"}
+                      className="secondary-button"
                       type="button"
-                      onClick={() => setRunMode("mock")}
+                      onClick={() => {
+                        setToolsPanelOpen(true);
+                        setReviewArtifact(null);
+                        setReviewLinks([]);
+                      }}
                     >
-                      Mock
+                      Manage tools
                     </button>
-                    <button
-                      className={runMode === "live" ? "mode-option active" : "mode-option"}
-                      type="button"
-                      onClick={() => setRunMode("live")}
-                    >
-                      Live OpenAI
-                    </button>
-                  </div>
-                  <label>
-                    Scenario input
-                    <textarea
-                      value={scenarioInput}
-                      onChange={(event) => setScenarioInput(event.target.value)}
-                    />
-                  </label>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={handleRunAgent}
-                    disabled={isRunning}
-                  >
-                    <Play size={18} />
-                    {isRunning ? "Running" : runMode === "live" ? "Run live" : "Run mock"}
-                  </button>
-                  {activity ? <p className="activity-text">{activity}</p> : null}
-                  {error ? <p className="error-text">{error}</p> : null}
-                </section>
-                <section className="tool-policy-panel">
-                  <div>
-                    <p className="artifact-type">Tool policy</p>
-                    <h3>Approved tools</h3>
-                    <p>
-                      Choose which platform-approved tools this design may call during live
-                      execution.
-                    </p>
-                  </div>
-                  <div className="tool-toggle-list">
-                    {approvedTools.length === 0 ? (
-                      <p className="muted-copy">No approved tools are available yet.</p>
-                    ) : (
-                      approvedTools.map((tool) => {
-                        const isAllowed = selectedAgent.allowed_tool_names.includes(tool.name);
-                        return (
-                          <button
-                            className={isAllowed ? "tool-toggle active" : "tool-toggle"}
-                            type="button"
-                            key={tool.id}
-                            onClick={() => handleToggleTool(tool.name)}
-                            disabled={updatingTools}
-                            aria-pressed={isAllowed}
-                          >
-                            <span>{isAllowed ? "✓" : ""}</span>
-                            <strong>{tool.name}</strong>
-                            <small>{tool.description}</small>
-                          </button>
-                        );
-                      })
-                    )}
                   </div>
                 </section>
-                <section className="edd-loop-panel">
+                <section className="edd-loop-panel primary-workflow-panel">
                   <div className="edd-loop-header">
                     <div>
-                      <p className="artifact-type">Eval-driven design</p>
-                      <h3>Prove an improvement</h3>
+                      <p className="artifact-type">Before and after</p>
+                      <h3>Run one scenario, fix one failure, compare the result.</h3>
                       <p>
-                        Turn one failed baseline check into a bounded fix, candidate version,
-                        and comparison artifact.
+                        The platform saves each run, check, failure, and fix as evidence so you
+                        can see whether the agent actually improved.
                       </p>
                     </div>
                     <label className="compact-label">
-                      Required phrase
+                      <span>Success criteria</span>
+                      <small>The answer should include this text.</small>
                       <input
                         value={requiredPhrase}
                         onChange={(event) => setRequiredPhrase(event.target.value)}
-                        disabled={Boolean(eddFlow.contract)}
                       />
+                      {eddFlow.contract ? (
+                        <button
+                          className="secondary-button compact-button"
+                          type="button"
+                          onClick={handleInitializeEddFlow}
+                          disabled={isFlowBusy || !requiredPhrase.trim()}
+                        >
+                          Redefine test
+                        </button>
+                      ) : null}
                     </label>
                   </div>
                   <div className="loop-step-grid">
@@ -1756,6 +1827,8 @@ function App() {
                       <p className="artifact-type">{currentLoopAction.eyebrow}</p>
                       <h4>{currentLoopAction.title}</h4>
                       <p>{currentLoopAction.detail}</p>
+                      {activity ? <p className="activity-text">{activity}</p> : null}
+                      {error ? <p className="error-text">{error}</p> : null}
                     </div>
                     {currentLoopAction.onClick ? (
                       <button
@@ -1778,6 +1851,45 @@ function App() {
                       </span>
                     </div>
                   ) : null}
+                  <div className="workflow-evidence-panel">
+                    <div>
+                      <p className="artifact-type">Saved evidence</p>
+                      <h4>{visibleArtifacts.length} records</h4>
+                      <p>Open the scenario, success criteria, run output, eval result, or trace.</p>
+                    </div>
+                    <div className="workflow-evidence-list">
+                      {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
+                      {!isLoadingContext && evidencePreviewArtifacts.length === 0 ? (
+                        <p className="muted-copy">No artifacts yet.</p>
+                      ) : null}
+                      {evidencePreviewArtifacts.map((artifact) => {
+                        const traceUrl = traceUrlFromArtifact(artifact);
+                        return (
+                          <div className="workflow-evidence-row" key={artifact.id}>
+                            <button
+                              className="workflow-evidence-item"
+                              type="button"
+                              onClick={() => handleReviewArtifact(artifact.id)}
+                            >
+                              <span>{artifact.artifact_type.replaceAll("_", " ")}</span>
+                              <strong>{artifact.title}</strong>
+                              <PanelRight size={17} />
+                            </button>
+                            {traceUrl ? (
+                              <a
+                                className="workflow-trace-link"
+                                href={traceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open trace
+                              </a>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div className="readiness-panel">
                     <div>
                       <p className="artifact-type">Promotion readiness</p>
@@ -1819,71 +1931,102 @@ function App() {
                     )}
                   </div>
                 </section>
-                <div className="context-pack-meta">
-                  <span>Context pack</span>
-                  <strong>{contextPack?.purpose.replaceAll("_", " ") ?? "Preparing"}</strong>
-                </div>
-                {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
-                {!isLoadingContext && (contextPack?.artifacts.length ?? 0) === 0 ? (
-                  <p className="muted-copy">No artifacts recorded for this design yet.</p>
-                ) : null}
-                {(contextPack?.artifacts ?? []).map((artifact) => {
-                  const traceUrl = traceUrlFromArtifact(artifact);
-                  return (
-                    <article className="artifact-card" key={artifact.id}>
-                      <div>
-                        <p className="artifact-type">{artifact.artifact_type.replaceAll("_", " ")}</p>
-                        <h3>{artifact.title}</h3>
-                        <p>{artifact.body}</p>
-                      </div>
-                      <div className="artifact-actions">
-                        {artifact.artifact_type === "RUN_RESULT" ? (
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            onClick={() => handleEvaluateArtifact(artifact)}
-                            disabled={evaluatingArtifactId === artifact.id}
-                          >
-                            {evaluatingArtifactId === artifact.id ? "Evaluating" : "Evaluate"}
-                          </button>
-                        ) : null}
-                        {traceUrl ? (
-                          <a
-                            className="secondary-button"
-                            href={traceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Open trace
-                          </a>
-                        ) : null}
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          onClick={() => handleReviewArtifact(artifact.id)}
-                        >
-                          <PanelRight size={18} />
-                          Review
-                        </button>
-                      </div>
-                      <dl>
-                        <div>
-                          <dt>Source</dt>
-                          <dd>{artifact.source}</dd>
-                        </div>
-                        <div>
-                          <dt>Updated</dt>
-                          <dd>{new Date(artifact.updated_at).toLocaleString()}</dd>
-                        </div>
-                      </dl>
-                    </article>
-                  );
-                })}
+                <section className="supporting-workspace">
+                  <section className="run-playground">
+                    <div>
+                      <p className="artifact-type">Scratch run</p>
+                      <h3>Try the agent without changing the test</h3>
+                      <p>
+                        Use the page run mode above. This saves evidence but does not advance the
+                        before/after improvement loop.
+                      </p>
+                    </div>
+                    <label>
+                      Scenario input
+                      <textarea
+                        value={scenarioInput}
+                        onChange={(event) => setScenarioInput(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={handleRunAgent}
+                      disabled={isRunning}
+                    >
+                      <Play size={18} />
+                      {isRunning ? "Running" : "Run scratch"}
+                    </button>
+                    {scratchActivity ? <p className="activity-text">{scratchActivity}</p> : null}
+                    {scratchError ? <p className="error-text">{scratchError}</p> : null}
+                    {scratchArtifact ? (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => handleReviewArtifact(scratchArtifact.id)}
+                      >
+                        <PanelRight size={18} />
+                        View result
+                      </button>
+                    ) : null}
+                  </section>
+                </section>
               </div>
             ) : null}
           </section>
         </section>
       </main>
+      {toolsPanelOpen && selectedAgent ? (
+        <aside className="review-panel" aria-label="Tool marketplace">
+          <div className="review-panel-header">
+            <div>
+              <p className="eyebrow">Tools</p>
+              <h2>Available tools</h2>
+            </div>
+            <button
+              className="icon-button review-toggle-button"
+              type="button"
+              aria-label="Close tools panel"
+              onClick={() => setToolsPanelOpen(false)}
+            >
+              <PanelRight size={22} />
+            </button>
+          </div>
+
+          <div className="review-panel-body">
+            <section>
+              <h3>Enabled for this agent</h3>
+              <p>
+                Pick the approved tools this agent may call during live runs. Tool calls still
+                execute through platform policy, not from the browser.
+              </p>
+            </section>
+            <section className="tool-marketplace-list">
+              {approvedTools.length === 0 ? (
+                <p>No approved tools are available yet.</p>
+              ) : (
+                approvedTools.map((tool) => {
+                  const isAllowed = selectedAgent.allowed_tool_names.includes(tool.name);
+                  return (
+                    <button
+                      className={isAllowed ? "tool-marketplace-item active" : "tool-marketplace-item"}
+                      type="button"
+                      key={tool.id}
+                      onClick={() => handleToggleTool(tool.name)}
+                      disabled={updatingTools}
+                      aria-pressed={isAllowed}
+                    >
+                      <span>{isAllowed ? "Enabled" : "Available"}</span>
+                      <strong>{tool.name}</strong>
+                      <small>{tool.description}</small>
+                    </button>
+                  );
+                })
+              )}
+            </section>
+          </div>
+        </aside>
+      ) : null}
       {reviewArtifact ? (
         <aside className="review-panel" aria-label="Artifact review">
           <div className="review-panel-header">
@@ -1892,7 +2035,7 @@ function App() {
               <h2>{reviewArtifact.title}</h2>
             </div>
             <button
-              className="icon-button"
+              className="icon-button review-toggle-button"
               type="button"
               aria-label="Close review panel"
               onClick={() => {
@@ -1900,13 +2043,13 @@ function App() {
                 setReviewLinks([]);
               }}
             >
-              <X size={22} />
+              <PanelRight size={22} />
             </button>
           </div>
 
           <div className="review-panel-body">
             <section>
-              <h3>Evidence</h3>
+              <h3>Record</h3>
               <p>{reviewArtifact.body}</p>
               {reviewTraceUrl ? (
                 <a
@@ -1920,14 +2063,12 @@ function App() {
               ) : null}
             </section>
             <section>
-              <h3>Related evidence</h3>
+              <h3>Connected records</h3>
               {reviewLinks.length === 0 ? (
-                <p>No related artifacts yet.</p>
+                <p>No connected records yet.</p>
               ) : (
                 <ul className="related-list">
                   {reviewLinks.map((link) => {
-                    const direction =
-                      link.source_artifact_id === reviewArtifact.id ? "points to" : "linked from";
                     const relatedId =
                       link.source_artifact_id === reviewArtifact.id
                         ? link.target_artifact_id
@@ -1935,9 +2076,8 @@ function App() {
                     const relatedArtifact = artifactsById.get(relatedId);
                     return (
                       <li key={link.id}>
-                        <strong>{link.relationship_type.replaceAll("_", " ")}</strong>
-                        <span>{direction}</span>
-                        <b>{relatedArtifact?.title ?? relatedId}</b>
+                        <strong>{relatedArtifact?.title ?? "Saved record"}</strong>
+                        <span>{link.relationship_type.replaceAll("_", " ").toLowerCase()}</span>
                       </li>
                     );
                   })}
@@ -1948,14 +2088,6 @@ function App() {
               <div>
                 <dt>Source</dt>
                 <dd>{reviewArtifact.source}</dd>
-              </div>
-              <div>
-                <dt>Artifact id</dt>
-                <dd>{reviewArtifact.id}</dd>
-              </div>
-              <div>
-                <dt>Project</dt>
-                <dd>{reviewArtifact.project_id}</dd>
               </div>
               <div>
                 <dt>Updated</dt>
