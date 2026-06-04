@@ -31,13 +31,15 @@ the user explicitly changes direction.
 The expected development loop is:
 
 1. Read the relevant steering files.
-2. Translate the request into a small, verifiable outcome.
-3. Update or identify tests where practical.
-4. Make scoped changes.
-5. Run the relevant checks.
-6. Browser-smoke visible UI changes.
-7. Update `docs/WORK_PLAN.md` when milestones move.
-8. Commit only when explicitly asked.
+2. Select and read the matching local skill in `.agents/skills`.
+3. Read the skill reference file when the task matches a specific workflow.
+4. Translate the request into a small, verifiable outcome.
+5. Update or identify tests where practical.
+6. Make scoped changes.
+7. Run the relevant checks.
+8. Browser-smoke visible UI changes.
+9. Update `docs/WORK_PLAN.md` when milestones move.
+10. Commit only when explicitly asked.
 
 This loop is meant to keep AI-assisted work boring, inspectable, and reversible.
 
@@ -57,6 +59,7 @@ Common drift modes:
 Guardrails:
 
 - use the product vocabulary in `AGENTS.md`
+- apply the relevant `.agents/skills` workflow before meaningful work
 - keep frontend work aligned with the design guide
 - keep HLDs tied to `docs/WORK_PLAN.md`
 - require local/mock behavior to work without provider keys
