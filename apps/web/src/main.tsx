@@ -37,11 +37,27 @@ type ToolDefinition = {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown> | null;
   output_description: string;
+  implementation_kind: "http" | "python" | "mcp" | "builtin" | "mock";
   implementation_key: string;
+  config_schema: Record<string, unknown>;
+  mock_response: string | null;
   status: "draft" | "approved";
   created_at: string;
   updated_at: string;
+};
+
+type ToolDefinitionCreate = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown> | null;
+  output_description: string;
+  implementation_kind: "http" | "python" | "mcp" | "builtin" | "mock";
+  implementation_key: string;
+  config_schema: Record<string, unknown>;
+  mock_response: string | null;
 };
 
 type ArtifactRecord = {
@@ -298,6 +314,63 @@ type EddFlowState = {
 const apiBase = "/api";
 const defaultScenarioInput =
   "A customer reports a failed deployment and asks what to do next.";
+const defaultToolInputSchema = `{
+  "type": "object",
+  "properties": {
+    "ticket_id": {
+      "type": "string",
+      "description": "External ticket identifier."
+    },
+    "customer_since": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO date, for example 2026-06-04."
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "include_history": {
+      "type": "boolean"
+    }
+  },
+  "required": ["ticket_id"]
+}`;
+const defaultToolOutputSchema = `{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "blocked", "resolved"]
+    },
+    "age_days": {
+      "type": "integer"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "recommended_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["summary", "status"]
+}`;
 
 async function responseError(response: Response, fallback: string): Promise<Error> {
   try {
@@ -357,6 +430,37 @@ async function listToolDefinitions(projectId: string): Promise<ToolDefinition[]>
   const response = await fetch(`${apiBase}/projects/${projectId}/tools`);
   if (!response.ok) {
     throw await responseError(response, "Unable to load tools.");
+  }
+  return response.json();
+}
+
+async function createToolDefinition(
+  projectId: string,
+  payload: ToolDefinitionCreate,
+): Promise<ToolDefinition> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/tools`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create tool definition.");
+  }
+  return response.json();
+}
+
+async function updateToolDefinitionStatus(
+  projectId: string,
+  toolId: string,
+  status: "draft" | "approved",
+): Promise<ToolDefinition> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/tools/${toolId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update tool status.");
   }
   return response.json();
 }
@@ -770,6 +874,23 @@ function traceUrlFromArtifact(artifact: ArtifactRecord): string | null {
   return match?.[1]?.trim() ?? null;
 }
 
+function parseJsonObject(value: string, label: string): Record<string, unknown> {
+  const parsed = JSON.parse(value);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object.`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function toolImplementationKey(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return `mock.${slug || "tool"}`;
+}
+
 function parseArtifactFields(body: string): { label: string; value: string }[] {
   const fields = body
     .split(/\n{2,}/)
@@ -924,6 +1045,12 @@ function App() {
   const [scratchError, setScratchError] = useState<string | null>(null);
   const [scratchArtifact, setScratchArtifact] = useState<ArtifactRecord | null>(null);
   const [scratchTraceUrl, setScratchTraceUrl] = useState<string | null>(null);
+  const [toolName, setToolName] = useState("");
+  const [toolDescription, setToolDescription] = useState("");
+  const [toolInputSchema, setToolInputSchema] = useState(defaultToolInputSchema);
+  const [toolOutputSchema, setToolOutputSchema] = useState(defaultToolOutputSchema);
+  const [toolOutputDescription, setToolOutputDescription] = useState("");
+  const [toolMockResponse, setToolMockResponse] = useState("");
 
   useEffect(() => {
     listProjects()
@@ -959,6 +1086,10 @@ function App() {
   );
   const approvedTools = useMemo(
     () => tools.filter((tool) => tool.status === "approved"),
+    [tools],
+  );
+  const draftTools = useMemo(
+    () => tools.filter((tool) => tool.status === "draft"),
     [tools],
   );
   const latestGate = gates[0] ?? null;
@@ -1117,14 +1248,81 @@ function App() {
     }
   }
 
-  async function handleRunAgent() {
+  async function handleApproveAndEnableTool(tool: ToolDefinition) {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    setError(null);
+    setUpdatingTools(true);
+    try {
+      const approved = await updateToolDefinitionStatus(project.id, tool.id, "approved");
+      setTools((items) =>
+        items.map((item) => (item.id === approved.id ? approved : item)),
+      );
+      const allowed = Array.from(new Set([...selectedAgent.allowed_tool_names, approved.name]));
+      const updatedAgent = await updateAgentDesignToolAllowlist(
+        project.id,
+        selectedAgent.id,
+        allowed,
+      );
+      setAgents((items) =>
+        items.map((agent) => (agent.id === updatedAgent.id ? updatedAgent : agent)),
+      );
+      setContextPack(await buildContextPack(project.id, updatedAgent.id));
+      setActivity(`Approved and assigned ${approved.name}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to approve tool.");
+    } finally {
+      setUpdatingTools(false);
+    }
+  }
+
+  async function handleCreateTool(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!project) {
+      return;
+    }
+    setError(null);
+    setUpdatingTools(true);
+    try {
+      const inputSchema = parseJsonObject(toolInputSchema, "Input schema");
+      const outputSchema = toolOutputSchema.trim()
+        ? parseJsonObject(toolOutputSchema, "Output schema")
+        : null;
+      const tool = await createToolDefinition(project.id, {
+        name: toolName.trim(),
+        description: toolDescription.trim(),
+        input_schema: inputSchema,
+        output_schema: outputSchema,
+        output_description: toolOutputDescription.trim(),
+        implementation_kind: "mock",
+        implementation_key: toolImplementationKey(toolName),
+        config_schema: {"type": "object", "properties": {}},
+        mock_response: toolMockResponse.trim() || null,
+      });
+      setTools((items) => [tool, ...items.filter((item) => item.id !== tool.id)]);
+      setToolName("");
+      setToolDescription("");
+      setToolInputSchema(defaultToolInputSchema);
+      setToolOutputSchema(defaultToolOutputSchema);
+      setToolOutputDescription("");
+      setToolMockResponse("");
+      setActivity(`Draft tool created: ${tool.name}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create tool definition.");
+    } finally {
+      setUpdatingTools(false);
+    }
+  }
+
+  async function handleRunAdHocScenario() {
     if (!project || !selectedAgent) {
       return;
     }
     setActivity(null);
     setError(null);
     setScratchError(null);
-    setScratchActivity(runMode === "live" ? "Running live OpenAI scenario." : "Running mock scenario.");
+    setScratchActivity(runMode === "live" ? "Running live ad hoc scenario." : "Running mock ad hoc scenario.");
     setScratchArtifact(null);
     setScratchTraceUrl(null);
     setIsRunning(true);
@@ -1135,7 +1333,7 @@ function App() {
         scenarioInput.trim(),
         runMode,
       );
-      setActivity("Stored run evidence.");
+      setActivity("Ad hoc evidence saved.");
       setContextPack((pack) =>
         pack
           ? { ...pack, artifacts: [run.artifact, ...pack.artifacts] }
@@ -1143,9 +1341,9 @@ function App() {
       );
       setScratchArtifact(run.artifact);
       setScratchTraceUrl(run.trace_url);
-      setScratchActivity("Scratch run saved.");
+      setScratchActivity("Ad hoc run saved.");
     } catch (err) {
-      setScratchError(err instanceof Error ? err.message : "Unable to run agent scenario.");
+      setScratchError(err instanceof Error ? err.message : "Unable to run ad hoc scenario.");
       setScratchActivity(null);
     } finally {
       setIsRunning(false);
@@ -1736,7 +1934,10 @@ function App() {
                       }}
                     >
                       <Play size={18} />
-                      Run scratch
+                      <span>
+                        Try scenario
+                        <small>Ad hoc run</small>
+                      </span>
                     </button>
                     <button
                       className="agent-menu-item danger"
@@ -1771,21 +1972,31 @@ function App() {
           </div>
           <div className="topbar-actions">
             {selectedAgent ? (
-              <div className="run-mode-control topbar-run-mode" aria-label="Run mode">
-                <button
-                  className={runMode === "mock" ? "mode-option active" : "mode-option"}
-                  type="button"
-                  onClick={() => setRunMode("mock")}
-                >
-                  Mock
-                </button>
-                <button
-                  className={runMode === "live" ? "mode-option active" : "mode-option"}
-                  type="button"
-                  onClick={() => setRunMode("live")}
-                >
-                  Live OpenAI
-                </button>
+              <div className="run-mode-shell">
+                <div className="run-mode-heading">
+                  <span>Run mode</span>
+                  <small>
+                    {runMode === "live"
+                      ? "Uses OpenAI and links Langfuse traces when configured."
+                      : "Uses deterministic local behavior for repeatable checks."}
+                  </small>
+                </div>
+                <div className="run-mode-control topbar-run-mode" aria-label="Run mode">
+                  <button
+                    className={runMode === "mock" ? "mode-option active" : "mode-option"}
+                    type="button"
+                    onClick={() => setRunMode("mock")}
+                  >
+                    Mock
+                  </button>
+                  <button
+                    className={runMode === "live" ? "mode-option active" : "mode-option"}
+                    type="button"
+                    onClick={() => setRunMode("live")}
+                  >
+                    Live OpenAI
+                  </button>
+                </div>
               </div>
             ) : null}
             <span className="status-pill">Platform: local</span>
@@ -2048,16 +2259,16 @@ function App() {
         </section>
       </main>
       {scratchPanelOpen && selectedAgent ? (
-        <aside className="review-panel" aria-label="Scratch run">
+        <aside className="review-panel" aria-label="Try scenario">
           <div className="review-panel-header">
             <div>
-              <p className="eyebrow">Scratch run</p>
+              <p className="eyebrow">Ad hoc run</p>
               <h2>{selectedAgent.name}</h2>
             </div>
             <button
               className="icon-button review-toggle-button"
               type="button"
-              aria-label="Close scratch run panel"
+              aria-label="Close ad hoc run panel"
               onClick={() => setScratchPanelOpen(false)}
             >
               <PanelRight size={22} />
@@ -2069,8 +2280,8 @@ function App() {
               <div>
                 <h3>Try a scenario</h3>
                 <p>
-                  Uses the page run mode above. This saves evidence but does not advance the
-                  before/after improvement loop.
+                  Run this agent without advancing the proof loop. The output is still saved as
+                  evidence and linked to a trace when live tracing is enabled.
                 </p>
               </div>
               <label>
@@ -2083,11 +2294,11 @@ function App() {
               <button
                 className="primary-button"
                 type="button"
-                onClick={handleRunAgent}
+                onClick={handleRunAdHocScenario}
                 disabled={isRunning}
               >
                 <Play size={18} />
-                {isRunning ? "Running" : "Run scratch"}
+                {isRunning ? "Running" : "Run ad hoc"}
               </button>
               {scratchActivity ? <p className="activity-text">{scratchActivity}</p> : null}
               {scratchError ? <p className="error-text">{scratchError}</p> : null}
@@ -2134,10 +2345,114 @@ function App() {
 
           <div className="review-panel-body">
             <section>
-              <h3>Enabled for this agent</h3>
+              <h3>Tool registry</h3>
               <p>
-                Pick the approved platform tools this agent may call during live runs. Each tool
-                should eventually carry input/output schemas, mock behavior, and execution policy.
+                Define draft tools with input and output schemas first. Approved tools can then be
+                enabled for live agent runs.
+              </p>
+            </section>
+            {draftTools.length > 0 ? (
+              <section className="tool-marketplace-list">
+                <h3>Draft tools</h3>
+                {draftTools.map((tool) => (
+                  <button
+                    className="tool-marketplace-item draft"
+                    type="button"
+                    key={tool.id}
+                    onClick={() => handleApproveAndEnableTool(tool)}
+                    disabled={updatingTools}
+                  >
+                    <span>Draft</span>
+                    <strong>{tool.name}</strong>
+                    <small>{tool.description}</small>
+                    <em>Approve and assign</em>
+                  </button>
+                ))}
+              </section>
+            ) : (
+              <section className="tool-empty-state">
+                <h3>No draft tools yet</h3>
+                <p>Create one below. Drafts are saved to the platform registry but are not assignable.</p>
+              </section>
+            )}
+            {activity ? <p className="activity-text">{activity}</p> : null}
+            {error ? <p className="error-text">{error}</p> : null}
+            <form className="tool-definition-form" onSubmit={handleCreateTool}>
+              <div>
+                <p className="eyebrow">New draft</p>
+                <h3>Define tool schema</h3>
+                <p>
+                  Start with the contract: inputs, outputs, and deterministic mock behavior.
+                  Execution adapters can be added once the shape is clear.
+                </p>
+              </div>
+              <label>
+                Tool name
+                <input
+                  value={toolName}
+                  onChange={(event) => setToolName(event.target.value)}
+                  placeholder="lookup_ticket"
+                  required
+                />
+              </label>
+              <label>
+                Description
+                <textarea
+                  value={toolDescription}
+                  onChange={(event) => setToolDescription(event.target.value)}
+                  placeholder="Look up a support ticket by id."
+                  rows={3}
+                  required
+                />
+              </label>
+              <label>
+                Input schema
+                <textarea
+                  className="schema-editor"
+                  value={toolInputSchema}
+                  onChange={(event) => setToolInputSchema(event.target.value)}
+                  rows={15}
+                  spellCheck={false}
+                  required
+                />
+              </label>
+              <label>
+                Output schema
+                <textarea
+                  className="schema-editor"
+                  value={toolOutputSchema}
+                  onChange={(event) => setToolOutputSchema(event.target.value)}
+                  rows={14}
+                  spellCheck={false}
+                />
+              </label>
+              <label>
+                Output description
+                <input
+                  value={toolOutputDescription}
+                  onChange={(event) => setToolOutputDescription(event.target.value)}
+                  placeholder="Ticket status and summary."
+                  required
+                />
+              </label>
+              <label>
+                Mock response
+                <textarea
+                  value={toolMockResponse}
+                  onChange={(event) => setToolMockResponse(event.target.value)}
+                  placeholder="Ticket is open and awaiting customer logs."
+                  rows={3}
+                />
+              </label>
+              <button className="primary-button" type="submit" disabled={updatingTools}>
+                {updatingTools ? "Creating" : "Create draft"}
+              </button>
+            </form>
+            <section>
+              <h3>Assigned to this agent</h3>
+              <p>
+                Only approved tools appear here. A tool still needs a runner adapter before live
+                execution can call it.
               </p>
             </section>
             <section className="tool-marketplace-list">

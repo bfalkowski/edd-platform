@@ -106,6 +106,119 @@ created_at
 updated_at
 ```
 
+### Tool Definitions
+
+Tool definitions are platform-owned. Agents may only use approved tools in
+their allowlists, but the registry can hold draft tools while their schemas,
+mock behavior, and execution policy are still being designed.
+
+```text
+GET   /api/projects/{project_id}/tools
+POST  /api/projects/{project_id}/tools
+PATCH /api/projects/{project_id}/tools/{tool_id}
+```
+
+Create request:
+
+```json
+{
+  "name": "lookup_ticket",
+  "description": "Look up a support ticket by id.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "ticket_id": {
+        "type": "string",
+        "description": "External ticket identifier."
+      },
+      "customer_since": {
+        "type": "string",
+        "format": "date"
+      },
+      "retry_count": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "priority": {
+        "type": "string",
+        "enum": ["low", "medium", "high"]
+      },
+      "include_history": {
+        "type": "boolean"
+      }
+    },
+    "required": ["ticket_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "summary": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string",
+        "enum": ["open", "blocked", "resolved"]
+      },
+      "age_days": {
+        "type": "integer"
+      },
+      "last_updated": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "recommended_actions": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": ["status", "summary"]
+  },
+  "output_description": "Ticket status and summary.",
+  "implementation_kind": "mock",
+  "implementation_key": "mock.lookup_ticket",
+  "config_schema": {
+    "type": "object",
+    "properties": {}
+  },
+  "mock_response": "Ticket is open and awaiting customer logs.",
+  "status": "draft"
+}
+```
+
+Status update request:
+
+```json
+{
+  "status": "approved"
+}
+```
+
+Minimum response fields:
+
+```text
+id
+project_id
+name
+description
+input_schema
+output_schema
+output_description
+implementation_kind
+implementation_key
+config_schema
+mock_response
+status
+created_at
+updated_at
+```
+
 ### Eval Contracts
 
 Eval contracts are where expectations live.

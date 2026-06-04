@@ -73,6 +73,9 @@ The architecture overview and diagrams are in
 The API contract is generated from OpenAPI and documented in
 [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md).
 
+The canonical manual happy path is documented in
+[`docs/HAPPY_PATH_WALKTHROUGH.md`](docs/HAPPY_PATH_WALKTHROUGH.md).
+
 The active implementation checklist is tracked in
 [`docs/WORK_PLAN.md`](docs/WORK_PLAN.md).
 

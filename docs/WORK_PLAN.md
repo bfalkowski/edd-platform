@@ -14,6 +14,8 @@ Planning anchors:
   defines the next implementation backbone.
 - [`API_CONTRACT.md`](API_CONTRACT.md) defines the Phase 2 API backbone to
   implement through FastAPI/OpenAPI.
+- [`HAPPY_PATH_WALKTHROUGH.md`](HAPPY_PATH_WALKTHROUGH.md) is the canonical
+  manual smoke script for validating the product flow.
 
 ## Phase 0: Repo Foundation
 

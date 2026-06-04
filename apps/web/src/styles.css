@@ -224,6 +224,17 @@ textarea {
   width: 100%;
 }
 
+.agent-menu-item span {
+  display: grid;
+  gap: 2px;
+}
+
+.agent-menu-item small {
+  color: #737684;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .agent-menu-item:hover {
   background: #f4f4f6;
 }
@@ -266,6 +277,30 @@ textarea {
   display: flex;
   flex: 0 0 auto;
   gap: 12px;
+}
+
+.run-mode-shell {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.run-mode-heading {
+  display: grid;
+  gap: 2px;
+  max-width: 290px;
+}
+
+.run-mode-heading > span {
+  color: #737684;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.run-mode-heading small {
+  color: #737684;
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .status-pill {
@@ -717,6 +752,67 @@ dd {
 
 .tool-marketplace-item.active span {
   color: #202123;
+}
+
+.tool-marketplace-item.draft {
+  cursor: pointer;
+}
+
+.tool-marketplace-item em {
+  color: #202123;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.tool-empty-state {
+  background: #f7f7f8;
+  border: 1px dashed #d7d7dc;
+  border-radius: 18px;
+  color: #606373;
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+}
+
+.tool-empty-state h3 {
+  color: #202123;
+}
+
+.tool-definition-form {
+  background: #ffffff;
+  border: 1px solid #e5e5e8;
+  border-radius: 22px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.tool-definition-form label {
+  color: #737684;
+  display: grid;
+  font-size: 14px;
+  font-weight: 850;
+  gap: 8px;
+}
+
+.tool-definition-form input,
+.tool-definition-form textarea {
+  background: #ffffff;
+  border: 1px solid #dedee3;
+  border-radius: 14px;
+  color: #202124;
+  font: inherit;
+  line-height: 1.35;
+  padding: 12px 14px;
+}
+
+.tool-definition-form textarea {
+  resize: vertical;
+}
+
+.tool-definition-form .schema-editor {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
 }
 
 .edd-loop-header {
@@ -1379,6 +1475,15 @@ dd {
   .topbar-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .run-mode-shell {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .run-mode-heading {
+    max-width: none;
   }
 
   .topbar-run-mode {

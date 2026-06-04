@@ -254,11 +254,32 @@ class ToolDefinition(BaseModel):
     name: str
     description: str
     input_schema: Dict[str, object]
+    output_schema: Optional[Dict[str, object]] = None
     output_description: str
+    implementation_kind: Literal["http", "python", "mcp", "builtin", "mock"] = "builtin"
     implementation_key: str
+    config_schema: Dict[str, object] = Field(default_factory=dict)
+    mock_response: Optional[str] = None
     status: Literal["draft", "approved"]
     created_at: datetime
     updated_at: datetime
+
+
+class ToolDefinitionCreate(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    input_schema: Dict[str, object] = Field(default_factory=dict)
+    output_schema: Optional[Dict[str, object]] = None
+    output_description: str = Field(min_length=1)
+    implementation_kind: Literal["http", "python", "mcp", "builtin", "mock"] = "mock"
+    implementation_key: str = Field(min_length=1)
+    config_schema: Dict[str, object] = Field(default_factory=dict)
+    mock_response: Optional[str] = None
+    status: Literal["draft", "approved"] = "draft"
+
+
+class ToolDefinitionUpdate(BaseModel):
+    status: Optional[Literal["draft", "approved"]] = None
 
 
 class AgentRunCreate(BaseModel):
@@ -598,8 +619,19 @@ default_tool = ToolDefinition(
         },
         "required": ["zip_code"],
     },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "source": {"type": "string"},
+        },
+        "required": ["summary"],
+    },
     output_description="Current temperature and conditions.",
+    implementation_kind="builtin",
     implementation_key="open_meteo_weather",
+    config_schema={},
+    mock_response="Current weather for 06511 New Haven, CT: 76°F and clear sky.",
     status="approved",
     created_at=seeded_at,
     updated_at=seeded_at,
@@ -794,6 +826,45 @@ def create_artifact(
     _artifacts[artifact.id] = artifact
     store.save_record("artifacts", artifact.id, artifact)
     return artifact
+
+
+def tool_definition_artifact_body(tool: ToolDefinition) -> str:
+    return (
+        f"Description\n{tool.description}\n\n"
+        f"Status\n{tool.status}\n\n"
+        f"Implementation kind\n{tool.implementation_kind}\n\n"
+        f"Implementation key\n{tool.implementation_key}\n\n"
+        f"Input schema\n{json.dumps(tool.input_schema, indent=2, sort_keys=True)}\n\n"
+        f"Output schema\n{json.dumps(tool.output_schema or {}, indent=2, sort_keys=True)}\n\n"
+        f"Output description\n{tool.output_description}\n\n"
+        f"Config schema\n{json.dumps(tool.config_schema, indent=2, sort_keys=True)}\n\n"
+        f"Mock response\n{tool.mock_response or ''}"
+    )
+
+
+def upsert_tool_definition_artifact(tool: ToolDefinition, now: datetime) -> ArtifactRecord:
+    existing = find_artifact_by_type_and_artifact_id("TOOL_DEFINITION", tool.id)
+    if existing is not None:
+        updated = existing.model_copy(
+            update={
+                "title": tool.name,
+                "body": tool_definition_artifact_body(tool),
+                "updated_at": now,
+            }
+        )
+        _artifacts[updated.id] = updated
+        store.save_record("artifacts", updated.id, updated)
+        return updated
+    return create_artifact(
+        project_id=tool.project_id,
+        artifact_type="TOOL_DEFINITION",
+        artifact_id=tool.id,
+        title=tool.name,
+        body=tool_definition_artifact_body(tool),
+        source="tool-registry",
+        agent_design_id=None,
+        now=now,
+    )
 
 
 def link_artifacts(
@@ -1065,6 +1136,19 @@ def validate_allowed_tool_names(project_id: str, allowed_tool_names: List[str]) 
             status_code=400,
             detail=f"Unknown or unapproved tools: {', '.join(unknown_tools)}.",
         )
+
+
+def validate_json_schema_object(schema: Dict[str, object], field_name: str) -> None:
+    schema_type = schema.get("type")
+    if schema_type is not None and schema_type != "object":
+        raise HTTPException(status_code=400, detail=f"{field_name} must be an object schema.")
+    properties = schema.get("properties")
+    if properties is not None and not isinstance(properties, dict):
+        raise HTTPException(status_code=400, detail=f"{field_name}.properties must be an object.")
+    required = schema.get("required")
+    if required is not None:
+        if not isinstance(required, list) or not all(isinstance(item, str) for item in required):
+            raise HTTPException(status_code=400, detail=f"{field_name}.required must be a list of strings.")
 
 
 def build_live_judge_prompt(
@@ -2916,6 +3000,66 @@ def list_tool_definitions(project_id: str) -> List[ToolDefinition]:
     get_project_or_404(project_id)
     tools = [tool for tool in _tool_definitions.values() if tool.project_id == project_id]
     return sorted(tools, key=lambda tool: tool.name)
+
+
+@app.post("/api/projects/{project_id}/tools", status_code=201)
+def create_tool_definition(project_id: str, payload: ToolDefinitionCreate) -> ToolDefinition:
+    get_project_or_404(project_id)
+    name = payload.name.strip()
+    existing_names = {
+        tool.name
+        for tool in _tool_definitions.values()
+        if tool.project_id == project_id
+    }
+    if name in existing_names:
+        raise HTTPException(status_code=409, detail="Tool name already exists.")
+    validate_json_schema_object(payload.input_schema, "input_schema")
+    if payload.output_schema is not None:
+        validate_json_schema_object(payload.output_schema, "output_schema")
+    validate_json_schema_object(payload.config_schema, "config_schema")
+
+    now = datetime.now(timezone.utc)
+    tool = ToolDefinition(
+        id=f"tool_{uuid4().hex[:12]}",
+        project_id=project_id,
+        name=name,
+        description=payload.description.strip(),
+        input_schema=payload.input_schema or {"type": "object", "properties": {}},
+        output_schema=payload.output_schema,
+        output_description=payload.output_description.strip(),
+        implementation_kind=payload.implementation_kind,
+        implementation_key=payload.implementation_key.strip(),
+        config_schema=payload.config_schema,
+        mock_response=payload.mock_response,
+        status=payload.status,
+        created_at=now,
+        updated_at=now,
+    )
+    _tool_definitions[tool.id] = tool
+    store.save_record("tool_definitions", tool.id, tool)
+    upsert_tool_definition_artifact(tool, now)
+    return tool
+
+
+@app.patch("/api/projects/{project_id}/tools/{tool_id}")
+def update_tool_definition(
+    project_id: str,
+    tool_id: str,
+    payload: ToolDefinitionUpdate,
+) -> ToolDefinition:
+    get_project_or_404(project_id)
+    existing = _tool_definitions.get(tool_id)
+    if existing is None or existing.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Tool not found.")
+    if payload.status is None:
+        return existing
+
+    now = datetime.now(timezone.utc)
+    updated = existing.model_copy(update={"status": payload.status, "updated_at": now})
+    _tool_definitions[updated.id] = updated
+    store.save_record("tool_definitions", updated.id, updated)
+    upsert_tool_definition_artifact(updated, now)
+    return updated
 
 
 @app.post("/api/projects/{project_id}/artifacts/{artifact_id}/evaluate", status_code=201)

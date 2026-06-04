@@ -256,6 +256,147 @@ def test_list_tool_definitions_includes_approved_weather_tool() -> None:
     assert tools[0]["implementation_key"] == "open_meteo_weather"
 
 
+def test_create_tool_definition_with_input_and_output_schema() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/projects/project_default/tools",
+        json={
+            "name": "lookup_ticket",
+            "description": "Look up a support ticket by id.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "ticket_id": {"type": "string", "description": "Ticket id."}
+                },
+                "required": ["ticket_id"],
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string"},
+                    "summary": {"type": "string"},
+                },
+                "required": ["status", "summary"],
+            },
+            "output_description": "Ticket status and summary.",
+            "implementation_kind": "mock",
+            "implementation_key": "mock.lookup_ticket",
+            "config_schema": {"type": "object", "properties": {}},
+            "mock_response": "Ticket is open and awaiting customer logs.",
+        },
+    )
+
+    assert response.status_code == 201
+    tool = response.json()
+    assert tool["name"] == "lookup_ticket"
+    assert tool["status"] == "draft"
+    assert tool["implementation_kind"] == "mock"
+    assert tool["input_schema"]["required"] == ["ticket_id"]
+    assert tool["output_schema"]["required"] == ["status", "summary"]
+
+    tools_response = client.get("/api/projects/project_default/tools")
+    assert "lookup_ticket" in {tool["name"] for tool in tools_response.json()}
+
+    artifacts_response = client.get("/api/projects/project_default/artifacts")
+    tool_artifact = next(
+        artifact
+        for artifact in artifacts_response.json()
+        if artifact["artifact_type"] == "TOOL_DEFINITION"
+        and artifact["artifact_id"] == tool["id"]
+    )
+    assert "Input schema" in tool_artifact["body"]
+    assert "Output schema" in tool_artifact["body"]
+
+
+def test_create_tool_definition_rejects_duplicate_names() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/projects/project_default/tools",
+        json={
+            "name": "get_weather",
+            "description": "Duplicate weather tool.",
+            "input_schema": {"type": "object", "properties": {}},
+            "output_description": "Weather output.",
+            "implementation_key": "mock.duplicate_weather",
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_create_tool_definition_rejects_non_object_input_schema() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/projects/project_default/tools",
+        json={
+            "name": "bad_schema_tool",
+            "description": "Invalid schema.",
+            "input_schema": {"type": "string"},
+            "output_description": "Bad output.",
+            "implementation_key": "mock.bad_schema",
+        },
+    )
+
+    assert response.status_code == 400
+
+
+def test_approve_tool_definition_then_allow_for_agent() -> None:
+    client = TestClient(app)
+    tool_response = client.post(
+        "/api/projects/project_default/tools",
+        json={
+            "name": "lookup_account",
+            "description": "Look up an account by id.",
+            "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}}},
+            "output_description": "Account summary.",
+            "implementation_key": "mock.lookup_account",
+            "mock_response": "Account is active.",
+        },
+    )
+    tool = tool_response.json()
+    agent_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Account Agent",
+            "intent": "Use approved account tools.",
+            "allowed_tool_names": [],
+        },
+    )
+    agent = agent_response.json()["agent"]
+
+    rejected_response = client.patch(
+        f"/api/projects/project_default/agent-designs/{agent['id']}",
+        json={"allowed_tool_names": ["lookup_account"]},
+    )
+    assert rejected_response.status_code == 400
+
+    approve_response = client.patch(
+        f"/api/projects/project_default/tools/{tool['id']}",
+        json={"status": "approved"},
+    )
+    assert approve_response.status_code == 200
+    assert approve_response.json()["status"] == "approved"
+
+    allow_response = client.patch(
+        f"/api/projects/project_default/agent-designs/{agent['id']}",
+        json={"allowed_tool_names": ["lookup_account"]},
+    )
+    assert allow_response.status_code == 200
+    assert allow_response.json()["allowed_tool_names"] == ["lookup_account"]
+
+    artifacts_response = client.get("/api/projects/project_default/artifacts")
+    tool_artifact = next(
+        artifact
+        for artifact in artifacts_response.json()
+        if artifact["artifact_type"] == "TOOL_DEFINITION"
+        and artifact["artifact_id"] == tool["id"]
+    )
+    assert "Status\napproved" in tool_artifact["body"]
+
+
 def test_update_agent_design_tool_allowlist() -> None:
     client = TestClient(app)
     create_response = client.post(

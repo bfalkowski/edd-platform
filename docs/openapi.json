@@ -2546,6 +2546,11 @@
       },
       "ToolDefinition": {
         "properties": {
+          "config_schema": {
+            "additionalProperties": true,
+            "title": "Config Schema",
+            "type": "object"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -2563,10 +2568,33 @@
             "title": "Implementation Key",
             "type": "string"
           },
+          "implementation_kind": {
+            "default": "builtin",
+            "enum": [
+              "http",
+              "python",
+              "mcp",
+              "builtin",
+              "mock"
+            ],
+            "title": "Implementation Kind",
+            "type": "string"
+          },
           "input_schema": {
             "additionalProperties": true,
             "title": "Input Schema",
             "type": "object"
+          },
+          "mock_response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mock Response"
           },
           "name": {
             "title": "Name",
@@ -2575,6 +2603,18 @@
           "output_description": {
             "title": "Output Description",
             "type": "string"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
           },
           "project_id": {
             "title": "Project Id",
@@ -2607,6 +2647,113 @@
           "updated_at"
         ],
         "title": "ToolDefinition",
+        "type": "object"
+      },
+      "ToolDefinitionCreate": {
+        "properties": {
+          "config_schema": {
+            "additionalProperties": true,
+            "title": "Config Schema",
+            "type": "object"
+          },
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "implementation_key": {
+            "minLength": 1,
+            "title": "Implementation Key",
+            "type": "string"
+          },
+          "implementation_kind": {
+            "default": "mock",
+            "enum": [
+              "http",
+              "python",
+              "mcp",
+              "builtin",
+              "mock"
+            ],
+            "title": "Implementation Kind",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "mock_response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mock Response"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "output_description": {
+            "minLength": 1,
+            "title": "Output Description",
+            "type": "string"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "status": {
+            "default": "draft",
+            "enum": [
+              "draft",
+              "approved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "output_description",
+          "implementation_key"
+        ],
+        "title": "ToolDefinitionCreate",
+        "type": "object"
+      },
+      "ToolDefinitionUpdate": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "draft",
+                  "approved"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "ToolDefinitionUpdate",
         "type": "object"
       },
       "TraceRef": {
@@ -5450,6 +5597,111 @@
           }
         },
         "summary": "List Tool Definitions"
+      },
+      "post": {
+        "operationId": "create_tool_definition_api_projects__project_id__tools_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolDefinitionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolDefinition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Tool Definition"
+      }
+    },
+    "/api/projects/{project_id}/tools/{tool_id}": {
+      "patch": {
+        "operationId": "update_tool_definition_api_projects__project_id__tools__tool_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolDefinitionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolDefinition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Tool Definition"
       }
     },
     "/api/projects/{project_id}/trace-refs": {
