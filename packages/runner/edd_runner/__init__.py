@@ -6,7 +6,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List
+from typing import Any, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -47,6 +47,8 @@ class RunnerResult(BaseModel):
     response: str
     tool_calls: List[RunnerToolCall]
     evidence: List[str]
+    trace_id: Optional[str] = None
+    trace_url: Optional[str] = None
     created_at: datetime
 
 
@@ -119,6 +121,26 @@ def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
     return tools
 
 
+def build_langfuse_langchain_callbacks():
+    if not langfuse_tracing_enabled():
+        return []
+    try:
+        from langfuse import get_client
+        from langfuse.langchain import CallbackHandler
+    except ImportError:
+        return []
+
+    langfuse = get_client()
+    trace_id = langfuse.get_current_trace_id()
+    if not trace_id:
+        return [CallbackHandler()]
+    observation_id = langfuse.get_current_observation_id()
+    trace_context = {"trace_id": trace_id}
+    if observation_id:
+        trace_context["parent_span_id"] = observation_id
+    return [CallbackHandler(trace_context=trace_context)]
+
+
 def openai_config_from_env() -> OpenAIRunnerConfig:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -178,6 +200,93 @@ def run_openai_agent(
     tool_definitions: List[RunnerToolDefinition] | None = None,
 ) -> RunnerResult:
     """Run a scenario through a LangGraph-backed LangChain agent."""
+    if langfuse_tracing_enabled():
+        return run_openai_agent_with_langfuse(
+            agent=agent,
+            scenario=scenario,
+            config=config,
+            tool_definitions=tool_definitions,
+        )
+    return run_openai_agent_core(
+        agent=agent,
+        scenario=scenario,
+        config=config,
+        tool_definitions=tool_definitions,
+    )
+
+
+def langfuse_tracing_enabled() -> bool:
+    return bool(
+        os.environ.get("LANGFUSE_PUBLIC_KEY", "").strip()
+        and os.environ.get("LANGFUSE_SECRET_KEY", "").strip()
+    )
+
+
+def run_openai_agent_with_langfuse(
+    *,
+    agent: RunnerAgentDesign,
+    scenario: RunnerScenario,
+    config: OpenAIRunnerConfig,
+    tool_definitions: List[RunnerToolDefinition] | None = None,
+) -> RunnerResult:
+    try:
+        from langfuse import get_client
+    except ImportError:
+        return run_openai_agent_core(
+            agent=agent,
+            scenario=scenario,
+            config=config,
+            tool_definitions=tool_definitions,
+        )
+
+    langfuse = get_client()
+    with langfuse.start_as_current_observation(
+        as_type="agent",
+        name=f"edd-agent-run:{agent.name}",
+        input={
+            "agent_id": agent.id,
+            "agent_name": agent.name,
+            "intent": agent.intent,
+            "scenario": scenario.input,
+        },
+        metadata={
+            "source": "edd-platform",
+            "runner_mode": "live",
+            "allowed_tools": agent.allowed_tool_names,
+        },
+    ) as observation:
+        result = run_openai_agent_core(
+            agent=agent,
+            scenario=scenario,
+            config=config,
+            tool_definitions=tool_definitions,
+        )
+        observation.update(
+            output={
+                "response": result.response,
+                "tool_calls": [tool.model_dump() for tool in result.tool_calls],
+            }
+        )
+        trace_id = langfuse.get_current_trace_id() or observation.trace_id
+        trace_url = langfuse.get_trace_url(trace_id=trace_id) if trace_id else None
+    langfuse.flush()
+    return result.model_copy(
+        update={
+            "trace_id": trace_id,
+            "trace_url": trace_url,
+            "evidence": result.evidence
+            + [f"Linked Langfuse trace {trace_id}." if trace_id else "Langfuse trace unavailable."],
+        }
+    )
+
+
+def run_openai_agent_core(
+    *,
+    agent: RunnerAgentDesign,
+    scenario: RunnerScenario,
+    config: OpenAIRunnerConfig,
+    tool_definitions: List[RunnerToolDefinition] | None = None,
+) -> RunnerResult:
     instructions = (
         "You are the candidate agent being designed in an eval-driven workflow. "
         "Stay inside the design intent, gather or cite relevant evidence from the scenario, "
@@ -276,7 +385,12 @@ def run_langchain_agent(
             f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}"
         ),
     )
-    result = graph.invoke({"messages": [{"role": "user", "content": scenario.input}]})
+    callbacks = build_langfuse_langchain_callbacks()
+    invoke_config = {"callbacks": callbacks} if callbacks else None
+    result = graph.invoke(
+        {"messages": [{"role": "user", "content": scenario.input}]},
+        config=invoke_config,
+    )
     messages = result.get("messages", [])
     response_text = ""
     tool_calls: List[RunnerToolCall] = []
@@ -326,6 +440,8 @@ __all__ = [
     "RunnerToolCall",
     "RunnerToolDefinition",
     "build_langchain_tools",
+    "build_langfuse_langchain_callbacks",
+    "langfuse_tracing_enabled",
     "openai_config_from_env",
     "run_mock_agent",
     "run_openai_agent",

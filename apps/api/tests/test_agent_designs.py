@@ -1899,6 +1899,94 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
     assert "41°F" in run["artifact"]["body"]
 
 
+def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Traced Live Agent",
+            "intent": "Gather evidence and recommend a safe next action.",
+        },
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Traced live scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Traced live contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "mentions_safe_next_action",
+                    "type": "output_contains",
+                    "value": "safe next action",
+                }
+            ],
+        },
+    ).json()
+
+    def fake_config_from_env():
+        return object()
+
+    def fake_run_openai_agent(agent_design, scenario_input, config, tool_definitions):
+        return RunnerResult(
+            id="run_live_traced_fake",
+            agent_design_id=agent_design.id,
+            mode="live",
+            scenario_input=scenario_input.input,
+            response="Live response with evidence and a safe next action.",
+            tool_calls=[RunnerToolCall(name="openai.responses", output="test-model")],
+            evidence=["Used fake OpenAI provider in test."],
+            trace_id="0123456789abcdef0123456789abcdef",
+            trace_url="https://cloud.langfuse.com/project/demo/traces/0123456789abcdef0123456789abcdef",
+            created_at=datetime.now(timezone.utc),
+        )
+
+    monkeypatch.setattr(api_main, "openai_config_from_env", fake_config_from_env)
+    monkeypatch.setattr(api_main, "run_openai_agent", fake_run_openai_agent)
+
+    run_response = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+            "mode": "live",
+        },
+    )
+
+    assert run_response.status_code == 201
+    run = run_response.json()
+    trace_refs_response = client.get(
+        "/api/projects/project_default/trace-refs",
+        params={"run_id": run["id"]},
+    )
+    assert trace_refs_response.status_code == 200
+    trace_refs = trace_refs_response.json()
+    assert trace_refs[0]["external_trace_id"] == "0123456789abcdef0123456789abcdef"
+    assert trace_refs[0]["run_id"] == run["id"]
+    assert trace_refs[0]["metadata"]["runner_mode"] == "live"
+
+    trace_artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "TRACE_REF"},
+    )
+    trace_artifact = trace_artifacts_response.json()[0]
+    assert "cloud.langfuse.com" in trace_artifact["body"]
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{trace_artifact['id']}/links"
+    )
+    relationship_types = {link["relationship_type"] for link in links_response.json()}
+    assert "OBSERVES" in relationship_types
+
+
 def test_live_run_requires_openai_api_key(monkeypatch) -> None:
     client = TestClient(app)
     create_response = client.post(

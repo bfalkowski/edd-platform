@@ -114,7 +114,7 @@ The API runs on `http://127.0.0.1:8001`. The web console runs on Vite's
 reported local URL, usually `http://localhost:5173`.
 
 By default, the API connects to
-`postgresql://edd_platform:edd_platform@127.0.0.1:5432/edd_platform`.
+`postgresql://edd_platform:edd_platform@127.0.0.1:15432/edd_platform`.
 Set `EDD_PLATFORM_DATABASE_URL` to point at a different Postgres database.
 Tests use `EDD_PLATFORM_STORAGE_BACKEND=memory` so CI does not require a
 database service.
@@ -122,6 +122,26 @@ database service.
 Live OpenAI runs are opt-in. Set `OPENAI_API_KEY` before starting the API, then
 choose `Live OpenAI` in the playground. The default model is `gpt-5-nano`; set
 `EDD_OPENAI_MODEL` to use a different OpenAI model.
+
+Langfuse tracing is local-first. Start the local Langfuse stack with:
+
+```bash
+./scripts/dev_langfuse.sh
+```
+
+That starts Postgres, Langfuse, the API, and the web console. Langfuse runs at
+`http://localhost:3001` with seeded local credentials:
+
+```text
+admin@local.dev / local-demo-password
+LANGFUSE_PUBLIC_KEY=pk-lf-local-demo
+LANGFUSE_SECRET_KEY=sk-lf-local-demo
+```
+
+Canonical live runs created through `POST /api/projects/{project_id}/runs` are
+wrapped in a Langfuse trace when `LANGFUSE_PUBLIC_KEY` and
+`LANGFUSE_SECRET_KEY` are set. The platform automatically creates a linked
+`TRACE_REF` evidence artifact.
 
 Run tests and build checks:
 
@@ -134,3 +154,13 @@ Seed the deterministic customer triage demo after the app is running:
 ```bash
 python scripts/seed_customer_triage_demo.py
 ```
+
+Run the live OpenAI plus local Langfuse E2E after `./scripts/dev_langfuse.sh`
+is running and `OPENAI_API_KEY` is exported:
+
+```bash
+python scripts/live_langfuse_e2e.py
+```
+
+The script prints the platform run id, eval result id, score, Langfuse trace id,
+and Langfuse trace URL.

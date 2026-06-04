@@ -2317,6 +2317,25 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
     )
     _runs[run.id] = run
     store.save_record("runs", run.id, run)
+    if runner_result.trace_id and runner_result.trace_url:
+        create_trace_ref_record(
+            project_id=project_id,
+            payload=TraceRefCreate(
+                provider="langfuse",
+                external_trace_id=runner_result.trace_id,
+                run_id=run.id,
+                url=runner_result.trace_url,
+                metadata={
+                    "runner_mode": run.mode,
+                    "provider": run.provider,
+                    "agent_version_id": run.agent_version_id,
+                    "scenario_id": run.scenario_id,
+                    "eval_contract_id": run.eval_contract_id,
+                },
+                related_artifact_ids=run.artifact_ids,
+            ),
+            now=datetime.now(timezone.utc),
+        )
     return run
 
 

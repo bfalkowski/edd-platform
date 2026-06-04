@@ -33,6 +33,7 @@ stop_port 5173
 echo "Starting API on http://127.0.0.1:8001"
 (
   cd "$ROOT_DIR/apps/api"
+  export EDD_PLATFORM_DATABASE_URL="${EDD_PLATFORM_DATABASE_URL:-postgresql://edd_platform:edd_platform@127.0.0.1:15432/edd_platform}"
   uv run uvicorn edd_platform_api.main:app --host 127.0.0.1 --port 8001
 ) &
 API_PID=$!

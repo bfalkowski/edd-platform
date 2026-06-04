@@ -163,6 +163,9 @@ This phase makes the backbone usable without hiding the system model.
 - [x] Add Langfuse adapter package implementation.
 - [x] Import or link Langfuse traces as evidence artifacts.
 - [x] Show trace links inside evidence context.
+- [x] Instrument canonical live agent runs with Langfuse trace capture.
+- [x] Auto-create trace references for traced live runs.
+- [x] Add live E2E script for agent creation, live run, live eval, and trace lookup.
 - [x] Keep platform artifacts as the source of truth.
 
 ## Phase 6: Context Intelligence

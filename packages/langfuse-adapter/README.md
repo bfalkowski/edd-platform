@@ -22,8 +22,8 @@ from edd_langfuse_adapter import build_trace_ref_payload
 payload = build_trace_ref_payload(
     trace_id="trace_123",
     run_id="run_abc",
-    base_url="https://cloud.langfuse.com",
-    langfuse_project_id="project_demo",
+    base_url="http://localhost:3001",
+    langfuse_project_id="local-demo",
     related_artifact_ids=["artifact_eval"],
 )
 ```
