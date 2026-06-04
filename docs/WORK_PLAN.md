@@ -175,10 +175,10 @@ This phase makes the backbone usable without hiding the system model.
 
 ## Phase 7: Portfolio Polish
 
-- [ ] Add GitHub Actions CI.
+- [x] Add GitHub Actions CI.
 - [ ] Add README screenshot.
-- [ ] Add a public demo-ready customer triage example.
-- [ ] Add seeded sample data for local demo mode.
+- [x] Add a public demo-ready customer triage example.
+- [x] Add seeded sample data for local demo mode.
 - [ ] Keep HLD index aligned with implementation.
 
 ## Current UI Status

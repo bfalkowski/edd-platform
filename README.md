@@ -57,8 +57,9 @@ The repo now has a minimal local product loop:
 12. Give new agents an approved `get_weather` tool from the platform registry;
     live runs adapt that approved tool into a LangChain/LangGraph tool loop.
 
-This is intentionally small. The next layers are editable tool allowlists,
-judge prompts, gates, failure packets, and richer evidence context.
+The current loop also supports eval contracts, failure packets, fix proposals,
+candidate versions, comparisons, gates, trace references, and bounded evidence
+summaries.
 
 The evidence context design is captured in
 [`docs/hld/HLD-001-artifact-retrieval-and-evidence-context.md`](docs/hld/HLD-001-artifact-retrieval-and-evidence-context.md).
@@ -126,4 +127,10 @@ Run tests and build checks:
 
 ```bash
 ./scripts/test.sh
+```
+
+Seed the deterministic customer triage demo after the app is running:
+
+```bash
+python scripts/seed_customer_triage_demo.py
 ```
