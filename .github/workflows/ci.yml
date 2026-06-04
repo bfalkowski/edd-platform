@@ -7,7 +7,31 @@ on:
       - main
 
 jobs:
-  checks:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Scan tracked files for secrets
+        run: python scripts/secret_scan.py
+
+  script-sanity:
+    name: Script and syntax sanity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts
+        run: bash -n scripts/*.sh
+
+      - name: Check Python syntax
+        run: python scripts/check_python_syntax.py
+
+  api-tests:
+    name: API tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -15,6 +39,94 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+
+      - name: Run deterministic API tests
+        run: uv run --extra dev pytest
+        working-directory: apps/api
+
+  postgres-storage:
+    name: Postgres storage smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: edd_platform
+          POSTGRES_PASSWORD: edd_platform
+          POSTGRES_DB: edd_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edd_platform -d edd_platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run Postgres-backed storage test
+        run: uv run --extra dev pytest tests/test_storage.py -k postgres_json_store
+        working-directory: apps/api
+        env:
+          EDD_PLATFORM_TEST_DATABASE_URL: postgresql://edd_platform:edd_platform@127.0.0.1:5432/edd_platform_test
+
+  langfuse-adapter-tests:
+    name: Langfuse adapter tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run adapter tests
+        run: uv run --extra dev pytest
+        working-directory: packages/langfuse-adapter
+
+  openapi-contract:
+    name: OpenAPI contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Lint OpenAPI contract
+        run: uv run --extra dev python ../../scripts/lint_openapi.py
+        working-directory: apps/api
+
+      - name: Verify committed OpenAPI is current
+        run: |
+          uv run --extra dev python ../../scripts/export_openapi.py --output /tmp/openapi.json
+          diff -u ../../docs/openapi.json /tmp/openapi.json
+        working-directory: apps/api
+
+  compose-config:
+    name: Docker Compose config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate platform compose file
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate local Langfuse compose overlay
+        run: docker compose -f docker-compose.yml -f docker-compose.langfuse.yml config --quiet
+
+  web-build:
+    name: Web build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -27,5 +139,6 @@ jobs:
         run: npm ci
         working-directory: apps/web
 
-      - name: Run checks
-        run: ./scripts/test.sh
+      - name: Build web
+        run: npm run build
+        working-directory: apps/web
