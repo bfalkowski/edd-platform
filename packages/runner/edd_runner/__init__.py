@@ -12,7 +12,7 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RunnerAgentDesign(BaseModel):
@@ -35,8 +35,12 @@ class RunnerToolDefinition(BaseModel):
     name: str
     description: str
     input_schema: dict[str, Any]
+    output_schema: Optional[dict[str, Any]] = None
     output_description: str
+    implementation_kind: str = "builtin"
     implementation_key: str
+    config_schema: dict[str, Any] = Field(default_factory=dict)
+    mock_response: Optional[str] = None
     status: str
 
 
@@ -171,6 +175,7 @@ def get_weather(zip_code: str) -> str:
 
 def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
     try:
+        from langchain_core.tools import StructuredTool
         from langchain_core.tools import tool
     except ImportError as exc:
         raise RuntimeError("LangChain tools require langchain-core to be installed.") from exc
@@ -187,6 +192,20 @@ def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
                 return get_weather(zip_code)
 
             tools.append(weather_tool)
+        elif definition.implementation_kind == "mock" or definition.implementation_key.startswith("mock."):
+            def make_mock_tool(response: str):
+                def mock_tool(**_kwargs: Any) -> str:
+                    return response
+
+                return mock_tool
+
+            tools.append(
+                StructuredTool.from_function(
+                    func=make_mock_tool(definition.mock_response or definition.output_description),
+                    name=definition.name,
+                    description=definition.description,
+                )
+            )
     return tools
 
 

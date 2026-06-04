@@ -2504,8 +2504,8 @@ function App() {
             <section>
               <h3>Assigned to this agent</h3>
               <p>
-                Only approved tools appear here. A tool still needs a runner adapter before live
-                execution can call it.
+                Only approved tools appear here. Built-in and mock tools can run through the
+                runner; HTTP, MCP, and Python adapters come next.
               </p>
             </section>
             <section className="tool-marketplace-list">

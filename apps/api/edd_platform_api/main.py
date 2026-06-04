@@ -1115,8 +1115,12 @@ def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[Runner
             name=tool.name,
             description=tool.description,
             input_schema=tool.input_schema,
+            output_schema=tool.output_schema,
             output_description=tool.output_description,
+            implementation_kind=tool.implementation_kind,
             implementation_key=tool.implementation_key,
+            config_schema=tool.config_schema,
+            mock_response=tool.mock_response,
             status=tool.status,
         )
         for tool in _tool_definitions.values()

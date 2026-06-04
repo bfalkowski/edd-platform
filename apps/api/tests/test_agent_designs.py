@@ -505,6 +505,34 @@ def test_approved_weather_tool_adapts_to_langchain_tool(monkeypatch) -> None:
     )
 
 
+def test_approved_mock_tool_adapts_to_langchain_tool() -> None:
+    tools = build_langchain_tools(
+        [
+            RunnerToolDefinition(
+                name="lookup_account",
+                description="Look up an account by id.",
+                input_schema={
+                    "type": "object",
+                    "properties": {"account_id": {"type": "string"}},
+                    "required": ["account_id"],
+                },
+                output_schema={
+                    "type": "object",
+                    "properties": {"summary": {"type": "string"}},
+                },
+                output_description="Account summary.",
+                implementation_kind="mock",
+                implementation_key="mock.lookup_account",
+                mock_response="Account is active.",
+                status="approved",
+            )
+        ]
+    )
+
+    assert tools[0].name == "lookup_account"
+    assert tools[0].invoke({"account_id": "acct_123"}) == "Account is active."
+
+
 def test_artifact_links_create_and_list_related_artifacts() -> None:
     client = TestClient(app)
 
@@ -2016,22 +2044,13 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
 
     def fake_run_openai_agent(agent_design, scenario, config, tool_definitions):
         assert agent_design.allowed_tool_names == ["get_weather"]
-        assert tool_definitions == [
-            RunnerToolDefinition(
-                name="get_weather",
-                description="Get current weather for a US ZIP code.",
-                input_schema={
-                    "type": "object",
-                    "properties": {
-                        "zip_code": {"type": "string", "description": "US ZIP code."}
-                    },
-                    "required": ["zip_code"],
-                },
-                output_description="Current temperature and conditions.",
-                implementation_key="open_meteo_weather",
-                status="approved",
-            )
-        ]
+        assert len(tool_definitions) == 1
+        assert tool_definitions[0].name == "get_weather"
+        assert tool_definitions[0].input_schema["required"] == ["zip_code"]
+        assert tool_definitions[0].output_schema is not None
+        assert tool_definitions[0].implementation_kind == "builtin"
+        assert tool_definitions[0].implementation_key == "open_meteo_weather"
+        assert tool_definitions[0].status == "approved"
         return RunnerResult(
             id="run_live_fake",
             agent_design_id=agent_design.id,

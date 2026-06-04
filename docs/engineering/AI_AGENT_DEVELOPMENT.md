@@ -19,6 +19,7 @@ The project uses a small set of steering files:
 
 - `AGENTS.md`: repo rules, product direction, commit constraints
 - `docs/WORK_PLAN.md`: active implementation checklist
+- `docs/engineering/TASK_TRACKING.md`: repo-local task tracking policy
 - `docs/design/FRONTEND_GUIDE.md`: frontend interaction and visual rules
 - `docs/hld/`: canonical high-level designs
 - `docs/decisions/`: short architectural decision records
@@ -33,13 +34,14 @@ The expected development loop is:
 1. Read the relevant steering files.
 2. Select and read the matching local skill in `.agents/skills`.
 3. Read the skill reference file when the task matches a specific workflow.
-4. Translate the request into a small, verifiable outcome.
-5. Update or identify tests where practical.
-6. Make scoped changes.
-7. Run the relevant checks.
-8. Browser-smoke visible UI changes.
-9. Update `docs/WORK_PLAN.md` when milestones move.
-10. Commit only when explicitly asked.
+4. Check the task queue when a repo-local tracker such as Beads is available.
+5. Translate the request into a small, verifiable outcome.
+6. Update or identify tests where practical.
+7. Make scoped changes.
+8. Run the relevant checks.
+9. Browser-smoke visible UI changes.
+10. Update task status and `docs/WORK_PLAN.md` when milestones move.
+11. Commit only when explicitly asked.
 
 This loop is meant to keep AI-assisted work boring, inspectable, and reversible.
 

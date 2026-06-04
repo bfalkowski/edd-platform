@@ -235,9 +235,9 @@ Expected result:
 
 Current limitation:
 
-- Approval and assignment do not guarantee execution for every custom tool yet.
-- The runner must still add adapters for each implementation kind, such as
-  `mock`, `http`, `mcp`, `python`, or `builtin`.
+- Built-in and mock tools can execute through the runner.
+- The runner still needs adapters for other implementation kinds, such as
+  `http`, `mcp`, or `python`.
 
 ## Ad Hoc Run Happy Path
 

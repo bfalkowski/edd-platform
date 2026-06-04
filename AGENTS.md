@@ -83,6 +83,16 @@ implementation rather than after mistakes.
 - Never add `Co-authored-by` trailers to commits.
 - Do not commit secrets, `.env` files, API keys, or local run artifacts.
 
+## Task Tracking
+
+- Use `docs/WORK_PLAN.md` for the public milestone checklist.
+- When Beads is installed, use repo-local Beads tasks for active work, blockers,
+  dependencies, and resume state.
+- Before resuming implementation, check the ready task queue and the work plan.
+- After meaningful work, update task status, verification notes, and the work
+  plan when milestone state changes.
+- Do not commit private scratch notes, secrets, or local-only run artifacts.
+
 ## Product Direction
 
 - This repo is the canonical product surface.
@@ -109,4 +119,6 @@ implementation rather than after mistakes.
 - Prefer fresh code in the new product language over bulk-copying legacy files.
 - If useful code is copied from older repos, rename and simplify it into this repo's model.
 - Follow `docs/engineering/AI_AGENT_DEVELOPMENT.md` for AI-assisted development guardrails.
+- Follow `docs/engineering/TASK_TRACKING.md` when using Beads or another local
+  task tracker to coordinate agent work.
 - Follow `docs/API_CONTRACT.md` before adding or stubbing API routes.
