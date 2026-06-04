@@ -21,7 +21,8 @@ Statuses:
 |---|---|---|---|---|---|
 | Clean-room consolidation | HLD-000 | n/a | n/a | covered | Establishes one repo, one UI, one API. |
 | Evidence artifacts | HLD-001, HLD-002 | covered | partial | covered | Artifact list/search/detail/link exist. |
-| Evidence context packs | HLD-001 | covered | partial | covered | Basic context packs exist; richer purposes remain later. |
+| Evidence context packs | HLD-001 | covered | partial | covered | Purpose-specific deterministic context packs exist for prompt review, fix proposal generation, gate review, and version comparison. |
+| Evidence summaries | HLD-001 | covered | gap | partial | Deterministic and optional live summaries exist with cache and token/cost telemetry; UI display is missing. |
 | Agent design | HLD-002, HLD-003 | covered | covered | covered | Create/list/delete and left-nav UI exist. |
 | Platform tools | HLD-002, HLD-004 | partial | partial | partial | Tool definitions exist; editing/governance UI is missing. |
 | Agent versions | HLD-001, HLD-004 | partial | gap | partial | Create/list/get API exists; versioned runs and comparison are missing. |

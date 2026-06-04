@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from hashlib import sha256
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
@@ -513,6 +514,31 @@ class ContextPack(BaseModel):
     created_at: datetime
 
 
+class EvidenceSummaryCreate(BaseModel):
+    purpose: str = Field(min_length=1)
+    agent_design_id: Optional[str] = None
+    summary_type: str = "CONTEXT_OVERVIEW"
+    mode: Literal["deterministic", "live"] = "deterministic"
+
+
+class EvidenceSummary(BaseModel):
+    id: str
+    project_id: str
+    purpose: str
+    agent_design_id: Optional[str] = None
+    summary_type: str
+    mode: str
+    provider: str
+    model: str
+    summary: str
+    supporting_artifact_ids: List[str]
+    token_usage: Dict[str, object]
+    cost_estimate: Optional[float] = None
+    cache_key: str
+    cache_hit: bool = False
+    created_at: datetime
+
+
 app = FastAPI(title="EDD Platform API")
 store = create_store_from_env()
 seeded_at = datetime.now(timezone.utc)
@@ -550,6 +576,10 @@ _comparisons: Dict[str, Comparison] = store.load_collection("comparisons", Compa
 _artifacts: Dict[str, ArtifactRecord] = store.load_collection("artifacts", ArtifactRecord)
 _artifact_links: Dict[str, ArtifactLink] = store.load_collection("artifact_links", ArtifactLink)
 _tool_definitions: Dict[str, ToolDefinition] = store.load_collection("tool_definitions", ToolDefinition)
+_evidence_summaries: Dict[str, EvidenceSummary] = store.load_collection(
+    "evidence_summaries",
+    EvidenceSummary,
+)
 if default_project.id not in _projects:
     _projects[default_project.id] = default_project
     store.save_record("projects", default_project.id, default_project)
@@ -1096,6 +1126,53 @@ def run_live_judge(prompt: str) -> tuple[str, str, Dict[str, object]]:
         raise RuntimeError(f"OpenAI judge request failed with status {exc.code}: {detail}") from exc
     except URLError as exc:
         raise RuntimeError(f"OpenAI judge request failed: {exc.reason}") from exc
+
+    response_text = extract_response_text(payload)
+    if not response_text:
+        raise RuntimeError(describe_empty_response(payload))
+    token_usage = payload.get("usage", {})
+    if not isinstance(token_usage, dict):
+        token_usage = {}
+    return response_text, config.model, token_usage
+
+
+def run_live_evidence_summary(prompt: str) -> tuple[str, str, Dict[str, object]]:
+    config = openai_config_from_env()
+    body = {
+        "model": config.model,
+        "reasoning": {"effort": "minimal"},
+        "text": {"verbosity": "low"},
+        "input": [
+            {
+                "role": "system",
+                "content": "You summarize bounded evidence for an eval-driven design platform.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        "max_output_tokens": 900,
+    }
+    request = Request(
+        f"{config.base_url}/responses",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=60) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"OpenAI evidence summary request failed with status {exc.code}: {detail}"
+        ) from exc
+    except URLError as exc:
+        raise RuntimeError(f"OpenAI evidence summary request failed: {exc.reason}") from exc
 
     response_text = extract_response_text(payload)
     if not response_text:
@@ -2947,6 +3024,132 @@ def list_artifact_links(project_id: str, artifact_id: str) -> List[ArtifactLink]
     return sorted(links, key=lambda link: link.created_at, reverse=True)
 
 
+CONTEXT_PACK_ARTIFACT_TYPES: Dict[str, set[str]] = {
+    "AGENT_PROMPT_REVIEW": {
+        "AGENT_DESIGN",
+        "AGENT_VERSION",
+        "EVAL_CONTRACT",
+        "JUDGE_PROMPT_TEMPLATE",
+        "GATE",
+        "TRACE_REF",
+    },
+    "SIDE_BY_SIDE_VERSION_COMPARISON": {
+        "COMPARISON",
+        "EVAL_RESULT",
+        "JUDGE_OUTPUT",
+        "FAILURE_PACKET",
+        "FIX_PROPOSAL",
+        "RUN_RESULT",
+        "TRACE_REF",
+    },
+    "FIX_PROPOSAL_GENERATION": {
+        "FAILURE_PACKET",
+        "EVAL_RESULT",
+        "JUDGE_OUTPUT",
+        "FIX_PROPOSAL",
+        "EVAL_CONTRACT",
+        "RUN_RESULT",
+        "TRACE_REF",
+    },
+    "GATE_DECISION_REVIEW": {
+        "GATE",
+        "GATE_DECISION",
+        "COMPARISON",
+        "EVAL_RESULT",
+        "JUDGE_OUTPUT",
+        "FAILURE_PACKET",
+        "TRACE_REF",
+    },
+}
+
+
+def assemble_context_pack_artifacts(
+    *,
+    project_id: str,
+    agent_design_id: Optional[str],
+    purpose: str,
+) -> List[ArtifactRecord]:
+    artifacts = list_project_artifacts(
+        project_id=project_id,
+        agent_design_id=agent_design_id,
+    )
+    allowed_types = CONTEXT_PACK_ARTIFACT_TYPES.get(purpose.strip().upper())
+    if allowed_types is None:
+        return artifacts
+    return [artifact for artifact in artifacts if artifact.artifact_type in allowed_types]
+
+
+def context_pack_cache_key(
+    *,
+    project_id: str,
+    agent_design_id: Optional[str],
+    purpose: str,
+    summary_type: str,
+    mode: str,
+    artifacts: List[ArtifactRecord],
+) -> str:
+    payload = {
+        "project_id": project_id,
+        "agent_design_id": agent_design_id,
+        "purpose": purpose,
+        "summary_type": summary_type,
+        "mode": mode,
+        "artifacts": [
+            {
+                "id": artifact.id,
+                "artifact_type": artifact.artifact_type,
+                "updated_at": artifact.updated_at.isoformat(),
+            }
+            for artifact in artifacts
+        ],
+    }
+    return sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def build_evidence_summary_prompt(
+    *,
+    purpose: str,
+    summary_type: str,
+    artifacts: List[ArtifactRecord],
+) -> str:
+    artifact_blocks = "\n\n".join(
+        (
+            f"Artifact {index}: {artifact.artifact_type} / {artifact.title}\n"
+            f"Source: {artifact.source}\n"
+            f"Body:\n{artifact.body[:1200]}"
+        )
+        for index, artifact in enumerate(artifacts[:12], start=1)
+    )
+    return (
+        "Summarize the evidence context below for a product user. "
+        "Cite only the supplied artifacts. Keep it concise and decision-oriented.\n\n"
+        f"Context purpose: {purpose}\n"
+        f"Summary type: {summary_type}\n\n"
+        f"{artifact_blocks or 'No artifacts are available.'}"
+    )
+
+
+def build_deterministic_evidence_summary(
+    *,
+    purpose: str,
+    artifacts: List[ArtifactRecord],
+) -> str:
+    if not artifacts:
+        return f"No evidence artifacts are available for {purpose}."
+    type_counts: Dict[str, int] = {}
+    for artifact in artifacts:
+        type_counts[artifact.artifact_type] = type_counts.get(artifact.artifact_type, 0) + 1
+    counts = ", ".join(
+        f"{artifact_type.lower()}={count}"
+        for artifact_type, count in sorted(type_counts.items())
+    )
+    titles = "; ".join(artifact.title for artifact in artifacts[:3])
+    return (
+        f"{purpose} context includes {len(artifacts)} evidence artifacts "
+        f"({counts}). Key artifacts: {titles}."
+    )
+
+
 @app.post("/api/projects/{project_id}/context-packs")
 def build_context_pack(project_id: str, payload: ContextPackCreate) -> ContextPack:
     get_project_or_404(project_id)
@@ -2956,15 +3159,92 @@ def build_context_pack(project_id: str, payload: ContextPackCreate) -> ContextPa
     ):
         raise HTTPException(status_code=404, detail="Agent design not found.")
 
-    artifacts = list_project_artifacts(
+    purpose = payload.purpose.strip().upper()
+    artifacts = assemble_context_pack_artifacts(
         project_id=project_id,
         agent_design_id=payload.agent_design_id,
+        purpose=purpose,
     )
     return ContextPack(
         id=f"context_{uuid4().hex[:12]}",
         project_id=project_id,
-        purpose=payload.purpose,
+        purpose=purpose,
         agent_design_id=payload.agent_design_id,
         artifacts=artifacts,
         created_at=datetime.now(timezone.utc),
     )
+
+
+@app.post("/api/projects/{project_id}/evidence-summaries", status_code=201)
+def create_evidence_summary(
+    project_id: str,
+    payload: EvidenceSummaryCreate,
+) -> EvidenceSummary:
+    get_project_or_404(project_id)
+    agent = _agent_designs.get(payload.agent_design_id) if payload.agent_design_id else None
+    if payload.agent_design_id is not None and (
+        agent is None or agent.project_id != project_id
+    ):
+        raise HTTPException(status_code=404, detail="Agent design not found.")
+
+    purpose = payload.purpose.strip().upper()
+    summary_type = payload.summary_type.strip().upper()
+    artifacts = assemble_context_pack_artifacts(
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        purpose=purpose,
+    )
+    cache_key = context_pack_cache_key(
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        purpose=purpose,
+        summary_type=summary_type,
+        mode=payload.mode,
+        artifacts=artifacts,
+    )
+    cached_summary = _evidence_summaries.get(cache_key)
+    if cached_summary is not None:
+        return cached_summary.model_copy(update={"cache_hit": True})
+
+    provider = "platform"
+    model = "deterministic-evidence-summary"
+    token_usage: Dict[str, object] = {}
+    cost_estimate: Optional[float] = None
+    if payload.mode == "live":
+        prompt = build_evidence_summary_prompt(
+            purpose=purpose,
+            summary_type=summary_type,
+            artifacts=artifacts,
+        )
+        try:
+            summary, model, token_usage = run_live_evidence_summary(prompt)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        provider = "openai"
+        cost_estimate = estimate_live_judge_cost(token_usage)
+    else:
+        summary = build_deterministic_evidence_summary(
+            purpose=purpose,
+            artifacts=artifacts,
+        )
+
+    evidence_summary = EvidenceSummary(
+        id=f"summary_{uuid4().hex[:12]}",
+        project_id=project_id,
+        purpose=purpose,
+        agent_design_id=payload.agent_design_id,
+        summary_type=summary_type,
+        mode=payload.mode,
+        provider=provider,
+        model=model,
+        summary=summary,
+        supporting_artifact_ids=[artifact.id for artifact in artifacts],
+        token_usage=token_usage,
+        cost_estimate=cost_estimate,
+        cache_key=cache_key,
+        cache_hit=False,
+        created_at=datetime.now(timezone.utc),
+    )
+    _evidence_summaries[cache_key] = evidence_summary
+    store.save_record("evidence_summaries", cache_key, evidence_summary)
+    return evidence_summary

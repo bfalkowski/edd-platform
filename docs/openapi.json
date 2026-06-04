@@ -1178,6 +1178,145 @@
         "title": "EvalRunResult",
         "type": "object"
       },
+      "EvidenceSummary": {
+        "properties": {
+          "agent_design_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Design Id"
+          },
+          "cache_hit": {
+            "default": false,
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "cache_key": {
+            "title": "Cache Key",
+            "type": "string"
+          },
+          "cost_estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Estimate"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "summary_type": {
+            "title": "Summary Type",
+            "type": "string"
+          },
+          "supporting_artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Artifact Ids",
+            "type": "array"
+          },
+          "token_usage": {
+            "additionalProperties": true,
+            "title": "Token Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "purpose",
+          "summary_type",
+          "mode",
+          "provider",
+          "model",
+          "summary",
+          "supporting_artifact_ids",
+          "token_usage",
+          "cache_key",
+          "created_at"
+        ],
+        "title": "EvidenceSummary",
+        "type": "object"
+      },
+      "EvidenceSummaryCreate": {
+        "properties": {
+          "agent_design_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Design Id"
+          },
+          "mode": {
+            "default": "deterministic",
+            "enum": [
+              "deterministic",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "purpose": {
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "summary_type": {
+            "default": "CONTEXT_OVERVIEW",
+            "title": "Summary Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purpose"
+        ],
+        "title": "EvidenceSummaryCreate",
+        "type": "object"
+      },
       "FailurePacket": {
         "properties": {
           "agent_design_id": {
@@ -3938,6 +4077,55 @@
           }
         },
         "summary": "Get Eval Result"
+      }
+    },
+    "/api/projects/{project_id}/evidence-summaries": {
+      "post": {
+        "operationId": "create_evidence_summary_api_projects__project_id__evidence_summaries_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceSummaryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Evidence Summary"
       }
     },
     "/api/projects/{project_id}/failure-packets": {

@@ -167,11 +167,11 @@ This phase makes the backbone usable without hiding the system model.
 
 ## Phase 6: Context Intelligence
 
-- [ ] Add richer context pack purposes.
-- [ ] Add deterministic context assembly strategies per purpose.
-- [ ] Add optional LLM evidence summaries.
-- [ ] Cache evidence summaries for unchanged context packs.
-- [ ] Record summary token usage and cost telemetry.
+- [x] Add richer context pack purposes.
+- [x] Add deterministic context assembly strategies per purpose.
+- [x] Add optional LLM evidence summaries.
+- [x] Cache evidence summaries for unchanged context packs.
+- [x] Record summary token usage and cost telemetry.
 
 ## Phase 7: Portfolio Polish
 

@@ -347,6 +347,104 @@ artifact_ids
 created_at
 ```
 
+### Context Packs
+
+Context packs assemble project evidence for a specific workflow purpose. They
+are deterministic by default and do not call an LLM.
+
+```text
+POST /api/projects/{project_id}/context-packs
+```
+
+Context pack request:
+
+```json
+{
+  "purpose": "AGENT_PROMPT_REVIEW",
+  "agentDesignId": "agent_123"
+}
+```
+
+Supported purposes:
+
+```text
+AGENT_PROMPT_REVIEW
+SIDE_BY_SIDE_VERSION_COMPARISON
+FIX_PROPOSAL_GENERATION
+GATE_DECISION_REVIEW
+```
+
+Purpose-specific assembly filters the artifact set so each workflow receives
+the evidence it can actually use:
+
+- `AGENT_PROMPT_REVIEW` emphasizes agent design, versions, contracts, judge
+  prompt templates, gates, and trace references.
+- `SIDE_BY_SIDE_VERSION_COMPARISON` emphasizes comparisons, runs, eval results,
+  judge outputs, failure packets, fix proposals, and trace references.
+- `FIX_PROPOSAL_GENERATION` emphasizes open evidence from runs, evals, judge
+  outputs, failure packets, existing fixes, contracts, and trace references.
+- `GATE_DECISION_REVIEW` emphasizes gate definitions, gate decisions,
+  comparisons, eval evidence, failures, judge outputs, and trace references.
+
+Unknown purposes currently fall back to the full project-scoped artifact set.
+
+Minimum response fields:
+
+```text
+id
+project_id
+purpose
+agent_design_id
+artifacts
+created_at
+```
+
+### Evidence Summaries
+
+Evidence summaries synthesize a bounded context pack. Deterministic mode is
+available for CI and local development without provider keys. Live mode is
+optional and calls OpenAI only when explicitly requested.
+
+```text
+POST /api/projects/{project_id}/evidence-summaries
+```
+
+Evidence summary request:
+
+```json
+{
+  "purpose": "FIX_PROPOSAL_GENERATION",
+  "agentDesignId": "agent_123",
+  "summaryType": "WHAT_FAILURES_REMAIN",
+  "mode": "deterministic"
+}
+```
+
+Minimum response fields:
+
+```text
+id
+project_id
+purpose
+agent_design_id
+summary_type
+mode
+provider
+model
+summary
+supporting_artifact_ids
+token_usage
+cost_estimate
+cache_key
+cache_hit
+created_at
+```
+
+The cache key is derived from project id, agent id, purpose, summary type, mode,
+and the selected artifact ids/update times. Repeated requests for an unchanged
+context return the cached summary with `cache_hit=true`. Live summaries record
+token usage and cost estimates when cost-rate environment variables are set.
+
 ### Evaluation
 
 Evaluation judges a run against an eval contract.

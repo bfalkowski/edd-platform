@@ -91,6 +91,139 @@ def test_context_pack_requires_known_agent_design() -> None:
     assert response.status_code == 404
 
 
+def test_context_pack_purposes_select_different_artifact_sets() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Context Strategy Agent", "intent": "Gather evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Context strategy scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Context strategy contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "requires_missing_phrase",
+                    "type": "output_contains",
+                    "value": "purple elephant",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+    client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    )
+    client.post(
+        "/api/projects/project_default/gates",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Context strategy gate",
+            "required_artifact_types": ["EVAL_RESULT"],
+        },
+    )
+
+    fix_pack_response = client.post(
+        "/api/projects/project_default/context-packs",
+        json={"purpose": "FIX_PROPOSAL_GENERATION", "agent_design_id": agent["id"]},
+    )
+    gate_pack_response = client.post(
+        "/api/projects/project_default/context-packs",
+        json={"purpose": "GATE_DECISION_REVIEW", "agent_design_id": agent["id"]},
+    )
+
+    assert fix_pack_response.status_code == 200
+    assert gate_pack_response.status_code == 200
+    fix_types = {artifact["artifact_type"] for artifact in fix_pack_response.json()["artifacts"]}
+    gate_types = {artifact["artifact_type"] for artifact in gate_pack_response.json()["artifacts"]}
+    assert {"EVAL_CONTRACT", "EVAL_RESULT", "FAILURE_PACKET", "JUDGE_OUTPUT", "RUN_RESULT"} <= fix_types
+    assert "GATE" not in fix_types
+    assert {"GATE", "EVAL_RESULT", "FAILURE_PACKET", "JUDGE_OUTPUT"} <= gate_types
+    assert "AGENT_DESIGN" not in gate_types
+
+
+def test_evidence_summary_is_cached_for_unchanged_context() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Summary Cache Agent", "intent": "Summarize evidence."},
+    ).json()["agent"]
+
+    first_response = client.post(
+        "/api/projects/project_default/evidence-summaries",
+        json={"purpose": "AGENT_PROMPT_REVIEW", "agent_design_id": agent["id"]},
+    )
+    second_response = client.post(
+        "/api/projects/project_default/evidence-summaries",
+        json={"purpose": "AGENT_PROMPT_REVIEW", "agent_design_id": agent["id"]},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    first_summary = first_response.json()
+    second_summary = second_response.json()
+    assert first_summary["cache_hit"] is False
+    assert second_summary["cache_hit"] is True
+    assert second_summary["id"] == first_summary["id"]
+    assert second_summary["supporting_artifact_ids"] == first_summary["supporting_artifact_ids"]
+
+
+def test_live_evidence_summary_records_token_usage(monkeypatch) -> None:
+    client = TestClient(app)
+    seen_prompt = {}
+    monkeypatch.setenv("EDD_OPENAI_INPUT_COST_PER_1M", "1.00")
+    monkeypatch.setenv("EDD_OPENAI_OUTPUT_COST_PER_1M", "2.00")
+
+    def fake_live_summary(prompt: str):
+        seen_prompt["value"] = prompt
+        return "Live evidence summary cites bounded artifacts.", "test-summary-model", {
+            "input_tokens": 20,
+            "output_tokens": 10,
+        }
+
+    monkeypatch.setattr(api_main, "run_live_evidence_summary", fake_live_summary)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Live Summary Agent", "intent": "Collect context."},
+    ).json()["agent"]
+
+    response = client.post(
+        "/api/projects/project_default/evidence-summaries",
+        json={
+            "purpose": "AGENT_PROMPT_REVIEW",
+            "agent_design_id": agent["id"],
+            "mode": "live",
+        },
+    )
+
+    assert response.status_code == 201
+    summary = response.json()
+    assert "Live evidence summary" in summary["summary"]
+    assert summary["provider"] == "openai"
+    assert summary["model"] == "test-summary-model"
+    assert summary["token_usage"] == {"input_tokens": 20, "output_tokens": 10}
+    assert summary["cost_estimate"] == 0.00004
+    assert "Live Summary Agent" in seen_prompt["value"]
+
+
 def test_project_scoped_routes_require_known_project() -> None:
     client = TestClient(app)
 
