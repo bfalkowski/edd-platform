@@ -81,15 +81,15 @@ Do this before adding more workflow UI.
 - [x] Implement `FailurePacket` API contracts.
 - [x] Implement `FixProposal` API contracts.
 - [x] Implement `Comparison` API contracts.
-- [ ] Add `EvalContract` artifacts as the first-class place where agent
+- [x] Add `EvalContract` artifacts as the first-class place where agent
       expectations live.
-- [ ] Add scenario-specific contracts that can describe any agent behavior,
+- [x] Add scenario-specific contracts that can describe any agent behavior,
       required evidence, tool expectations, output shape, forbidden behavior,
       and pass/fail criteria.
 - [ ] Add run records that reference agent design/version, scenario, mode,
       tools, and optional eval contract.
 - [x] Split tool calls and tool results into first-class evidence artifacts.
-- [ ] Replace hardcoded eval checks with contract-driven deterministic checks.
+- [x] Replace hardcoded eval checks with contract-driven deterministic checks.
 - [x] Store eval results and judge outputs as evidence artifacts linked to runs
       and contracts.
 - [x] Create failure packet artifacts when contract checks fail.

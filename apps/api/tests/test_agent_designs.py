@@ -1,20 +1,47 @@
 import json
 import sys
+import types
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
 import edd_platform_api.main as api_main
 from edd_runner import (
+    OpenAIRunnerConfig,
+    RunnerAgentDesign,
     RunnerResult,
+    RunnerScenario,
     RunnerToolCall,
     RunnerToolDefinition,
     build_langchain_tools,
     extract_response_text,
+    run_openai_agent_with_langfuse,
 )
 from edd_platform_api.main import app  # noqa: E402
 
 edd_runner = sys.modules["edd_runner"]
+
+
+def test_service_status_reports_dependency_configuration(monkeypatch) -> None:
+    client = TestClient(app)
+    monkeypatch.setenv("EDD_PLATFORM_STORAGE_BACKEND", "memory")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setenv("LANGFUSE_HOST", "http://localhost:3001")
+    monkeypatch.setattr(api_main, "service_url_reachable", lambda url: False)
+
+    response = client.get("/api/services")
+
+    assert response.status_code == 200
+    services = {service["id"]: service for service in response.json()["services"]}
+    assert services["storage"]["status"] == "online"
+    assert services["storage"]["description"] == "API persistence backend: memory."
+    assert services["openai"]["status"] == "configured"
+    assert services["openai"]["configured"] is True
+    assert services["langfuse"]["status"] == "offline"
+    assert services["langfuse"]["configured"] is True
+    assert services["langfuse"]["url"] == "http://localhost:3001"
 
 
 def test_create_and_list_agent_designs() -> None:
@@ -533,6 +560,68 @@ def test_approved_mock_tool_adapts_to_langchain_tool() -> None:
     assert tools[0].invoke({"account_id": "acct_123"}) == "Account is active."
 
 
+def test_langfuse_trace_url_failure_does_not_fail_live_run(monkeypatch) -> None:
+    class FakeObservation:
+        trace_id = "trace_fake"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def update(self, **_kwargs):
+            return None
+
+    class FakeLangfuse:
+        def start_as_current_observation(self, **_kwargs):
+            return FakeObservation()
+
+        def get_current_trace_id(self):
+            return "trace_fake"
+
+        def get_trace_url(self, *, trace_id: str):
+            raise RuntimeError(f"Langfuse unavailable for {trace_id}.")
+
+        def flush(self):
+            raise RuntimeError("Langfuse offline.")
+
+    def fake_run_openai_agent_core(agent, scenario, config, tool_definitions):
+        return RunnerResult(
+            id="run_fake",
+            agent_design_id=agent.id,
+            mode="live",
+            scenario_input=scenario.input,
+            response="Live answer.",
+            tool_calls=[],
+            evidence=["Used fake live runner."],
+            created_at=datetime.now(timezone.utc),
+        )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "langfuse",
+        types.SimpleNamespace(get_client=lambda: FakeLangfuse()),
+    )
+    monkeypatch.setattr(edd_runner, "run_openai_agent_core", fake_run_openai_agent_core)
+
+    result = run_openai_agent_with_langfuse(
+        agent=RunnerAgentDesign(
+            id="agent_fake",
+            name="Fake Agent",
+            intent="Answer safely.",
+        ),
+        scenario=RunnerScenario(input="A scenario."),
+        config=OpenAIRunnerConfig(api_key="test-key"),
+        tool_definitions=[],
+    )
+
+    assert result.response == "Live answer."
+    assert result.trace_id == "trace_fake"
+    assert result.trace_url is None
+    assert "Linked Langfuse trace trace_fake." in result.evidence
+
+
 def test_artifact_links_create_and_list_related_artifacts() -> None:
     client = TestClient(app)
 
@@ -730,6 +819,7 @@ def test_create_scenario_and_eval_contract_artifacts() -> None:
     assert contract["scenario_id"] == scenario["id"]
     assert contract["required_tools"] == ["get_weather"]
     assert contract["checks"][0]["id"] == "mentions_evidence"
+    assert contract["checks"][1]["id"] == "requires_tool_get_weather"
 
     scenarios_response = client.get(
         "/api/projects/project_default/scenarios",
@@ -751,6 +841,83 @@ def test_create_scenario_and_eval_contract_artifacts() -> None:
     artifact_types = {artifact["artifact_type"] for artifact in artifacts_response.json()}
     assert "SCENARIO" in artifact_types
     assert "EVAL_CONTRACT" in artifact_types
+
+
+def test_eval_contract_fields_generate_deterministic_checks() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Data Contract Agent",
+            "intent": "Gather evidence and recommend a safe next action.",
+        },
+    )
+    agent = create_response.json()["agent"]
+    version = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={"version_label": "v0", "status": "baseline"},
+    ).json()
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Data-driven scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract_response = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Data-driven contract",
+            "scenario_id": scenario["id"],
+            "required_evidence": ["evidence"],
+            "required_tools": ["collect_design_intent"],
+            "forbidden_tools": ["get_weather"],
+            "forbidden_behavior": ["refund everyone"],
+            "output_requirements": ["safe next action"],
+        },
+    )
+
+    assert contract_response.status_code == 201
+    contract = contract_response.json()
+    assert [check["id"] for check in contract["checks"]] == [
+        "requires_evidence_1",
+        "requires_tool_collect_design_intent",
+        "forbids_tool_get_weather",
+        "forbids_behavior_1",
+        "requires_output_1",
+    ]
+
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "agent_version_id": version["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+            "mode": "mock",
+        },
+    ).json()
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"eval_contract_id": contract["id"], "judge_mode": "deterministic"},
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    assert eval_result["passed"] is True
+    assert {check["check_type"] for check in eval_result["checks"]} == {
+        "output_contains",
+        "output_not_contains",
+        "tool_called",
+        "tool_not_called",
+    }
+    assert any(
+        "Tool\ncollect_design_intent" in check["observed"]
+        for check in eval_result["checks"]
+        if check["check_type"] == "tool_called"
+    )
 
 
 def test_eval_contract_requires_matching_scenario_agent() -> None:
@@ -2137,6 +2304,18 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
     assert "76°F" in run["artifact"]["body"]
     assert run["trace_id"] == "trace_scratch_fake"
     assert run["trace_url"] == "https://cloud.langfuse.com/project/demo/traces/trace_scratch_fake"
+    assert run["trace_artifact"]["artifact_type"] == "TRACE_REF"
+    assert run["trace_artifact"]["id"] in run["artifact_ids"]
+    assert "trace_scratch_fake" in run["trace_artifact"]["body"]
+
+    trace_artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "TRACE_REF"},
+    )
+    assert trace_artifacts_response.status_code == 200
+    trace_artifact = trace_artifacts_response.json()[0]
+    assert trace_artifact["id"] == run["trace_artifact"]["id"]
+    assert "cloud.langfuse.com" in trace_artifact["body"]
 
 
 def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) -> None:

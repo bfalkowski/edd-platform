@@ -65,6 +65,8 @@ Rules:
 - Avoid duplicate headings. If the top bar names the selected agent, do not
   repeat the same title in a large card below.
 - Avoid passive breadcrumb/status blocks that cannot be clicked.
+- Avoid placeholder companion panels. If a panel has no real object, evidence,
+  or action yet, do not render it.
 - Show the current object and available action clearly.
 - Prefer artifact/evidence sections over wizard progress strips.
 - Do not show all future workflow steps at once unless they are useful and
@@ -134,6 +136,8 @@ Rules:
 - Do not invent custom SVG icons for common actions.
 - Do not use generic button rows disconnected from the selected object.
 - Put actions where their output appears.
+- Do not add explanatory copy beside controls when the control label and local
+  service status already make the behavior clear.
 - Disable controls only when the reason is obvious; otherwise hide unavailable
   actions until they are meaningful.
 
@@ -160,12 +164,39 @@ Rules:
 - Show evidence as named artifacts with short descriptions.
 - Context packs should explain why a set of artifacts is being shown.
 - Artifact cards should have a clear type, title, body/summary, and source.
-- Related artifacts should be shown through links/relationship summaries once
-  artifact links exist.
+- Related artifacts should be shown as clickable evidence rows. If the row
+  remains visible, it must open the related artifact or perform a clear action.
+- Do not expose raw relationship names such as `GENERATED_FROM`, `OBSERVES`,
+  or `SUPPORTS` in the UI. Translate them into user-facing labels such as
+  Agent design, Run output, Success criteria, or Trace for this run.
+- Do not show unresolved related artifacts as fallback cards like Saved
+  evidence. If the UI cannot resolve what a linked artifact is, omit it until
+  it can be loaded and named.
+- Trace references must provide an explicit Open trace link when a URL exists.
+  The trace id alone is not a useful UI affordance.
+- Evidence summaries should be compact. Avoid giant sentence-lists of every
+  completed workflow stage; progress belongs in the workflow controls, while
+  the evidence section should show a count and inspectable artifacts.
 - Do not expose raw file names as the main UI unless the user is explicitly in a
   source/code review mode.
 - Do not call the feature generic memory in the UI. Prefer Evidence, Artifacts,
   or Evidence Context.
+
+## Service Status
+
+Dependency status belongs in the left rail as compact operational context.
+
+Rules:
+
+- Show configured/reachable services such as Storage, OpenAI, and Langfuse in a
+  small Services section.
+- Service rows may link to their external/local UI when a URL exists.
+- Do not duplicate this state in top-bar pills such as Platform: local.
+- Do not expose secret values. Show only configured, online, offline, or not
+  configured state.
+- Live-mode trace behavior should be discoverable through Langfuse service
+  status and explicit trace links, not long explanatory text beside the run mode
+  control.
 
 ## Streaming And Activity
 
@@ -200,6 +231,7 @@ Avoid:
 - long instructional paragraphs
 - explaining visual design inside the app
 - placeholder language that looks unfinished
+- empty right-side cards that only say the app is ready
 
 ## Current Canonical Patterns
 

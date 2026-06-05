@@ -1,5 +1,6 @@
 import {
   Clock3,
+  ExternalLink,
   MoreHorizontal,
   PanelLeft,
   PanelRight,
@@ -28,6 +29,20 @@ type Project = {
   name: string;
   description: string;
   created_at: string;
+  updated_at: string;
+};
+
+type ServiceStatus = {
+  id: string;
+  name: string;
+  status: "online" | "offline" | "configured" | "not_configured";
+  configured: boolean;
+  url: string | null;
+  description: string;
+};
+
+type ServiceStatusResponse = {
+  services: ServiceStatus[];
   updated_at: string;
 };
 
@@ -108,6 +123,8 @@ type AgentRunResult = {
   trace_id: string | null;
   trace_url: string | null;
   artifact: ArtifactRecord;
+  trace_artifact: ArtifactRecord | null;
+  artifact_ids: string[];
   created_at: string;
 };
 
@@ -390,6 +407,15 @@ async function listProjects(): Promise<Project[]> {
     throw await responseError(response, "Unable to load projects.");
   }
   return response.json();
+}
+
+async function listServices(): Promise<ServiceStatus[]> {
+  const response = await fetch(`${apiBase}/services`);
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load service status.");
+  }
+  const payload = (await response.json()) as ServiceStatusResponse;
+  return payload.services;
 }
 
 async function listAgentDesigns(projectId: string): Promise<AgentDesign[]> {
@@ -924,6 +950,22 @@ function artifactRoleLabel(artifactType: string): string {
   return labels[artifactType] ?? artifactType.replaceAll("_", " ").toLowerCase();
 }
 
+function relatedEvidenceLabel(artifact: ArtifactRecord | undefined): string {
+  if (!artifact) {
+    return "Saved evidence";
+  }
+  if (artifact.artifact_type === "TRACE_REF") {
+    return "Trace for this run";
+  }
+  if (artifact.artifact_type === "AGENT_DESIGN") {
+    return "Agent design";
+  }
+  if (artifact.artifact_type === "RUN_RESULT") {
+    return "Run output";
+  }
+  return artifactRoleLabel(artifact.artifact_type);
+}
+
 function proofFlowSummary(flow: EddFlowState): string {
   const parts = [
     flow.scenario ? "scenario" : null,
@@ -1034,6 +1076,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
   const [agents, setAgents] = useState<AgentDesign[]>([]);
+  const [services, setServices] = useState<ServiceStatus[]>([]);
   const [tools, setTools] = useState<ToolDefinition[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -1072,8 +1115,9 @@ function App() {
   const [toolMockResponse, setToolMockResponse] = useState("");
 
   useEffect(() => {
-    listProjects()
-      .then((projects) => {
+    Promise.all([listProjects(), listServices()])
+      .then(([projects, serviceItems]) => {
+        setServices(serviceItems);
         const activeProject = projects[0] ?? null;
         setProject(activeProject);
         if (!activeProject) {
@@ -1138,9 +1182,37 @@ function App() {
     (artifact, index, artifacts) =>
       artifacts.findIndex((candidate) => candidate.id === artifact.id) === index,
   ).slice(0, 4);
-  const proofEvidenceSummary = proofFlowSummary(eddFlow);
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
+  const connectedArtifacts = reviewArtifact
+    ? reviewLinks.reduce<
+        {
+          artifact: ArtifactRecord;
+          link: ArtifactLink;
+          relationshipTypes: string[];
+        }[]
+      >((items, link) => {
+        const relatedId =
+          link.source_artifact_id === reviewArtifact.id
+            ? link.target_artifact_id
+            : link.source_artifact_id;
+        const relatedArtifact = artifactsById.get(relatedId);
+        if (!relatedArtifact) {
+          return items;
+        }
+        const existing = items.find((item) => item.artifact?.id === relatedId);
+        if (existing) {
+          existing.relationshipTypes.push(link.relationship_type);
+          return items;
+        }
+        items.push({
+          artifact: relatedArtifact,
+          link,
+          relationshipTypes: [link.relationship_type],
+        });
+        return items;
+      }, [])
+    : [];
   const savedExpectedPhrase = eddFlow.contract?.checks.find((check) => check.value)?.value ?? "";
   const savedScenarioInput = eddFlow.scenario?.input ?? "";
   const testOutOfSync = Boolean(
@@ -1369,7 +1441,14 @@ function App() {
       setActivity("Ad hoc evidence saved.");
       setContextPack((pack) =>
         pack
-          ? { ...pack, artifacts: [run.artifact, ...pack.artifacts] }
+          ? {
+              ...pack,
+              artifacts: [
+                run.artifact,
+                ...(run.trace_artifact ? [run.trace_artifact] : []),
+                ...pack.artifacts,
+              ],
+            }
           : pack,
       );
       setScratchArtifact(run.artifact);
@@ -1930,6 +2009,40 @@ function App() {
         </nav>
 
         {sidebarOpen ? (
+          <>
+          <section className="service-list" aria-label="Service status">
+            <p className="section-label">Services</p>
+            {services.length === 0 ? <p className="empty-list">Checking services...</p> : null}
+            {services.map((service) => {
+              const content = (
+                <>
+                  <span className={`service-dot ${service.status}`} aria-hidden="true" />
+                  <span className="service-copy">
+                    <strong>{service.name}</strong>
+                    <small>{service.status.replace("_", " ")}</small>
+                  </span>
+                  {service.url ? <ExternalLink size={15} /> : null}
+                </>
+              );
+              return service.url ? (
+                <a
+                  className="service-row"
+                  href={service.url}
+                  key={service.id}
+                  rel="noreferrer"
+                  target="_blank"
+                  title={service.description}
+                >
+                  {content}
+                </a>
+              ) : (
+                <div className="service-row" key={service.id} title={service.description}>
+                  {content}
+                </div>
+              );
+            })}
+          </section>
+
           <section className="agent-list" aria-label="Agent designs">
             <p className="section-label">Agents</p>
             {isLoading ? <p className="empty-list">Loading...</p> : null}
@@ -2005,6 +2118,7 @@ function App() {
               </div>
             ))}
           </section>
+          </>
         ) : null}
       </aside>
 
@@ -2022,14 +2136,6 @@ function App() {
           <div className="topbar-actions">
             {selectedAgent ? (
               <div className="run-mode-shell">
-                <div className="run-mode-heading">
-                  <span>Run mode</span>
-                  <small>
-                    {runMode === "live"
-                      ? "Uses OpenAI and links Langfuse traces when configured."
-                      : "Uses deterministic local behavior for repeatable checks."}
-                  </small>
-                </div>
                 <div className="run-mode-control topbar-run-mode" aria-label="Run mode">
                   <button
                     className={runMode === "mock" ? "mode-option active" : "mode-option"}
@@ -2048,7 +2154,6 @@ function App() {
                 </div>
               </div>
             ) : null}
-            <span className="status-pill">Platform: local</span>
           </div>
         </header>
 
@@ -2082,16 +2187,10 @@ function App() {
             </form>
           ) : null}
 
-          <section className={selectedAgent ? "evidence-panel evidence-workspace" : "evidence-panel"}>
-            <p className="eyebrow">{selectedAgent ? "Agent test workflow" : "Evidence context"}</p>
-            <h2>{selectedAgent ? "Prove this agent gets better." : "Ready for the first design"}</h2>
-            {!selectedAgent ? (
-              <p className="muted-copy">
-                Create an agent design to begin collecting targets, judge prompts, gates, runs,
-                and evidence.
-              </p>
-            ) : null}
-            {selectedAgent ? (
+          {selectedAgent ? (
+          <section className="evidence-panel evidence-workspace">
+            <p className="eyebrow">Agent test workflow</p>
+            <h2>Prove this agent gets better.</h2>
               <div className="artifact-stack">
                 <section className="agent-setup-panel">
                   <div>
@@ -2220,22 +2319,17 @@ function App() {
                     </div>
                   ) : null}
                   <div className="workflow-evidence-panel">
-                    <div>
-                      <p className="artifact-type">Saved evidence</p>
-                      <h4>{proofEvidenceSummary}</h4>
-                      <p>
-                        The platform stores the test setup, run outputs, eval decisions, fixes,
-                        comparisons, and traces as inspectable evidence.
-                      </p>
+                    <div className="workflow-evidence-header">
+                      <div>
+                        <p className="artifact-type">Evidence</p>
+                        <h4>Proof artifacts</h4>
+                      </div>
+                      <span>{visibleArtifacts.length} saved</span>
                     </div>
                     <div className="workflow-evidence-list">
                       {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
                       {!isLoadingContext && evidencePreviewArtifacts.length === 0 ? (
-                        <p className="muted-copy">
-                          {proofEvidenceSummary === "No proof evidence yet"
-                            ? "No artifacts yet."
-                            : "Evidence exists for this proof loop; refresh if artifact cards are still loading."}
-                        </p>
+                        <p className="muted-copy">No proof artifacts yet.</p>
                       ) : null}
                       {evidencePreviewArtifacts.map((artifact) => {
                         const traceUrl = traceUrlFromArtifact(artifact);
@@ -2307,8 +2401,8 @@ function App() {
                   </div>
                 </section>
               </div>
-            ) : null}
           </section>
+          ) : null}
         </section>
       </main>
       {scratchPanelOpen && selectedAgent ? (
@@ -2581,21 +2675,33 @@ function App() {
               ) : null}
             </section>
             <section>
-              <h3>Connected records</h3>
-              {reviewLinks.length === 0 ? (
-                <p>No connected records yet.</p>
+              <h3>Related evidence</h3>
+              {connectedArtifacts.length === 0 ? (
+                <p>No related evidence yet.</p>
               ) : (
                 <ul className="related-list">
-                  {reviewLinks.map((link) => {
-                    const relatedId =
-                      link.source_artifact_id === reviewArtifact.id
-                        ? link.target_artifact_id
-                        : link.source_artifact_id;
-                    const relatedArtifact = artifactsById.get(relatedId);
+                  {connectedArtifacts.map(({ artifact, link }) => {
+                    const traceUrl = traceUrlFromArtifact(artifact);
                     return (
                       <li key={link.id}>
-                        <strong>{relatedArtifact?.title ?? "Saved record"}</strong>
-                        <span>{link.relationship_type.replaceAll("_", " ").toLowerCase()}</span>
+                        <button
+                          className="related-record-button"
+                          type="button"
+                          onClick={() => handleReviewArtifact(artifact.id)}
+                        >
+                          <strong>{relatedEvidenceLabel(artifact)}</strong>
+                          <span>{artifact.title}</span>
+                        </button>
+                        {traceUrl ? (
+                          <a
+                            className="secondary-button related-trace-link"
+                            href={traceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open trace
+                          </a>
+                        ) : null}
                       </li>
                     );
                   })}

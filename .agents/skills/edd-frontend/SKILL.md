@@ -32,12 +32,16 @@ The console should feel like a focused agent workspace:
 3. Prefer clear artifact cards, compact controls, and right-panel review.
 4. Avoid duplicated headers, disconnected action rows, static breadcrumbs, and raw filenames as primary UI.
 5. Keep the EDD loop legible: expectation, run, eval, failure, fix, comparison.
-6. Run `npm run build`.
-7. Use the browser skill/plugin to inspect `http://localhost:5173` when the app is running or visual behavior changed.
+6. Reject placeholder panels, unknown evidence fallback cards, and raw artifact relationship labels in visible UI.
+7. Ensure visible related-evidence rows are clickable or provide a clear action.
+8. Run `npm run build`.
+9. Use the browser skill/plugin to inspect `http://localhost:5173` when the app is running or visual behavior changed.
 
 ## Guardrails
 
 - Do not make the UI a generic dashboard.
 - Do not add marketing/landing pages.
 - Do not hide state transitions in activity logs only.
+- Do not expose internal relationship names such as GENERATED_FROM, OBSERVES, or SUPPORTS.
+- Do not show trace ids without an explicit Open trace link when a trace URL exists.
 - Do not add UI for objects that lack a stable API contract unless the user explicitly asks for a mockup.

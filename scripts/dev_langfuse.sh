@@ -4,6 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if ! docker info >/dev/null 2>&1; then
+  active_context="$(docker context show 2>/dev/null || true)"
+  if [[ "$active_context" == "colima" ]] && command -v colima >/dev/null 2>&1; then
+    echo "Docker is not reachable; starting Colima."
+    colima start
+  fi
+fi
+
+if ! docker info >/dev/null 2>&1; then
   echo "Docker is not reachable. Start Docker Desktop or Colima, then retry." >&2
   exit 1
 fi

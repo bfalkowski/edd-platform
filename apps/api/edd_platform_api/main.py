@@ -350,6 +350,7 @@ class AgentRunResult(BaseModel):
     trace_id: Optional[str] = None
     trace_url: Optional[str] = None
     artifact: ArtifactRecord
+    trace_artifact: Optional[ArtifactRecord] = None
     artifact_ids: List[str]
     created_at: datetime
 
@@ -563,6 +564,20 @@ class EvidenceSummary(BaseModel):
     created_at: datetime
 
 
+class ServiceStatus(BaseModel):
+    id: str
+    name: str
+    status: Literal["online", "offline", "configured", "not_configured"]
+    configured: bool
+    url: Optional[str] = None
+    description: str
+
+
+class ServiceStatusResponse(BaseModel):
+    services: List[ServiceStatus]
+    updated_at: datetime
+
+
 app = FastAPI(title="EDD Platform API")
 store = create_store_from_env()
 seeded_at = datetime.now(timezone.utc)
@@ -648,6 +663,76 @@ elif _tool_definitions[default_tool.id].implementation_key == "local_weather_fix
 @app.get("/health")
 def health() -> Dict[str, str]:
     return {"status": "ok"}
+
+
+def service_url_reachable(url: str) -> bool:
+    try:
+        request = Request(url.rstrip("/"), method="GET")
+        with urlopen(request, timeout=1.0) as response:
+            return 200 <= response.status < 500
+    except (HTTPError, URLError, TimeoutError, OSError):
+        return False
+
+
+def dependency_statuses() -> List[ServiceStatus]:
+    storage_backend = os.environ.get("EDD_PLATFORM_STORAGE_BACKEND", "postgres").strip() or "postgres"
+    openai_configured = bool(os.environ.get("OPENAI_API_KEY", "").strip())
+    langfuse_url = (
+        os.environ.get("LANGFUSE_HOST", "").strip()
+        or os.environ.get("LANGFUSE_BASE_URL", "").strip()
+        or "http://localhost:3001"
+    )
+    langfuse_configured = bool(
+        os.environ.get("LANGFUSE_PUBLIC_KEY", "").strip()
+        and os.environ.get("LANGFUSE_SECRET_KEY", "").strip()
+    )
+    langfuse_online = langfuse_configured and service_url_reachable(langfuse_url)
+
+    return [
+        ServiceStatus(
+            id="storage",
+            name="Storage",
+            status="online",
+            configured=True,
+            description=f"API persistence backend: {storage_backend}.",
+        ),
+        ServiceStatus(
+            id="openai",
+            name="OpenAI",
+            status="configured" if openai_configured else "not_configured",
+            configured=openai_configured,
+            url="https://platform.openai.com/api-keys",
+            description=(
+                "Live agent runs are enabled."
+                if openai_configured
+                else "Set OPENAI_API_KEY before starting the API to enable live runs."
+            ),
+        ),
+        ServiceStatus(
+            id="langfuse",
+            name="Langfuse",
+            status="online" if langfuse_online else ("offline" if langfuse_configured else "not_configured"),
+            configured=langfuse_configured,
+            url=langfuse_url,
+            description=(
+                "Trace links are available for live runs."
+                if langfuse_online
+                else (
+                    "Tracing is configured, but the Langfuse UI is not reachable."
+                    if langfuse_configured
+                    else "Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY to link live traces."
+                )
+            ),
+        ),
+    ]
+
+
+@app.get("/api/services", response_model=ServiceStatusResponse)
+def get_service_status() -> ServiceStatusResponse:
+    return ServiceStatusResponse(
+        services=dependency_statuses(),
+        updated_at=datetime.now(timezone.utc),
+    )
 
 
 def get_project_or_404(project_id: str) -> Project:
@@ -1165,6 +1250,52 @@ def create_trace_ref_record(
     return trace_ref
 
 
+def create_runner_trace_artifact(
+    *,
+    project_id: str,
+    agent_design_id: str,
+    provider: str,
+    trace_id: str,
+    trace_url: str,
+    run_id: str,
+    metadata: Dict[str, object],
+    related_artifact_ids: List[str],
+    now: datetime,
+) -> ArtifactRecord:
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="TRACE_REF",
+        artifact_id=f"trace_ref_{uuid4().hex[:12]}",
+        title=f"{provider} trace: {trace_id}",
+        body=(
+            f"Provider\n{provider}\n\n"
+            f"External trace id\n{trace_id}\n\n"
+            f"Run\n{run_id}\n\n"
+            f"URL\n{trace_url}\n\n"
+            f"Metadata\n{json.dumps(metadata, sort_keys=True)}"
+        ),
+        source=f"trace-ref:{provider}",
+        agent_design_id=agent_design_id,
+        now=now,
+    )
+    for related_artifact_id in related_artifact_ids:
+        if related_artifact_id in _artifacts:
+            link_artifacts(
+                project_id=project_id,
+                source_artifact_id=artifact.id,
+                target_artifact_id=related_artifact_id,
+                relationship_type="OBSERVES",
+                now=now,
+            )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=agent_design_id,
+        artifact=artifact,
+        now=now,
+    )
+    return artifact
+
+
 def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[RunnerToolDefinition]:
     allowed = set(agent.allowed_tool_names)
     return [
@@ -1239,6 +1370,52 @@ def build_live_judge_prompt(
         f"Deterministic check results:\n{check_lines or 'No deterministic checks defined.'}\n\n"
         "Return a concise judge explanation. Do not invent evidence not shown above."
     )
+
+
+def contract_generated_checks(payload: EvalContractCreate) -> List[Dict[str, object]]:
+    checks: List[Dict[str, object]] = []
+    checks.extend(payload.checks)
+    checks.extend(
+        {
+            "id": f"requires_evidence_{index}",
+            "type": "output_contains",
+            "value": evidence,
+        }
+        for index, evidence in enumerate(payload.required_evidence, start=1)
+    )
+    checks.extend(
+        {
+            "id": f"requires_tool_{tool}",
+            "type": "tool_called",
+            "tool": tool,
+        }
+        for tool in payload.required_tools
+    )
+    checks.extend(
+        {
+            "id": f"forbids_tool_{tool}",
+            "type": "tool_not_called",
+            "tool": tool,
+        }
+        for tool in payload.forbidden_tools
+    )
+    checks.extend(
+        {
+            "id": f"forbids_behavior_{index}",
+            "type": "output_not_contains",
+            "value": behavior,
+        }
+        for index, behavior in enumerate(payload.forbidden_behavior, start=1)
+    )
+    checks.extend(
+        {
+            "id": f"requires_output_{index}",
+            "type": "output_contains",
+            "value": requirement,
+        }
+        for index, requirement in enumerate(payload.output_requirements, start=1)
+    )
+    return checks
 
 
 def run_live_judge(prompt: str) -> tuple[str, str, Dict[str, object]]:
@@ -1456,6 +1633,7 @@ def evaluate_contract_check(
     normalized_output = run.output.lower()
     normalized_body = run_artifact_body.lower()
     normalized_expected = expected.lower()
+    expected_tool_marker = f"tool\n{normalized_expected}"
 
     if check_type == "output_contains":
         passed = bool(normalized_expected and normalized_expected in normalized_output)
@@ -1466,11 +1644,21 @@ def evaluate_contract_check(
         observed = run.output
         comment = f"Output should not contain {expected!r}."
     elif check_type == "tool_called":
-        passed = bool(normalized_expected and f"- {normalized_expected}:" in normalized_body)
+        passed = bool(
+            normalized_expected
+            and (
+                f"- {normalized_expected}:" in normalized_body
+                or expected_tool_marker in normalized_body
+            )
+        )
         observed = run_artifact_body
         comment = f"Run should call tool {expected!r}."
     elif check_type == "tool_not_called":
-        passed = bool(normalized_expected and f"- {normalized_expected}:" not in normalized_body)
+        passed = bool(
+            normalized_expected
+            and f"- {normalized_expected}:" not in normalized_body
+            and expected_tool_marker not in normalized_body
+        )
         observed = run_artifact_body
         comment = f"Run should not call tool {expected!r}."
     else:
@@ -2238,6 +2426,7 @@ def create_eval_contract(project_id: str, payload: EvalContractCreate) -> EvalCo
         get_judge_prompt_template_or_404(project_id, payload.judge_prompt_template_id)
 
     now = datetime.now(timezone.utc)
+    checks = contract_generated_checks(payload)
     contract = EvalContract(
         id=f"contract_{uuid4().hex[:12]}",
         project_id=project_id,
@@ -2252,7 +2441,7 @@ def create_eval_contract(project_id: str, payload: EvalContractCreate) -> EvalCo
         forbidden_tools=payload.forbidden_tools,
         forbidden_behavior=payload.forbidden_behavior,
         output_requirements=payload.output_requirements,
-        checks=payload.checks,
+        checks=checks,
         judge_prompt_template_id=payload.judge_prompt_template_id,
         pass_criteria=payload.pass_criteria.strip(),
         status=payload.status.strip(),
@@ -2564,12 +2753,17 @@ def evaluate_run(
         if run.artifact_ids
         else None
     )
-    run_artifact_body = run_artifact.body if run_artifact is not None else run.output
     evidence_artifact_ids = [
         artifact_id
         for artifact_id in run.artifact_ids
         if _artifacts.get(artifact_id) is not None
     ]
+    evidence_bodies = [
+        _artifacts[artifact_id].body
+        for artifact_id in evidence_artifact_ids
+        if artifact_id in _artifacts
+    ]
+    run_artifact_body = "\n\n".join(evidence_bodies) if evidence_bodies else run.output
     checks = [
         evaluate_contract_check(
             check=check,
@@ -3050,6 +3244,25 @@ def run_agent_design(
         scenario_input=payload.scenario_input,
         mode=payload.mode,
     )
+    artifact_ids = [artifact.id] + [tool_artifact.id for tool_artifact in tool_artifacts]
+    trace_artifact: Optional[ArtifactRecord] = None
+    if runner_result.trace_id and runner_result.trace_url:
+        trace_artifact = create_runner_trace_artifact(
+            project_id=project_id,
+            agent_design_id=agent.id,
+            provider="langfuse",
+            trace_id=runner_result.trace_id,
+            trace_url=runner_result.trace_url,
+            run_id=runner_result.id,
+            metadata={
+                "runner_mode": runner_result.mode,
+                "provider": "openai" if runner_result.mode == "live" else "mock",
+                "ad_hoc": True,
+            },
+            related_artifact_ids=artifact_ids,
+            now=datetime.now(timezone.utc),
+        )
+        artifact_ids.append(trace_artifact.id)
 
     return AgentRunResult(
         id=runner_result.id,
@@ -3063,7 +3276,8 @@ def run_agent_design(
         trace_id=runner_result.trace_id,
         trace_url=runner_result.trace_url,
         artifact=artifact,
-        artifact_ids=[artifact.id] + [tool_artifact.id for tool_artifact in tool_artifacts],
+        trace_artifact=trace_artifact,
+        artifact_ids=artifact_ids,
         created_at=runner_result.created_at,
     )
 

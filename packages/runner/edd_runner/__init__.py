@@ -359,8 +359,16 @@ def run_openai_agent_with_langfuse(
             }
         )
         trace_id = langfuse.get_current_trace_id() or observation.trace_id
-        trace_url = langfuse.get_trace_url(trace_id=trace_id) if trace_id else None
-    langfuse.flush()
+        trace_url = None
+        if trace_id:
+            try:
+                trace_url = langfuse.get_trace_url(trace_id=trace_id)
+            except Exception:
+                trace_url = None
+    try:
+        langfuse.flush()
+    except Exception:
+        pass
     return result.model_copy(
         update={
             "trace_id": trace_id,
