@@ -1295,6 +1295,53 @@ def test_create_agent_versions_for_baseline_and_candidate() -> None:
     assert len(artifact_response.json()) == 2
 
 
+def test_auto_agent_version_labels_continue_past_v1() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Iterative Agent",
+            "intent": "Initial instructions.",
+        },
+    )
+    agent = create_response.json()["agent"]
+
+    baseline_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={"instructions": "Initial instructions.", "status": "baseline"},
+    )
+    assert baseline_response.status_code == 201
+    baseline = baseline_response.json()
+
+    first_candidate_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={
+            "parent_version_id": baseline["id"],
+            "instructions": "First fix.",
+        },
+    )
+    assert first_candidate_response.status_code == 201
+    first_candidate = first_candidate_response.json()
+
+    second_candidate_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={
+            "parent_version_id": first_candidate["id"],
+            "instructions": "Second fix.",
+        },
+    )
+    assert second_candidate_response.status_code == 201
+    second_candidate = second_candidate_response.json()
+
+    assert [
+        baseline["version_label"],
+        first_candidate["version_label"],
+        second_candidate["version_label"],
+    ] == ["v0", "v1", "v2"]
+    assert first_candidate["parent_version_id"] == baseline["id"]
+    assert second_candidate["parent_version_id"] == first_candidate["id"]
+
+
 def test_project_scoped_run_references_version_scenario_and_contract() -> None:
     client = TestClient(app)
     create_response = client.post(

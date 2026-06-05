@@ -569,7 +569,7 @@ async function createAgentVersion(
   projectId: string,
   agentDesignId: string,
   payload: {
-    version_label: string;
+    version_label?: string;
     parent_version_id?: string;
     instructions: string;
     source_fix_proposal_id?: string;
@@ -999,6 +999,13 @@ function proofRunIds(flow: EddFlowState): string[] {
     flow.baselineRun?.id,
     flow.candidateRun?.id,
   ].filter((id): id is string => Boolean(id));
+}
+
+function failurePacketsForEval(flow: EddFlowState, evalResultId?: string): FailurePacket[] {
+  if (!evalResultId) {
+    return flow.failurePackets;
+  }
+  return flow.failurePackets.filter((packet) => packet.eval_result_id === evalResultId);
 }
 
 function inferExpectedResponse(agent: AgentDesign): string {
@@ -1600,7 +1607,7 @@ function App() {
         requiredPhrase.trim(),
       );
       setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
-      setActivity("Test is ready. Run the original agent next.");
+      setActivity("Test is ready. Run the current version next.");
       await refreshContext();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to initialize EDD flow.");
@@ -1615,7 +1622,7 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Running the original agent.");
+    setActivity(`Running ${eddFlow.baselineVersion.version_label}.`);
     setIsFlowBusy(true);
     try {
       const baselineRun = await createProjectRun(project.id, {
@@ -1626,7 +1633,7 @@ function App() {
         mode: runMode,
       });
       setEddFlow((flow) => ({ ...flow, baselineRun }));
-      setActivity("Original answer saved.");
+      setActivity(`${eddFlow.baselineVersion.version_label} answer saved.`);
       await refreshContext();
       await reviewFirstArtifact(baselineRun.artifact_ids);
     } catch (err) {
@@ -1642,14 +1649,14 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Checking the original answer.");
+    setActivity("Checking the current answer.");
     setIsFlowBusy(true);
     try {
       const baselineEval = await evaluateRun(project.id, eddFlow.baselineRun.id);
       const failurePackets = await listFailurePackets(project.id, selectedAgent.id);
       setEddFlow((flow) => ({ ...flow, baselineEval, failurePackets }));
       setActivity(
-        baselineEval.passed ? "Original answer passed." : "Original answer failed; evidence saved.",
+        baselineEval.passed ? "Current answer passed." : "Current answer failed; evidence saved.",
       );
       await refreshContext();
       await reviewFirstArtifact(baselineEval.artifact_ids);
@@ -1662,12 +1669,13 @@ function App() {
   }
 
   async function handleCreateFixProposal() {
+    const currentFailurePackets = failurePacketsForEval(eddFlow, eddFlow.baselineEval?.id);
     if (
       !project ||
       !selectedAgent ||
       !eddFlow.baselineVersion ||
       !eddFlow.contract ||
-      eddFlow.failurePackets.length === 0
+      currentFailurePackets.length === 0
     ) {
       return;
     }
@@ -1679,7 +1687,7 @@ function App() {
         project.id,
         selectedAgent.id,
         eddFlow.baselineVersion.id,
-        eddFlow.failurePackets,
+        currentFailurePackets,
         eddFlow.contract.id,
         requiredPhrase.trim(),
       );
@@ -1699,21 +1707,20 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Creating the candidate version.");
+    setActivity("Creating the next version.");
     setIsFlowBusy(true);
     try {
       const candidateVersion = await createAgentVersion(project.id, selectedAgent.id, {
-        version_label: "v1",
         parent_version_id: eddFlow.baselineVersion.id,
         source_fix_proposal_id: eddFlow.fixProposal.id,
         instructions: candidateInstructions(requiredPhrase),
         status: "candidate",
       });
       setEddFlow((flow) => ({ ...flow, candidateVersion }));
-      setActivity("Candidate v1 is ready to run.");
+      setActivity(`${candidateVersion.version_label} is ready to run.`);
       await refreshContext();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create candidate version.");
+      setError(err instanceof Error ? err.message : "Unable to create next version.");
       setActivity(null);
     } finally {
       setIsFlowBusy(false);
@@ -1725,7 +1732,7 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Running the candidate agent.");
+    setActivity(`Running ${eddFlow.candidateVersion.version_label}.`);
     setIsFlowBusy(true);
     try {
       const candidateRun = await createProjectRun(project.id, {
@@ -1736,7 +1743,7 @@ function App() {
         mode: runMode,
       });
       setEddFlow((flow) => ({ ...flow, candidateRun }));
-      setActivity("Candidate answer saved.");
+      setActivity(`${eddFlow.candidateVersion.version_label} answer saved.`);
       await refreshContext();
       await reviewFirstArtifact(candidateRun.artifact_ids);
     } catch (err) {
@@ -1752,12 +1759,12 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Checking the candidate answer.");
+    setActivity("Checking the new answer.");
     setIsFlowBusy(true);
     try {
       const candidateEval = await evaluateRun(project.id, eddFlow.candidateRun.id);
       setEddFlow((flow) => ({ ...flow, candidateEval }));
-      setActivity(candidateEval.passed ? "Candidate passed." : "Candidate still fails.");
+      setActivity(candidateEval.passed ? "New version passed." : "New version still fails.");
       await refreshContext();
       await reviewFirstArtifact(candidateEval.artifact_ids);
     } catch (err) {
@@ -1773,7 +1780,7 @@ function App() {
       return;
     }
     setError(null);
-    setActivity("Comparing original and candidate evidence.");
+    setActivity("Comparing version evidence.");
     setIsFlowBusy(true);
     try {
       const comparison = await createComparison(
@@ -1794,8 +1801,28 @@ function App() {
     }
   }
 
+  async function handleContinueImprovement() {
+    if (!eddFlow.candidateVersion || !eddFlow.candidateRun || !eddFlow.candidateEval) {
+      return;
+    }
+    const nextFailurePackets = failurePacketsForEval(eddFlow, eddFlow.candidateEval.id);
+    setEddFlow((flow) => ({
+      baselineVersion: flow.candidateVersion,
+      scenario: flow.scenario,
+      contract: flow.contract,
+      baselineRun: flow.candidateRun,
+      baselineEval: flow.candidateEval,
+      failurePackets: nextFailurePackets,
+    }));
+    setActivity(`Continuing from ${eddFlow.candidateVersion.version_label}.`);
+    setReviewArtifact(null);
+    setReviewLinks([]);
+  }
+
   const baselinePassed = eddFlow.baselineEval?.passed === true;
   const improvementNeeded = eddFlow.baselineEval?.passed === false;
+  const baselineLabel = eddFlow.baselineVersion?.version_label ?? "current";
+  const candidateLabel = eddFlow.candidateVersion?.version_label ?? "next";
   const loopSteps = [
     {
       label: "Define test",
@@ -1803,12 +1830,12 @@ function App() {
       detail: testOutOfSync ? "Needs update" : "Scenario and success criteria",
     },
     {
-      label: "Run original",
+      label: `Run ${baselineLabel}`,
       done: Boolean(eddFlow.baselineRun),
-      detail: eddFlow.baselineRun ? "Original response saved" : "Capture the starting behavior",
+      detail: eddFlow.baselineRun ? "Response saved" : "Capture the current behavior",
     },
     {
-      label: "Check original",
+      label: `Check ${baselineLabel}`,
       done: Boolean(eddFlow.baselineEval),
       detail: eddFlow.baselineEval
         ? `${eddFlow.baselineEval.score}/${eddFlow.baselineEval.checks.length} checks`
@@ -1822,17 +1849,17 @@ function App() {
             detail: eddFlow.fixProposal ? "Fix linked to the failure" : "Suggest one targeted change",
           },
           {
-            label: "Create candidate",
+            label: `Create ${candidateLabel}`,
             done: Boolean(eddFlow.candidateVersion),
             detail: eddFlow.candidateVersion ? "New version ready" : "Apply the proposed fix",
           },
           {
-            label: "Run candidate",
+            label: `Run ${candidateLabel}`,
             done: Boolean(eddFlow.candidateRun),
-            detail: eddFlow.candidateRun ? "Candidate response saved" : "Run the same scenario again",
+            detail: eddFlow.candidateRun ? "Response saved" : "Run the same scenario again",
           },
           {
-            label: "Check candidate",
+            label: `Check ${candidateLabel}`,
             done: Boolean(eddFlow.candidateEval),
             detail: eddFlow.candidateEval
               ? `${eddFlow.candidateEval.score}/${eddFlow.candidateEval.checks.length} checks`
@@ -1841,7 +1868,7 @@ function App() {
           {
             label: "Compare",
             done: Boolean(eddFlow.comparison),
-            detail: eddFlow.comparison?.summary ?? "Did the candidate improve?",
+            detail: eddFlow.comparison?.summary ?? "Did the new version improve?",
           },
         ]
       : []),
@@ -1855,7 +1882,7 @@ function App() {
       return {
         eyebrow: "Next action",
         title: "Define the test",
-        detail: "Save the scenario and success criteria before running the original agent.",
+        detail: "Save the scenario and success criteria before running the agent.",
         label: "Define test",
         onClick: handleInitializeEddFlow,
         disabled: isFlowBusy || !requiredPhrase.trim(),
@@ -1874,9 +1901,9 @@ function App() {
     if (!eddFlow.baselineRun) {
       return {
         eyebrow: "Next action",
-        title: "Run the original agent",
-        detail: "Capture how the current instructions answer the scenario before any fix.",
-        label: "Run original",
+        title: `Run ${baselineLabel}`,
+        detail: "Capture how the current instructions answer the scenario.",
+        label: "Run current",
         onClick: handleRunBaseline,
         disabled: isFlowBusy,
       };
@@ -1884,7 +1911,7 @@ function App() {
     if (!eddFlow.baselineEval) {
       return {
         eyebrow: "Next action",
-        title: "Check the original answer",
+        title: `Check ${baselineLabel}`,
         detail: "Judge the response against the success criteria and record what failed.",
         label: "Check answer",
         onClick: handleEvaluateBaseline,
@@ -1894,7 +1921,7 @@ function App() {
     if (baselinePassed) {
       return {
         eyebrow: "Complete",
-        title: "Original answer passed",
+        title: `${baselineLabel} passed`,
         detail: "No fix is needed for this contract. Open the saved evidence to inspect the result.",
         label: "Done",
         onClick: undefined,
@@ -1914,9 +1941,9 @@ function App() {
     if (!eddFlow.candidateVersion && eddFlow.fixProposal) {
       return {
         eyebrow: "Next action",
-        title: "Create the candidate",
+        title: "Create the next version",
         detail: "Apply the proposed fix to create a new agent version.",
-        label: "Create candidate",
+        label: "Create version",
         onClick: handleCreateCandidate,
         disabled: isFlowBusy,
       };
@@ -1924,9 +1951,9 @@ function App() {
     if (!eddFlow.candidateRun && eddFlow.candidateVersion) {
       return {
         eyebrow: "Next action",
-        title: "Run the candidate",
+        title: `Run ${eddFlow.candidateVersion.version_label}`,
         detail: "Run the improved version against the same scenario.",
-        label: "Run candidate",
+        label: "Run version",
         onClick: handleRunCandidate,
         disabled: isFlowBusy,
       };
@@ -1934,9 +1961,9 @@ function App() {
     if (!eddFlow.candidateEval && eddFlow.candidateRun) {
       return {
         eyebrow: "Next action",
-        title: "Check the candidate answer",
+        title: `Check ${eddFlow.candidateVersion?.version_label ?? "next version"}`,
         detail: "Judge the new response against the same success criteria.",
-        label: "Check candidate",
+        label: "Check version",
         onClick: handleEvaluateCandidate,
         disabled: isFlowBusy,
       };
@@ -1944,10 +1971,20 @@ function App() {
     if (!eddFlow.comparison && eddFlow.baselineEval && eddFlow.candidateEval) {
       return {
         eyebrow: "Next action",
-        title: "Compare original vs candidate",
+        title: "Compare versions",
         detail: "Show whether the new version fixed the failure or still needs work.",
         label: "Compare",
         onClick: handleCompareRuns,
+        disabled: isFlowBusy,
+      };
+    }
+    if (eddFlow.comparison && eddFlow.candidateVersion && eddFlow.candidateRun && eddFlow.candidateEval) {
+      return {
+        eyebrow: "Iteration complete",
+        title: eddFlow.comparison.summary,
+        detail: "Continue from this version if another bounded improvement is needed.",
+        label: "Continue improving",
+        onClick: handleContinueImprovement,
         disabled: isFlowBusy,
       };
     }
@@ -2238,16 +2275,16 @@ function App() {
                   <div className="edd-loop-header">
                     <div>
                       <p className="artifact-type">Proof loop</p>
-                      <h3>Run one scenario. Fix one failure. Compare the result.</h3>
+                      <h3>Run one scenario. Fix one failure. Compare the next version.</h3>
                       <p>
-                        Define what good looks like, capture the original behavior, make one
-                        targeted change, and verify whether the candidate improved.
+                        Define what good looks like, capture the current behavior, make one
+                        targeted change, and verify whether the next version improved.
                       </p>
                     </div>
                     <div className="proof-setup-grid">
                       <label className="compact-label">
                         <span>Scenario</span>
-                        <small>The same input is used for original and candidate runs.</small>
+                        <small>The same input is reused across each version.</small>
                         <textarea
                           value={scenarioInput}
                           onChange={(event) => setScenarioInput(event.target.value)}
