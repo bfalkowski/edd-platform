@@ -179,6 +179,13 @@
           "artifact": {
             "$ref": "#/components/schemas/ArtifactRecord"
           },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -213,13 +220,21 @@
           },
           "tool_calls": {
             "items": {
-              "additionalProperties": {
-                "type": "string"
-              },
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Tool Calls",
             "type": "array"
+          },
+          "trace_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "trace_id": {
             "anyOf": [
@@ -254,6 +269,7 @@
           "tool_calls",
           "evidence",
           "artifact",
+          "artifact_ids",
           "created_at"
         ],
         "title": "AgentRunResult",
@@ -2542,6 +2558,78 @@
           "input"
         ],
         "title": "ScenarioCreate",
+        "type": "object"
+      },
+      "ServiceStatus": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "online",
+              "offline",
+              "configured",
+              "not_configured"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "configured",
+          "description"
+        ],
+        "title": "ServiceStatus",
+        "type": "object"
+      },
+      "ServiceStatusResponse": {
+        "properties": {
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceStatus"
+            },
+            "title": "Services",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "services",
+          "updated_at"
+        ],
+        "title": "ServiceStatusResponse",
         "type": "object"
       },
       "ToolDefinition": {
@@ -5872,6 +5960,24 @@
           }
         },
         "summary": "Get Trace Ref"
+      }
+    },
+    "/api/services": {
+      "get": {
+        "operationId": "get_service_status_api_services_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Service Status"
       }
     },
     "/health": {

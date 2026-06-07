@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 import edd_platform_api.main as api_main
+from edd_platform_api import service_status
 from edd_runner import (
     OpenAIRunnerConfig,
     RunnerAgentDesign,
@@ -29,7 +30,7 @@ def test_service_status_reports_dependency_configuration(monkeypatch) -> None:
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
     monkeypatch.setenv("LANGFUSE_HOST", "http://localhost:3001")
-    monkeypatch.setattr(api_main, "service_url_reachable", lambda url: False)
+    monkeypatch.setattr(service_status, "service_url_reachable", lambda url: False)
 
     response = client.get("/api/services")
 
