@@ -84,6 +84,14 @@ type ArtifactRecord = {
   body: string;
   source: string;
   agent_design_id: string | null;
+  external_refs: {
+    provider: string;
+    ref_type: string;
+    external_id: string;
+    url: string | null;
+    label: string;
+    metadata: Record<string, unknown>;
+  }[];
   created_at: string;
   updated_at: string;
 };
@@ -895,6 +903,12 @@ function latestRunForVersion(
 function traceUrlFromArtifact(artifact: ArtifactRecord): string | null {
   if (artifact.artifact_type !== "TRACE_REF") {
     return null;
+  }
+  const traceRef = artifact.external_refs.find(
+    (ref) => ref.provider === "langfuse" && ref.ref_type === "trace" && ref.url,
+  );
+  if (traceRef?.url) {
+    return traceRef.url;
   }
   const match = artifact.body.match(/URL\n(.+)/);
   return match?.[1]?.trim() ?? null;

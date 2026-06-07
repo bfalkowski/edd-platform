@@ -1761,6 +1761,16 @@ def test_create_trace_ref_links_langfuse_trace_to_run_and_eval_artifacts() -> No
     trace_artifact = artifact_response.json()[0]
     assert trace_artifact["artifact_id"] == trace_ref["id"]
     assert "cloud.langfuse.com" in trace_artifact["body"]
+    assert trace_artifact["external_refs"] == [
+        {
+            "provider": "langfuse",
+            "ref_type": "trace",
+            "external_id": "trace_abc123",
+            "url": "https://cloud.langfuse.com/project/demo/traces/trace_abc123",
+            "label": "Langfuse trace",
+            "metadata": {"environment": "local"},
+        }
+    ]
 
     links_response = client.get(
         f"/api/projects/project_default/artifacts/{trace_artifact['id']}/links"
@@ -2364,6 +2374,9 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
     trace_artifact = trace_artifacts_response.json()[0]
     assert trace_artifact["id"] == run["trace_artifact"]["id"]
     assert "cloud.langfuse.com" in trace_artifact["body"]
+    assert trace_artifact["external_refs"][0]["provider"] == "langfuse"
+    assert trace_artifact["external_refs"][0]["ref_type"] == "trace"
+    assert trace_artifact["external_refs"][0]["url"] == "https://cloud.langfuse.com/project/demo/traces/trace_scratch_fake"
 
 
 def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) -> None:
@@ -2447,6 +2460,9 @@ def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) ->
     )
     trace_artifact = trace_artifacts_response.json()[0]
     assert "cloud.langfuse.com" in trace_artifact["body"]
+    assert trace_artifact["external_refs"][0]["provider"] == "langfuse"
+    assert trace_artifact["external_refs"][0]["ref_type"] == "trace"
+    assert trace_artifact["external_refs"][0]["url"] == "https://cloud.langfuse.com/project/demo/traces/0123456789abcdef0123456789abcdef"
     links_response = client.get(
         f"/api/projects/project_default/artifacts/{trace_artifact['id']}/links"
     )

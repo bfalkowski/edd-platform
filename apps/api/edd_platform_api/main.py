@@ -31,6 +31,7 @@ from edd_platform_api.schemas import (
     GateDecision,
     AgentVersionCreate,
     AgentVersion,
+    ExternalArtifactRef,
     ArtifactRecord,
     ArtifactLinkCreate,
     ArtifactLink,
@@ -335,6 +336,7 @@ def create_artifact(
     source: str,
     agent_design_id: Optional[str],
     now: datetime,
+    external_refs: Optional[List[ExternalArtifactRef]] = None,
 ) -> ArtifactRecord:
     artifact = ArtifactRecord(
         id=f"artifact_{uuid4().hex[:12]}",
@@ -345,6 +347,7 @@ def create_artifact(
         body=body,
         source=source,
         agent_design_id=agent_design_id,
+        external_refs=external_refs or [],
         created_at=now,
         updated_at=now,
     )
@@ -659,6 +662,16 @@ def create_trace_ref_record(
         source=f"trace-ref:{trace_ref.provider}",
         agent_design_id=run.agent_design_id,
         now=now,
+        external_refs=[
+            ExternalArtifactRef(
+                provider=trace_ref.provider,
+                ref_type="trace",
+                external_id=trace_ref.external_trace_id,
+                url=trace_ref.url,
+                label="Langfuse trace" if trace_ref.provider == "langfuse" else "Trace",
+                metadata=trace_ref.metadata,
+            )
+        ],
     )
     trace_ref = trace_ref.model_copy(update={"artifact_ids": [artifact.id]})
     _trace_refs[trace_ref.id] = trace_ref
@@ -716,6 +729,16 @@ def create_runner_trace_artifact(
         source=f"trace-ref:{provider}",
         agent_design_id=agent_design_id,
         now=now,
+        external_refs=[
+            ExternalArtifactRef(
+                provider=provider,
+                ref_type="trace",
+                external_id=trace_id,
+                url=trace_url,
+                label="Langfuse trace" if provider == "langfuse" else "Trace",
+                metadata=metadata,
+            )
+        ],
     )
     for related_artifact_id in related_artifact_ids:
         if related_artifact_id in _artifacts:

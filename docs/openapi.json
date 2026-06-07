@@ -508,6 +508,13 @@
             "title": "Created At",
             "type": "string"
           },
+          "external_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalArtifactRef"
+            },
+            "title": "External Refs",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1353,6 +1360,60 @@
           "purpose"
         ],
         "title": "EvidenceSummaryCreate",
+        "type": "object"
+      },
+      "ExternalArtifactRef": {
+        "properties": {
+          "external_id": {
+            "minLength": 1,
+            "title": "External Id",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "provider": {
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          },
+          "ref_type": {
+            "enum": [
+              "trace",
+              "dataset",
+              "dataset_item",
+              "prompt",
+              "score",
+              "experiment"
+            ],
+            "title": "Ref Type",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "provider",
+          "ref_type",
+          "external_id"
+        ],
+        "title": "ExternalArtifactRef",
         "type": "object"
       },
       "FailurePacket": {

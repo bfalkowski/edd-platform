@@ -193,6 +193,15 @@ class AgentVersion(BaseModel):
     updated_at: datetime
 
 
+class ExternalArtifactRef(BaseModel):
+    provider: str = Field(min_length=1)
+    ref_type: Literal["trace", "dataset", "dataset_item", "prompt", "score", "experiment"]
+    external_id: str = Field(min_length=1)
+    url: Optional[str] = None
+    label: str = ""
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
 class ArtifactRecord(BaseModel):
     id: str
     project_id: str
@@ -202,6 +211,7 @@ class ArtifactRecord(BaseModel):
     body: str
     source: str
     agent_design_id: Optional[str] = None
+    external_refs: List[ExternalArtifactRef] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
