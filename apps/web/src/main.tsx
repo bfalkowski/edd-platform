@@ -268,6 +268,7 @@ type FixProposal = {
   proposed_changes: Record<string, unknown>[];
   addressed_failure_packet_ids: string[];
   validation_contract_ids: string[];
+  artifact_ids: string[];
   status: string;
   created_at: string;
   updated_at: string;
@@ -863,6 +864,22 @@ async function listEvalResults(projectId: string, runId: string): Promise<EvalRe
   return response.json();
 }
 
+async function updateFixProposal(
+  projectId: string,
+  fixProposalId: string,
+  payload: { rationale?: string; proposed_changes?: Record<string, unknown>[]; status?: string },
+): Promise<FixProposal> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/fix-proposals/${fixProposalId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update fix proposal.");
+  }
+  return response.json();
+}
+
 async function listFixProposals(projectId: string, agentDesignId: string): Promise<FixProposal[]> {
   const response = await fetch(
     `${apiBase}/projects/${projectId}/fix-proposals?agent_design_id=${agentDesignId}`,
@@ -1002,6 +1019,7 @@ function proofArtifactIds(flow: EddFlowState): string[] {
     ...(flow.baselineRun?.artifact_ids ?? []),
     ...(flow.baselineEval?.artifact_ids ?? []),
     ...(flow.failurePackets.flatMap((packet) => packet.evidence_artifact_ids) ?? []),
+    ...(flow.fixProposal?.artifact_ids ?? []),
     ...(flow.candidateRun?.artifact_ids ?? []),
     ...(flow.candidateEval?.artifact_ids ?? []),
     ...(flow.comparison?.artifact_ids ?? []),
@@ -1111,6 +1129,8 @@ function App() {
   const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
+  const [fixEditText, setFixEditText] = useState("");
+  const [isSavingFix, setIsSavingFix] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const [scratchPanelOpen, setScratchPanelOpen] = useState(false);
   const [openAgentMenuId, setOpenAgentMenuId] = useState<string | null>(null);
@@ -1205,6 +1225,10 @@ function App() {
   ).slice(0, 4);
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
+  const reviewFixProposal =
+    reviewArtifact?.artifact_type === "FIX_PROPOSAL" && eddFlow.fixProposal?.id === reviewArtifact.artifact_id
+      ? eddFlow.fixProposal
+      : null;
   const connectedArtifacts = reviewArtifact
     ? reviewLinks.reduce<
         {
@@ -1234,6 +1258,11 @@ function App() {
         return items;
       }, [])
     : [];
+  useEffect(() => {
+    const firstChange = reviewFixProposal?.proposed_changes[0]?.change;
+    setFixEditText(typeof firstChange === "string" ? firstChange : "");
+  }, [reviewFixProposal?.id]);
+
   const savedExpectedPhrase = eddFlow.contract?.checks.find((check) => check.value)?.value ?? "";
   const savedScenarioInput = eddFlow.scenario?.input ?? "";
   const testOutOfSync = Boolean(
@@ -1507,6 +1536,33 @@ function App() {
     }
   }
 
+
+  async function handleSaveFixProposal() {
+    if (!project || !reviewFixProposal) {
+      return;
+    }
+    setError(null);
+    setIsSavingFix(true);
+    try {
+      const updated = await updateFixProposal(project.id, reviewFixProposal.id, {
+        proposed_changes: [
+          {
+            surface: "instructions",
+            change: fixEditText.trim(),
+          },
+        ],
+      });
+      setEddFlow((flow) => ({ ...flow, fixProposal: updated }));
+      setActivity("Fix proposal updated.");
+      await refreshContext();
+      await handleReviewArtifact(updated.artifact_ids[0]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update fix proposal.");
+    } finally {
+      setIsSavingFix(false);
+    }
+  }
+
   async function handleReviewArtifact(artifactId: string) {
     if (!project) {
       return;
@@ -1708,6 +1764,7 @@ function App() {
       setEddFlow((flow) => ({ ...flow, fixProposal }));
       setActivity("Fix proposal linked to failure evidence.");
       await refreshContext();
+      await reviewFirstArtifact(fixProposal.artifact_ids);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create fix proposal.");
       setActivity(null);
@@ -2700,6 +2757,26 @@ function App() {
           </div>
 
           <div className="review-panel-body">
+            {reviewFixProposal ? (
+              <section>
+                <h3>Edit fix</h3>
+                <label className="compact-label">
+                  <span>Instruction change</span>
+                  <textarea
+                    value={fixEditText}
+                    onChange={(event) => setFixEditText(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={handleSaveFixProposal}
+                  disabled={isSavingFix || !fixEditText.trim()}
+                >
+                  Save
+                </button>
+              </section>
+            ) : null}
             <section>
               <h3>Contents</h3>
               {reviewFields.length > 0 ? (

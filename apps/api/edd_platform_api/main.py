@@ -1238,6 +1238,26 @@ def validate_fix_proposal_references(
             )
 
 
+def fix_proposal_artifact_body(fix_proposal: FixProposal) -> str:
+    change_lines = "\n".join(
+        f"- {change.get('surface', 'change')}: {change.get('change', change)}"
+        for change in fix_proposal.proposed_changes
+    )
+    return (
+        f"Rationale\n{fix_proposal.rationale}\n\n"
+        f"Target version\n{fix_proposal.target_version_id or 'None'}\n\n"
+        f"Addressed failures\n"
+        + "\n".join(
+            f"- {failure_id}" for failure_id in fix_proposal.addressed_failure_packet_ids
+        )
+        + "\n\nValidation contracts\n"
+        + "\n".join(
+            f"- {contract_id}" for contract_id in fix_proposal.validation_contract_ids
+        )
+        + f"\n\nProposed changes\n{change_lines or 'Needs review'}"
+    )
+
+
 def create_fix_proposal_record(
     *,
     project_id: str,
@@ -1265,35 +1285,21 @@ def create_fix_proposal_record(
         created_at=now,
         updated_at=now,
     )
-    _fix_proposals[fix_proposal.id] = fix_proposal
-    store.save_record("fix_proposals", fix_proposal.id, fix_proposal)
 
-    change_lines = "\n".join(
-        f"- {change.get('surface', 'change')}: {change.get('change', change)}"
-        for change in proposed_changes
-    )
     artifact = create_artifact(
         project_id=project_id,
         artifact_type="FIX_PROPOSAL",
         artifact_id=fix_proposal.id,
         title=fix_proposal.title,
-        body=(
-            f"Rationale\n{fix_proposal.rationale}\n\n"
-            f"Target version\n{fix_proposal.target_version_id or 'None'}\n\n"
-            f"Addressed failures\n"
-            + "\n".join(
-                f"- {failure_id}" for failure_id in fix_proposal.addressed_failure_packet_ids
-            )
-            + "\n\nValidation contracts\n"
-            + "\n".join(
-                f"- {contract_id}" for contract_id in fix_proposal.validation_contract_ids
-            )
-            + f"\n\nProposed changes\n{change_lines or 'Needs review'}"
-        ),
+        body=fix_proposal_artifact_body(fix_proposal),
         source="fix-proposal",
         agent_design_id=agent_design_id,
         now=now,
     )
+    fix_proposal = fix_proposal.model_copy(update={"artifact_ids": [artifact.id]})
+    _fix_proposals[fix_proposal.id] = fix_proposal
+    store.save_record("fix_proposals", fix_proposal.id, fix_proposal)
+
     for failure_packet_id in addressed_failure_packet_ids:
         failure_artifact = find_artifact_by_type_and_artifact_id(
             "FAILURE_PACKET",
@@ -2607,6 +2613,18 @@ def update_fix_proposal(
     )
     _fix_proposals[updated.id] = updated
     store.save_record("fix_proposals", updated.id, updated)
+    for artifact_id in updated.artifact_ids:
+        artifact = _artifacts.get(artifact_id)
+        if artifact is not None:
+            updated_artifact = artifact.model_copy(
+                update={
+                    "title": updated.title,
+                    "body": fix_proposal_artifact_body(updated),
+                    "updated_at": updated.updated_at,
+                }
+            )
+            _artifacts[updated_artifact.id] = updated_artifact
+            store.save_record("artifacts", updated_artifact.id, updated_artifact)
     return updated
 
 

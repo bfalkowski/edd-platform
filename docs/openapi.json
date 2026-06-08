@@ -1676,6 +1676,13 @@
             "title": "Agent Design Id",
             "type": "string"
           },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",

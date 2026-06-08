@@ -461,6 +461,7 @@ class FixProposal(BaseModel):
     proposed_changes: List[Dict[str, object]]
     addressed_failure_packet_ids: List[str]
     validation_contract_ids: List[str]
+    artifact_ids: List[str] = Field(default_factory=list)
     status: str
     created_at: datetime
     updated_at: datetime
