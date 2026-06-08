@@ -1682,6 +1682,22 @@ def create_scenario(project_id: str, payload: ScenarioCreate) -> Scenario:
         source="scenario",
         agent_design_id=scenario.agent_design_id,
         now=now,
+        external_refs=[
+            ExternalArtifactRef(
+                provider="langfuse",
+                ref_type="dataset",
+                external_id=f"dataset:{project_id}:{scenario.agent_design_id}",
+                label="Langfuse dataset",
+                metadata={"sync_mode": "planned"},
+            ),
+            ExternalArtifactRef(
+                provider="langfuse",
+                ref_type="dataset_item",
+                external_id=f"dataset_item:{scenario.id}",
+                label="Langfuse dataset item",
+                metadata={"sync_mode": "planned"},
+            ),
+        ],
     )
     link_to_agent_design(
         project_id=project_id,

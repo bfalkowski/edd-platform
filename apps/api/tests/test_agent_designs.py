@@ -842,6 +842,20 @@ def test_create_scenario_and_eval_contract_artifacts() -> None:
     artifact_types = {artifact["artifact_type"] for artifact in artifacts_response.json()}
     assert "SCENARIO" in artifact_types
     assert "EVAL_CONTRACT" in artifact_types
+    scenario_artifact = next(
+        artifact
+        for artifact in artifacts_response.json()
+        if artifact["artifact_type"] == "SCENARIO"
+    )
+    scenario_refs = scenario_artifact["external_refs"]
+    assert {
+        (ref["provider"], ref["ref_type"], ref["external_id"])
+        for ref in scenario_refs
+    } == {
+        ("langfuse", "dataset", f"dataset:project_default:{agent['id']}"),
+        ("langfuse", "dataset_item", f"dataset_item:{scenario['id']}"),
+    }
+    assert {ref["metadata"]["sync_mode"] for ref in scenario_refs} == {"planned"}
 
 
 def test_eval_contract_fields_generate_deterministic_checks() -> None:
