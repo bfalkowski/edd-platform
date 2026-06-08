@@ -112,6 +112,82 @@ def test_create_and_list_agent_designs() -> None:
     assert context_pack["artifacts"][0]["artifact_id"] == agent["id"]
 
 
+def test_agent_version_and_judge_prompt_store_langfuse_prompt_refs() -> None:
+    client = TestClient(app)
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Prompt Linked Agent",
+            "intent": "Use managed prompt instructions.",
+            "langfuse_prompt_name": "edd-agent-support",
+            "langfuse_prompt_version": "3",
+            "langfuse_prompt_label": "production",
+        },
+    )
+    agent = create_response.json()["agent"]
+    agent_artifact = create_response.json()["artifact"]
+
+    assert agent["langfuse_prompt_name"] == "edd-agent-support"
+    assert agent["langfuse_prompt_version"] == "3"
+    assert agent_artifact["external_refs"] == [
+        {
+            "provider": "langfuse",
+            "ref_type": "prompt",
+            "external_id": "edd-agent-support:version:3",
+            "url": None,
+            "label": "Langfuse prompt",
+            "metadata": {
+                "prompt_name": "edd-agent-support",
+                "prompt_version": "3",
+                "prompt_label": "production",
+                "prompt_role": "agent",
+                "source_id": agent["id"],
+            },
+        }
+    ]
+
+    version_response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={"version_label": "v0", "status": "baseline"},
+    )
+    version = version_response.json()
+    assert version["langfuse_prompt_name"] == "edd-agent-support"
+    assert version["langfuse_prompt_version"] == "3"
+
+    artifacts = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"]},
+    ).json()
+    version_artifact = next(
+        artifact
+        for artifact in artifacts
+        if artifact["artifact_type"] == "AGENT_VERSION"
+        and artifact["artifact_id"] == version["id"]
+    )
+    assert version_artifact["external_refs"][0]["metadata"]["prompt_role"] == "agent_version"
+    assert version_artifact["external_refs"][0]["external_id"] == "edd-agent-support:version:3"
+
+    template_response = client.post(
+        "/api/projects/project_default/judge-prompt-templates",
+        json={
+            "name": "Prompt Linked Judge",
+            "template": "Judge against supplied evidence only.",
+            "langfuse_prompt_name": "edd-judge-evidence",
+            "langfuse_prompt_label": "staging",
+        },
+    )
+    template = template_response.json()
+    prompt_artifact = next(
+        artifact
+        for artifact in client.get("/api/projects/project_default/artifacts").json()
+        if artifact["artifact_type"] == "JUDGE_PROMPT_TEMPLATE"
+        and artifact["artifact_id"] == template["id"]
+    )
+    assert template["langfuse_prompt_name"] == "edd-judge-evidence"
+    assert prompt_artifact["external_refs"][0]["external_id"] == "edd-judge-evidence:label:staging"
+    assert prompt_artifact["external_refs"][0]["metadata"]["prompt_role"] == "judge"
+
+
 def test_context_pack_requires_known_agent_design() -> None:
     client = TestClient(app)
 
@@ -2498,6 +2574,8 @@ def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) ->
         json={
             "name": "Traced Live Agent",
             "intent": "Gather evidence and recommend a safe next action.",
+            "langfuse_prompt_name": "edd-agent-live",
+            "langfuse_prompt_label": "production",
         },
     ).json()["agent"]
     scenario = client.post(
@@ -2508,12 +2586,22 @@ def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) ->
             "input": "A customer reports a failed deployment.",
         },
     ).json()
+    prompt_template = client.post(
+        "/api/projects/project_default/judge-prompt-templates",
+        json={
+            "name": "Traced live judge",
+            "template": "Judge only against visible evidence.",
+            "langfuse_prompt_name": "edd-judge-live",
+            "langfuse_prompt_version": "7",
+        },
+    ).json()
     contract = client.post(
         "/api/projects/project_default/eval-contracts",
         json={
             "agent_design_id": agent["id"],
             "name": "Traced live contract",
             "scenario_id": scenario["id"],
+            "judge_prompt_template_id": prompt_template["id"],
             "checks": [
                 {
                     "id": "mentions_safe_next_action",
@@ -2565,6 +2653,19 @@ def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) ->
     assert trace_refs[0]["external_trace_id"] == "0123456789abcdef0123456789abcdef"
     assert trace_refs[0]["run_id"] == run["id"]
     assert trace_refs[0]["metadata"]["runner_mode"] == "live"
+    assert [
+        ref["external_id"]
+        for ref in trace_refs[0]["metadata"]["prompt_refs"]
+    ] == ["edd-agent-live:label:production", "edd-judge-live:version:7"]
+
+    run_artifact = client.get(
+        f"/api/projects/project_default/artifacts/{run['artifact_ids'][0]}"
+    ).json()
+    assert [
+        ref["external_id"]
+        for ref in run_artifact["external_refs"]
+        if ref["ref_type"] == "prompt"
+    ] == ["edd-agent-live:label:production", "edd-judge-live:version:7"]
 
     trace_artifacts_response = client.get(
         "/api/projects/project_default/artifacts",
@@ -2575,6 +2676,11 @@ def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) ->
     assert trace_artifact["external_refs"][0]["provider"] == "langfuse"
     assert trace_artifact["external_refs"][0]["ref_type"] == "trace"
     assert trace_artifact["external_refs"][0]["url"] == "https://cloud.langfuse.com/project/demo/traces/0123456789abcdef0123456789abcdef"
+    assert [
+        ref["external_id"]
+        for ref in trace_artifact["external_refs"]
+        if ref["ref_type"] == "prompt"
+    ] == ["edd-agent-live:label:production", "edd-judge-live:version:7"]
     links_response = client.get(
         f"/api/projects/project_default/artifacts/{trace_artifact['id']}/links"
     )

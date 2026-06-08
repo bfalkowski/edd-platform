@@ -102,6 +102,9 @@ name
 intent
 status
 allowed_tool_names
+langfuse_prompt_name
+langfuse_prompt_version
+langfuse_prompt_label
 created_at
 updated_at
 ```
@@ -275,6 +278,9 @@ description
 template
 version
 status
+langfuse_prompt_name
+langfuse_prompt_version
+langfuse_prompt_label
 created_at
 updated_at
 ```
@@ -384,6 +390,9 @@ instructions
 tool_policy
 source_fix_proposal_id
 status
+langfuse_prompt_name
+langfuse_prompt_version
+langfuse_prompt_label
 created_at
 updated_at
 ```

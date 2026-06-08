@@ -23,6 +23,39 @@
             "title": "Intent",
             "type": "string"
           },
+          "langfuse_prompt_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Label"
+          },
+          "langfuse_prompt_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Name"
+          },
+          "langfuse_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Version"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -66,6 +99,39 @@
             "minLength": 1,
             "title": "Intent",
             "type": "string"
+          },
+          "langfuse_prompt_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Label"
+          },
+          "langfuse_prompt_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Name"
+          },
+          "langfuse_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Version"
           },
           "name": {
             "minLength": 1,
@@ -122,6 +188,39 @@
               }
             ],
             "title": "Intent"
+          },
+          "langfuse_prompt_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Label"
+          },
+          "langfuse_prompt_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Name"
+          },
+          "langfuse_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Version"
           },
           "name": {
             "anyOf": [
@@ -294,6 +393,39 @@
             "title": "Instructions",
             "type": "string"
           },
+          "langfuse_prompt_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Label"
+          },
+          "langfuse_prompt_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Name"
+          },
+          "langfuse_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Version"
+          },
           "parent_version_id": {
             "anyOf": [
               {
@@ -365,6 +497,39 @@
               }
             ],
             "title": "Instructions"
+          },
+          "langfuse_prompt_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Label"
+          },
+          "langfuse_prompt_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Name"
+          },
+          "langfuse_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Version"
           },
           "parent_version_id": {
             "anyOf": [
@@ -2201,6 +2366,39 @@
             "title": "Id",
             "type": "string"
           },
+          "langfuse_prompt_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Label"
+          },
+          "langfuse_prompt_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Name"
+          },
+          "langfuse_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Version"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2247,6 +2445,39 @@
             "default": "",
             "title": "Description",
             "type": "string"
+          },
+          "langfuse_prompt_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Label"
+          },
+          "langfuse_prompt_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Name"
+          },
+          "langfuse_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Prompt Version"
           },
           "name": {
             "minLength": 1,

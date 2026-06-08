@@ -10,6 +10,9 @@ class AgentDesignCreate(BaseModel):
     name: str = Field(min_length=1)
     intent: str = Field(min_length=1)
     allowed_tool_names: List[str] = Field(default_factory=list)
+    langfuse_prompt_name: Optional[str] = None
+    langfuse_prompt_version: Optional[str] = None
+    langfuse_prompt_label: Optional[str] = None
 
 
 class AgentDesignUpdate(BaseModel):
@@ -17,6 +20,9 @@ class AgentDesignUpdate(BaseModel):
     intent: Optional[str] = None
     allowed_tool_names: Optional[List[str]] = None
     status: Optional[str] = None
+    langfuse_prompt_name: Optional[str] = None
+    langfuse_prompt_version: Optional[str] = None
+    langfuse_prompt_label: Optional[str] = None
 
 
 class Project(BaseModel):
@@ -34,6 +40,9 @@ class AgentDesign(BaseModel):
     intent: str
     status: str
     allowed_tool_names: List[str] = Field(default_factory=list)
+    langfuse_prompt_name: Optional[str] = None
+    langfuse_prompt_version: Optional[str] = None
+    langfuse_prompt_label: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -108,6 +117,9 @@ class JudgePromptTemplateCreate(BaseModel):
     template: str = Field(min_length=1)
     version: str = "v1"
     status: str = "draft"
+    langfuse_prompt_name: Optional[str] = None
+    langfuse_prompt_version: Optional[str] = None
+    langfuse_prompt_label: Optional[str] = None
 
 
 class JudgePromptTemplate(BaseModel):
@@ -118,6 +130,9 @@ class JudgePromptTemplate(BaseModel):
     template: str
     version: str
     status: str
+    langfuse_prompt_name: Optional[str] = None
+    langfuse_prompt_version: Optional[str] = None
+    langfuse_prompt_label: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -177,6 +192,9 @@ class AgentVersionCreate(BaseModel):
     tool_policy: Dict[str, object] = Field(default_factory=dict)
     source_fix_proposal_id: Optional[str] = None
     status: str = "candidate"
+    langfuse_prompt_name: Optional[str] = None
+    langfuse_prompt_version: Optional[str] = None
+    langfuse_prompt_label: Optional[str] = None
 
 
 class AgentVersion(BaseModel):
@@ -189,6 +207,9 @@ class AgentVersion(BaseModel):
     tool_policy: Dict[str, object]
     source_fix_proposal_id: Optional[str] = None
     status: str
+    langfuse_prompt_name: Optional[str] = None
+    langfuse_prompt_version: Optional[str] = None
+    langfuse_prompt_label: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

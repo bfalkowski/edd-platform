@@ -285,7 +285,83 @@ def find_agent_design_artifact(agent_id: str) -> Optional[ArtifactRecord]:
 
 def agent_design_artifact_body(agent: AgentDesign) -> str:
     tools = ", ".join(agent.allowed_tool_names) if agent.allowed_tool_names else "none"
-    return f"{agent.intent}\n\nAllowed tools: {tools}"
+    prompt = langfuse_prompt_display(
+        name=agent.langfuse_prompt_name,
+        version=agent.langfuse_prompt_version,
+        label=agent.langfuse_prompt_label,
+    )
+    return f"{agent.intent}\n\nAllowed tools: {tools}\n\nLangfuse prompt\n{prompt}"
+
+
+def langfuse_prompt_display(
+    *,
+    name: Optional[str],
+    version: Optional[str],
+    label: Optional[str],
+) -> str:
+    if not name:
+        return "None"
+    details = [f"name={name}"]
+    if version:
+        details.append(f"version={version}")
+    if label:
+        details.append(f"label={label}")
+    return ", ".join(details)
+
+
+def langfuse_prompt_external_id(
+    *,
+    name: str,
+    version: Optional[str],
+    label: Optional[str],
+) -> str:
+    if version:
+        return f"{name}:version:{version}"
+    if label:
+        return f"{name}:label:{label}"
+    return name
+
+
+def langfuse_prompt_refs(
+    *,
+    name: Optional[str],
+    version: Optional[str],
+    label: Optional[str],
+    prompt_role: str,
+    source_id: str,
+) -> List[ExternalArtifactRef]:
+    if not name:
+        return []
+    return [
+        ExternalArtifactRef(
+            provider="langfuse",
+            ref_type="prompt",
+            external_id=langfuse_prompt_external_id(
+                name=name,
+                version=version,
+                label=label,
+            ),
+            label="Langfuse prompt",
+            metadata={
+                "prompt_name": name,
+                "prompt_version": version,
+                "prompt_label": label,
+                "prompt_role": prompt_role,
+                "source_id": source_id,
+            },
+        )
+    ]
+
+
+def prompt_refs_from_metadata(metadata: Dict[str, object]) -> List[ExternalArtifactRef]:
+    prompt_refs = metadata.get("prompt_refs", [])
+    if not isinstance(prompt_refs, list):
+        return []
+    refs: List[ExternalArtifactRef] = []
+    for prompt_ref in prompt_refs:
+        if isinstance(prompt_ref, dict):
+            refs.append(ExternalArtifactRef.model_validate(prompt_ref))
+    return refs
 
 
 def sync_agent_design_artifact(agent: AgentDesign, now: datetime) -> ArtifactRecord:
@@ -300,6 +376,13 @@ def sync_agent_design_artifact(agent: AgentDesign, now: datetime) -> ArtifactRec
             body=agent_design_artifact_body(agent),
             source="intent",
             agent_design_id=agent.id,
+            external_refs=langfuse_prompt_refs(
+                name=agent.langfuse_prompt_name,
+                version=agent.langfuse_prompt_version,
+                label=agent.langfuse_prompt_label,
+                prompt_role="agent",
+                source_id=agent.id,
+            ),
             created_at=now,
             updated_at=now,
         )
@@ -308,6 +391,13 @@ def sync_agent_design_artifact(agent: AgentDesign, now: datetime) -> ArtifactRec
             update={
                 "title": agent.name,
                 "body": agent_design_artifact_body(agent),
+                "external_refs": langfuse_prompt_refs(
+                    name=agent.langfuse_prompt_name,
+                    version=agent.langfuse_prompt_version,
+                    label=agent.langfuse_prompt_label,
+                    prompt_role="agent",
+                    source_id=agent.id,
+                ),
                 "updated_at": now,
             }
         )
@@ -925,7 +1015,8 @@ def create_trace_ref_record(
                 label="Langfuse trace" if trace_ref.provider == "langfuse" else "Trace",
                 metadata=trace_ref.metadata,
             )
-        ],
+        ]
+        + prompt_refs_from_metadata(trace_ref.metadata),
     )
     trace_ref = trace_ref.model_copy(update={"artifact_ids": [artifact.id]})
     _trace_refs[trace_ref.id] = trace_ref
@@ -992,7 +1083,8 @@ def create_runner_trace_artifact(
                 label="Langfuse trace" if provider == "langfuse" else "Trace",
                 metadata=metadata,
             )
-        ],
+        ]
+        + prompt_refs_from_metadata(metadata),
     )
     for related_artifact_id in related_artifact_ids:
         if related_artifact_id in _artifacts:
@@ -1251,6 +1343,54 @@ def estimate_live_judge_cost(token_usage: Dict[str, object]) -> Optional[float]:
     )
 
 
+def active_prompt_refs_for_run(
+    *,
+    project_id: str,
+    agent: AgentDesign,
+    version: Optional[AgentVersion],
+    contract_id: Optional[str],
+) -> List[ExternalArtifactRef]:
+    refs: List[ExternalArtifactRef] = []
+    if version is not None:
+        refs.extend(
+            langfuse_prompt_refs(
+                name=version.langfuse_prompt_name,
+                version=version.langfuse_prompt_version,
+                label=version.langfuse_prompt_label,
+                prompt_role="agent_version",
+                source_id=version.id,
+            )
+        )
+    else:
+        refs.extend(
+            langfuse_prompt_refs(
+                name=agent.langfuse_prompt_name,
+                version=agent.langfuse_prompt_version,
+                label=agent.langfuse_prompt_label,
+                prompt_role="agent",
+                source_id=agent.id,
+            )
+        )
+
+    if contract_id is not None:
+        contract = get_eval_contract_or_404(project_id, contract_id)
+        if contract.judge_prompt_template_id is not None:
+            template = get_judge_prompt_template_or_404(
+                project_id,
+                contract.judge_prompt_template_id,
+            )
+            refs.extend(
+                langfuse_prompt_refs(
+                    name=template.langfuse_prompt_name,
+                    version=template.langfuse_prompt_version,
+                    label=template.langfuse_prompt_label,
+                    prompt_role="judge",
+                    source_id=template.id,
+                )
+            )
+    return refs
+
+
 def run_agent_with_runner(
     *,
     project_id: str,
@@ -1258,6 +1398,7 @@ def run_agent_with_runner(
     instructions: str,
     scenario_input: str,
     mode: Literal["mock", "live"],
+    prompt_refs: Optional[List[ExternalArtifactRef]] = None,
 ) -> tuple[object, ArtifactRecord, List[ArtifactRecord]]:
     runner_agent = RunnerAgentDesign(
         id=agent.id,
@@ -1298,6 +1439,7 @@ def run_agent_with_runner(
         source=f"runner:{runner_result.mode}",
         agent_design_id=agent.id,
         now=now,
+        external_refs=prompt_refs if runner_result.mode == "live" else [],
     )
     link_to_agent_design(
         project_id=project_id,
@@ -1831,6 +1973,21 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
         intent=payload.intent.strip(),
         status="designing",
         allowed_tool_names=payload.allowed_tool_names or ["get_weather"],
+        langfuse_prompt_name=(
+            payload.langfuse_prompt_name.strip()
+            if payload.langfuse_prompt_name is not None
+            else None
+        ),
+        langfuse_prompt_version=(
+            payload.langfuse_prompt_version.strip()
+            if payload.langfuse_prompt_version is not None
+            else None
+        ),
+        langfuse_prompt_label=(
+            payload.langfuse_prompt_label.strip()
+            if payload.langfuse_prompt_label is not None
+            else None
+        ),
         created_at=now,
         updated_at=now,
     )
@@ -1867,6 +2024,21 @@ def update_agent_design(
             "intent": payload.intent.strip() if payload.intent is not None else existing.intent,
             "allowed_tool_names": allowed_tool_names,
             "status": payload.status.strip() if payload.status is not None else existing.status,
+            "langfuse_prompt_name": (
+                payload.langfuse_prompt_name.strip()
+                if payload.langfuse_prompt_name is not None
+                else existing.langfuse_prompt_name
+            ),
+            "langfuse_prompt_version": (
+                payload.langfuse_prompt_version.strip()
+                if payload.langfuse_prompt_version is not None
+                else existing.langfuse_prompt_version
+            ),
+            "langfuse_prompt_label": (
+                payload.langfuse_prompt_label.strip()
+                if payload.langfuse_prompt_label is not None
+                else existing.langfuse_prompt_label
+            ),
             "updated_at": datetime.now(timezone.utc),
         }
     )
@@ -1982,6 +2154,21 @@ def create_judge_prompt_template(
         template=payload.template.strip(),
         version=payload.version.strip(),
         status=payload.status.strip(),
+        langfuse_prompt_name=(
+            payload.langfuse_prompt_name.strip()
+            if payload.langfuse_prompt_name is not None
+            else None
+        ),
+        langfuse_prompt_version=(
+            payload.langfuse_prompt_version.strip()
+            if payload.langfuse_prompt_version is not None
+            else None
+        ),
+        langfuse_prompt_label=(
+            payload.langfuse_prompt_label.strip()
+            if payload.langfuse_prompt_label is not None
+            else None
+        ),
         created_at=now,
         updated_at=now,
     )
@@ -1995,11 +2182,25 @@ def create_judge_prompt_template(
         body=(
             f"Description\n{template.description or 'None'}\n\n"
             f"Version\n{template.version}\n\n"
+            f"Langfuse prompt\n"
+            + langfuse_prompt_display(
+                name=template.langfuse_prompt_name,
+                version=template.langfuse_prompt_version,
+                label=template.langfuse_prompt_label,
+            )
+            + "\n\n"
             f"Template\n{template.template}"
         ),
         source="judge-prompt-template",
         agent_design_id=None,
         now=now,
+        external_refs=langfuse_prompt_refs(
+            name=template.langfuse_prompt_name,
+            version=template.langfuse_prompt_version,
+            label=template.langfuse_prompt_label,
+            prompt_role="judge",
+            source_id=template.id,
+        ),
     )
     return template
 
@@ -2275,6 +2476,21 @@ def create_agent_version(
         tool_policy=payload.tool_policy or {"allowed_tool_names": agent.allowed_tool_names},
         source_fix_proposal_id=payload.source_fix_proposal_id,
         status=payload.status.strip(),
+        langfuse_prompt_name=(
+            payload.langfuse_prompt_name.strip()
+            if payload.langfuse_prompt_name is not None
+            else agent.langfuse_prompt_name
+        ),
+        langfuse_prompt_version=(
+            payload.langfuse_prompt_version.strip()
+            if payload.langfuse_prompt_version is not None
+            else agent.langfuse_prompt_version
+        ),
+        langfuse_prompt_label=(
+            payload.langfuse_prompt_label.strip()
+            if payload.langfuse_prompt_label is not None
+            else agent.langfuse_prompt_label
+        ),
         created_at=now,
         updated_at=now,
     )
@@ -2289,11 +2505,24 @@ def create_agent_version(
         body=(
             f"Instructions\n{version.instructions}\n\n"
             f"Parent version\n{version.parent_version_id or 'None'}\n\n"
-            f"Status\n{version.status}"
+            f"Status\n{version.status}\n\n"
+            f"Langfuse prompt\n"
+            + langfuse_prompt_display(
+                name=version.langfuse_prompt_name,
+                version=version.langfuse_prompt_version,
+                label=version.langfuse_prompt_label,
+            )
         ),
         source="agent-version",
         agent_design_id=agent.id,
         now=now,
+        external_refs=langfuse_prompt_refs(
+            name=version.langfuse_prompt_name,
+            version=version.langfuse_prompt_version,
+            label=version.langfuse_prompt_label,
+            prompt_role="agent_version",
+            source_id=version.id,
+        ),
     )
     link_to_agent_design(
         project_id=project_id,
@@ -2363,12 +2592,19 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
             )
 
     instructions = version.instructions if version is not None else agent.intent
+    prompt_refs = active_prompt_refs_for_run(
+        project_id=project_id,
+        agent=agent,
+        version=version,
+        contract_id=payload.eval_contract_id,
+    )
     runner_result, artifact, tool_artifacts = run_agent_with_runner(
         project_id=project_id,
         agent=agent,
         instructions=instructions,
         scenario_input=scenario.input,
         mode=payload.mode,
+        prompt_refs=prompt_refs,
     )
     run = RunRecord(
         id=runner_result.id,
@@ -2403,6 +2639,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
                     "agent_version_id": run.agent_version_id,
                     "scenario_id": run.scenario_id,
                     "eval_contract_id": run.eval_contract_id,
+                    "prompt_refs": [ref.model_dump(mode="json") for ref in prompt_refs],
                 },
                 related_artifact_ids=run.artifact_ids,
             ),
@@ -2989,12 +3226,19 @@ def run_agent_design(
 ) -> AgentRunResult:
     get_project_or_404(project_id)
     agent = get_agent_design_or_404(project_id, agent_id)
+    prompt_refs = active_prompt_refs_for_run(
+        project_id=project_id,
+        agent=agent,
+        version=None,
+        contract_id=None,
+    )
     runner_result, artifact, tool_artifacts = run_agent_with_runner(
         project_id=project_id,
         agent=agent,
         instructions=agent.intent,
         scenario_input=payload.scenario_input,
         mode=payload.mode,
+        prompt_refs=prompt_refs,
     )
     artifact_ids = [artifact.id] + [tool_artifact.id for tool_artifact in tool_artifacts]
     trace_artifact: Optional[ArtifactRecord] = None
@@ -3010,6 +3254,7 @@ def run_agent_design(
                 "runner_mode": runner_result.mode,
                 "provider": "openai" if runner_result.mode == "live" else "mock",
                 "ad_hoc": True,
+                "prompt_refs": [ref.model_dump(mode="json") for ref in prompt_refs],
             },
             related_artifact_ids=artifact_ids,
             now=datetime.now(timezone.utc),
