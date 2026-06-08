@@ -356,6 +356,260 @@ def create_artifact(
     return artifact
 
 
+def get_langfuse_client() -> object:
+    from langfuse import get_client
+
+    return get_client()
+
+
+def planned_langfuse_scenario_refs(
+    *,
+    project_id: str,
+    scenario: Scenario,
+    metadata: Optional[Dict[str, object]] = None,
+) -> List[ExternalArtifactRef]:
+    base_metadata: Dict[str, object] = {"sync_mode": "planned"}
+    if metadata is not None:
+        base_metadata.update(metadata)
+    return [
+        ExternalArtifactRef(
+            provider="langfuse",
+            ref_type="dataset",
+            external_id=f"dataset:{project_id}:{scenario.agent_design_id}",
+            label="Langfuse dataset",
+            metadata=base_metadata,
+        ),
+        ExternalArtifactRef(
+            provider="langfuse",
+            ref_type="dataset_item",
+            external_id=f"dataset_item:{scenario.id}",
+            label="Langfuse dataset item",
+            metadata=base_metadata,
+        ),
+    ]
+
+
+def langfuse_dataset_sync_enabled() -> bool:
+    return os.environ.get("EDD_PLATFORM_LANGFUSE_DATASET_SYNC", "").strip().lower() == "live"
+
+
+def langfuse_credentials_configured() -> bool:
+    return bool(
+        os.environ.get("LANGFUSE_PUBLIC_KEY", "").strip()
+        and os.environ.get("LANGFUSE_SECRET_KEY", "").strip()
+    )
+
+
+def object_field(value: object, field_name: str, fallback: str) -> str:
+    field_value = getattr(value, field_name, None)
+    if field_value is None and isinstance(value, dict):
+        field_value = value.get(field_name)
+    return str(field_value or fallback)
+
+
+def sync_langfuse_scenario_dataset_refs(
+    *,
+    project_id: str,
+    scenario: Scenario,
+) -> List[ExternalArtifactRef]:
+    if not langfuse_dataset_sync_enabled():
+        return planned_langfuse_scenario_refs(project_id=project_id, scenario=scenario)
+    if not langfuse_credentials_configured():
+        return planned_langfuse_scenario_refs(
+            project_id=project_id,
+            scenario=scenario,
+            metadata={"sync_requested": "live", "sync_error": "missing_langfuse_credentials"},
+        )
+
+    dataset_name = f"edd:{project_id}:{scenario.agent_design_id}:scenarios"
+    dataset_metadata: Dict[str, object] = {
+        "project_id": project_id,
+        "agent_design_id": scenario.agent_design_id,
+        "source": "edd-platform",
+    }
+    item_metadata: Dict[str, object] = {
+        **dataset_metadata,
+        "scenario_id": scenario.id,
+        "scenario_name": scenario.name,
+        "setup_context": scenario.setup_context,
+        "fixture_refs": scenario.fixture_refs,
+        "default_eval_contract_id": scenario.default_eval_contract_id,
+    }
+    try:
+        langfuse = get_langfuse_client()
+        dataset = langfuse.create_dataset(
+            name=dataset_name,
+            description=f"EDD scenarios for agent design {scenario.agent_design_id}.",
+            metadata=dataset_metadata,
+        )
+        dataset_item = langfuse.create_dataset_item(
+            dataset_name=dataset_name,
+            input=scenario.input,
+            expected_output=None,
+            metadata=item_metadata,
+            id=scenario.id,
+        )
+    except Exception as exc:
+        return planned_langfuse_scenario_refs(
+            project_id=project_id,
+            scenario=scenario,
+            metadata={"sync_requested": "live", "sync_error": str(exc)},
+        )
+
+    return [
+        ExternalArtifactRef(
+            provider="langfuse",
+            ref_type="dataset",
+            external_id=object_field(dataset, "id", dataset_name),
+            label="Langfuse dataset",
+            metadata={
+                **dataset_metadata,
+                "sync_mode": "live",
+                "dataset_name": dataset_name,
+            },
+        ),
+        ExternalArtifactRef(
+            provider="langfuse",
+            ref_type="dataset_item",
+            external_id=object_field(dataset_item, "id", scenario.id),
+            label="Langfuse dataset item",
+            metadata={
+                **item_metadata,
+                "sync_mode": "live",
+                "dataset_name": dataset_name,
+            },
+        ),
+    ]
+
+
+def langfuse_score_sync_enabled() -> bool:
+    return os.environ.get("EDD_PLATFORM_LANGFUSE_SCORE_SYNC", "").strip().lower() == "live"
+
+
+def find_langfuse_trace_ref_for_run(project_id: str, run_id: str) -> Optional[TraceRef]:
+    trace_refs = [
+        trace_ref
+        for trace_ref in _trace_refs.values()
+        if trace_ref.project_id == project_id
+        and trace_ref.run_id == run_id
+        and trace_ref.provider == "langfuse"
+    ]
+    return sorted(trace_refs, key=lambda trace_ref: trace_ref.created_at, reverse=True)[0] if trace_refs else None
+
+
+def sync_langfuse_eval_score_refs(
+    *,
+    project_id: str,
+    run: RunRecord,
+    contract: EvalContract,
+    eval_id: str,
+    judge_output_id: str,
+    judge_mode: str,
+    score: int,
+    check_count: int,
+    passed: bool,
+) -> List[ExternalArtifactRef]:
+    if not langfuse_score_sync_enabled() or run.mode != "live":
+        return []
+
+    score_id = f"score_{eval_id}"
+    metadata: Dict[str, object] = {
+        "project_id": project_id,
+        "agent_design_id": run.agent_design_id,
+        "agent_version_id": run.agent_version_id,
+        "run_id": run.id,
+        "scenario_id": run.scenario_id,
+        "eval_contract_id": contract.id,
+        "eval_result_id": eval_id,
+        "judge_output_id": judge_output_id,
+        "judge_mode": judge_mode,
+        "raw_score": score,
+        "check_count": check_count,
+        "passed": passed,
+        "source": "edd-platform",
+    }
+    if not langfuse_credentials_configured():
+        return [
+            ExternalArtifactRef(
+                provider="langfuse",
+                ref_type="score",
+                external_id=score_id,
+                label="Langfuse score",
+                metadata={
+                    **metadata,
+                    "sync_mode": "planned",
+                    "sync_requested": "live",
+                    "sync_error": "missing_langfuse_credentials",
+                },
+            )
+        ]
+
+    trace_ref = find_langfuse_trace_ref_for_run(project_id, run.id)
+    if trace_ref is None:
+        return [
+            ExternalArtifactRef(
+                provider="langfuse",
+                ref_type="score",
+                external_id=score_id,
+                label="Langfuse score",
+                metadata={
+                    **metadata,
+                    "sync_mode": "planned",
+                    "sync_requested": "live",
+                    "sync_error": "missing_langfuse_trace_ref",
+                },
+            )
+        ]
+
+    normalized_score = score / check_count if check_count else (1.0 if passed else 0.0)
+    try:
+        langfuse = get_langfuse_client()
+        langfuse.create_score(
+            name="edd_eval_pass_rate",
+            value=normalized_score,
+            trace_id=trace_ref.external_trace_id,
+            score_id=score_id,
+            data_type="NUMERIC",
+            comment=f"EDD eval {eval_id}: {score}/{check_count} checks passed.",
+            metadata=metadata,
+        )
+        flush = getattr(langfuse, "flush", None)
+        if callable(flush):
+            flush()
+    except Exception as exc:
+        return [
+            ExternalArtifactRef(
+                provider="langfuse",
+                ref_type="score",
+                external_id=score_id,
+                label="Langfuse score",
+                metadata={
+                    **metadata,
+                    "sync_mode": "planned",
+                    "sync_requested": "live",
+                    "trace_id": trace_ref.external_trace_id,
+                    "sync_error": str(exc),
+                },
+            )
+        ]
+
+    return [
+        ExternalArtifactRef(
+            provider="langfuse",
+            ref_type="score",
+            external_id=score_id,
+            label="Langfuse score",
+            metadata={
+                **metadata,
+                "sync_mode": "live",
+                "trace_id": trace_ref.external_trace_id,
+                "score_name": "edd_eval_pass_rate",
+                "score_value": normalized_score,
+            },
+        )
+    ]
+
+
 def tool_definition_artifact_body(tool: ToolDefinition) -> str:
     return (
         f"Description\n{tool.description}\n\n"
@@ -1682,22 +1936,10 @@ def create_scenario(project_id: str, payload: ScenarioCreate) -> Scenario:
         source="scenario",
         agent_design_id=scenario.agent_design_id,
         now=now,
-        external_refs=[
-            ExternalArtifactRef(
-                provider="langfuse",
-                ref_type="dataset",
-                external_id=f"dataset:{project_id}:{scenario.agent_design_id}",
-                label="Langfuse dataset",
-                metadata={"sync_mode": "planned"},
-            ),
-            ExternalArtifactRef(
-                provider="langfuse",
-                ref_type="dataset_item",
-                external_id=f"dataset_item:{scenario.id}",
-                label="Langfuse dataset item",
-                metadata={"sync_mode": "planned"},
-            ),
-        ],
+        external_refs=sync_langfuse_scenario_dataset_refs(
+            project_id=project_id,
+            scenario=scenario,
+        ),
     )
     link_to_agent_design(
         project_id=project_id,
@@ -2265,39 +2507,6 @@ def evaluate_run(
         f"- {check.check_id}: {'pass' if check.passed else 'fail'} - {check.comment}"
         for check in checks
     )
-    artifact = create_artifact(
-        project_id=project_id,
-        artifact_type="EVAL_RESULT",
-        artifact_id=eval_id,
-        title=f"Eval: {contract.name}",
-        body=(
-            f"Contract\n{contract.name}\n\n"
-            f"Run\n{run.id}\n\n"
-            f"Score\n{score}/{len(checks)}\n\n"
-            f"Result\n{'Passed' if passed else 'Failed'}\n\n"
-            f"Checks\n{check_lines or 'No checks defined'}"
-        ),
-        source=f"judge:{payload.judge_mode}",
-        agent_design_id=run.agent_design_id,
-        now=now,
-    )
-    for evidence_artifact_id in evidence_artifact_ids:
-        link_artifacts(
-            project_id=project_id,
-            source_artifact_id=artifact.id,
-            target_artifact_id=evidence_artifact_id,
-            relationship_type="GENERATED_FROM",
-            now=now,
-        )
-    contract_artifact = find_artifact_by_type_and_artifact_id("EVAL_CONTRACT", contract.id)
-    if contract_artifact is not None:
-        link_artifacts(
-            project_id=project_id,
-            source_artifact_id=artifact.id,
-            target_artifact_id=contract_artifact.id,
-            relationship_type="SUPPORTED_BY",
-            now=now,
-        )
     judge_output_id = f"judge_{uuid4().hex[:12]}"
     judge_output_text = "\n".join(
         f"{check.check_id}: {'pass' if check.passed else 'fail'} ({check.comment})"
@@ -2326,6 +2535,52 @@ def evaluate_run(
             raise HTTPException(status_code=status_code, detail=detail) from exc
         cost_estimate = estimate_live_judge_cost(token_usage)
 
+    score_refs = sync_langfuse_eval_score_refs(
+        project_id=project_id,
+        run=run,
+        contract=contract,
+        eval_id=eval_id,
+        judge_output_id=judge_output_id,
+        judge_mode=payload.judge_mode,
+        score=score,
+        check_count=len(checks),
+        passed=passed,
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="EVAL_RESULT",
+        artifact_id=eval_id,
+        title=f"Eval: {contract.name}",
+        body=(
+            f"Contract\n{contract.name}\n\n"
+            f"Run\n{run.id}\n\n"
+            f"Score\n{score}/{len(checks)}\n\n"
+            f"Result\n{'Passed' if passed else 'Failed'}\n\n"
+            f"Checks\n{check_lines or 'No checks defined'}"
+        ),
+        source=f"judge:{payload.judge_mode}",
+        agent_design_id=run.agent_design_id,
+        now=now,
+        external_refs=score_refs,
+    )
+    for evidence_artifact_id in evidence_artifact_ids:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=evidence_artifact_id,
+            relationship_type="GENERATED_FROM",
+            now=now,
+        )
+    contract_artifact = find_artifact_by_type_and_artifact_id("EVAL_CONTRACT", contract.id)
+    if contract_artifact is not None:
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=contract_artifact.id,
+            relationship_type="SUPPORTED_BY",
+            now=now,
+        )
+
     judge_artifact = create_artifact(
         project_id=project_id,
         artifact_type="JUDGE_OUTPUT",
@@ -2335,6 +2590,7 @@ def evaluate_run(
         source=f"judge:{payload.judge_mode}",
         agent_design_id=run.agent_design_id,
         now=now,
+        external_refs=score_refs,
     )
     link_artifacts(
         project_id=project_id,

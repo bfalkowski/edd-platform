@@ -770,8 +770,9 @@ def test_run_agent_design_creates_run_result_artifact() -> None:
     )
 
 
-def test_create_scenario_and_eval_contract_artifacts() -> None:
+def test_create_scenario_and_eval_contract_artifacts(monkeypatch) -> None:
     client = TestClient(app)
+    monkeypatch.delenv("EDD_PLATFORM_LANGFUSE_DATASET_SYNC", raising=False)
     create_response = client.post(
         "/api/projects/project_default/agent-designs",
         json={
@@ -845,7 +846,7 @@ def test_create_scenario_and_eval_contract_artifacts() -> None:
     scenario_artifact = next(
         artifact
         for artifact in artifacts_response.json()
-        if artifact["artifact_type"] == "SCENARIO"
+        if artifact["artifact_type"] == "SCENARIO" and artifact["artifact_id"] == scenario["id"]
     )
     scenario_refs = scenario_artifact["external_refs"]
     assert {
@@ -856,6 +857,101 @@ def test_create_scenario_and_eval_contract_artifacts() -> None:
         ("langfuse", "dataset_item", f"dataset_item:{scenario['id']}"),
     }
     assert {ref["metadata"]["sync_mode"] for ref in scenario_refs} == {"planned"}
+
+
+def test_create_scenario_live_syncs_langfuse_dataset_refs(monkeypatch) -> None:
+    client = TestClient(app)
+    calls = []
+
+    class FakeLangfuse:
+        def create_dataset(self, **kwargs):
+            calls.append(("create_dataset", kwargs))
+            return types.SimpleNamespace(id="dataset_live_123")
+
+        def create_dataset_item(self, **kwargs):
+            calls.append(("create_dataset_item", kwargs))
+            return types.SimpleNamespace(id="dataset_item_live_456")
+
+    monkeypatch.setenv("EDD_PLATFORM_LANGFUSE_DATASET_SYNC", "live")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setattr(api_main, "get_langfuse_client", lambda: FakeLangfuse())
+
+    create_response = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Live Dataset Agent",
+            "intent": "Use synced scenarios for evaluation.",
+        },
+    )
+    agent = create_response.json()["agent"]
+
+    scenario_response = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Synced escalation triage",
+            "input": "A customer reports a failed deployment.",
+            "setup_context": "The support team needs a safe next action.",
+            "fixture_refs": ["fixture_ticket_123"],
+        },
+    )
+
+    assert scenario_response.status_code == 201
+    scenario = scenario_response.json()
+    dataset_name = f"edd:project_default:{agent['id']}:scenarios"
+    assert calls == [
+        (
+            "create_dataset",
+            {
+                "name": dataset_name,
+                "description": f"EDD scenarios for agent design {agent['id']}.",
+                "metadata": {
+                    "project_id": "project_default",
+                    "agent_design_id": agent["id"],
+                    "source": "edd-platform",
+                },
+            },
+        ),
+        (
+            "create_dataset_item",
+            {
+                "dataset_name": dataset_name,
+                "input": "A customer reports a failed deployment.",
+                "expected_output": None,
+                "metadata": {
+                    "project_id": "project_default",
+                    "agent_design_id": agent["id"],
+                    "source": "edd-platform",
+                    "scenario_id": scenario["id"],
+                    "scenario_name": "Synced escalation triage",
+                    "setup_context": "The support team needs a safe next action.",
+                    "fixture_refs": ["fixture_ticket_123"],
+                    "default_eval_contract_id": None,
+                },
+                "id": scenario["id"],
+            },
+        ),
+    ]
+
+    artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"]},
+    )
+    scenario_artifact = next(
+        artifact
+        for artifact in artifacts_response.json()
+        if artifact["artifact_type"] == "SCENARIO" and artifact["artifact_id"] == scenario["id"]
+    )
+    scenario_refs = scenario_artifact["external_refs"]
+    assert {
+        (ref["ref_type"], ref["external_id"], ref["metadata"]["sync_mode"])
+        for ref in scenario_refs
+    } == {
+        ("dataset", "dataset_live_123", "live"),
+        ("dataset_item", "dataset_item_live_456", "live"),
+    }
+    assert {ref["metadata"]["dataset_name"] for ref in scenario_refs} == {dataset_name}
 
 
 def test_eval_contract_fields_generate_deterministic_checks() -> None:
@@ -1561,11 +1657,13 @@ def test_contract_driven_run_evaluation_creates_eval_result() -> None:
     assert get_response.json()["id"] == eval_result["id"]
     assert artifact_response.status_code == 200
     assert artifact_response.json()["artifact_type"] == "EVAL_RESULT"
+    assert artifact_response.json()["external_refs"] == []
     judge_artifact_response = client.get(
         f"/api/projects/project_default/artifacts/{eval_result['artifact_ids'][1]}"
     )
     assert judge_artifact_response.status_code == 200
     assert judge_artifact_response.json()["artifact_type"] == "JUDGE_OUTPUT"
+    assert judge_artifact_response.json()["external_refs"] == []
     relationship_types = {link["relationship_type"] for link in links_response.json()}
     assert "GENERATED_FROM" in relationship_types
     assert "SUPPORTED_BY" in relationship_types
@@ -2482,6 +2580,157 @@ def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) ->
     )
     relationship_types = {link["relationship_type"] for link in links_response.json()}
     assert "OBSERVES" in relationship_types
+
+
+def test_live_project_run_eval_writes_langfuse_score_refs(monkeypatch) -> None:
+    client = TestClient(app)
+    score_calls = []
+
+    class FakeLangfuse:
+        def create_score(self, **kwargs):
+            score_calls.append(kwargs)
+
+        def flush(self):
+            score_calls.append({"flushed": True})
+
+    def fake_config_from_env():
+        return object()
+
+    def fake_run_openai_agent(agent_design, scenario_input, config, tool_definitions):
+        return RunnerResult(
+            id="run_live_score_fake",
+            agent_design_id=agent_design.id,
+            mode="live",
+            scenario_input=scenario_input.input,
+            response="Live response with evidence and a safe next action.",
+            tool_calls=[RunnerToolCall(name="openai.responses", output="test-model")],
+            evidence=["Used fake OpenAI provider in test."],
+            trace_id="trace_score_fake",
+            trace_url="https://cloud.langfuse.com/project/demo/traces/trace_score_fake",
+            created_at=datetime.now(timezone.utc),
+        )
+
+    monkeypatch.setenv("EDD_PLATFORM_LANGFUSE_SCORE_SYNC", "live")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setattr(api_main, "openai_config_from_env", fake_config_from_env)
+    monkeypatch.setattr(api_main, "run_openai_agent", fake_run_openai_agent)
+    monkeypatch.setattr(api_main, "get_langfuse_client", lambda: FakeLangfuse())
+
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={
+            "name": "Score Sync Agent",
+            "intent": "Gather evidence and recommend a safe next action.",
+        },
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Score sync scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Score sync contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "mentions_safe_next_action",
+                    "type": "output_contains",
+                    "value": "safe next action",
+                },
+                {
+                    "id": "mentions_evidence",
+                    "type": "output_contains",
+                    "value": "evidence",
+                },
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+            "mode": "live",
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    assert score_calls == [
+        {
+            "name": "edd_eval_pass_rate",
+            "value": 1.0,
+            "trace_id": "trace_score_fake",
+            "score_id": f"score_{eval_result['id']}",
+            "data_type": "NUMERIC",
+            "comment": f"EDD eval {eval_result['id']}: 2/2 checks passed.",
+            "metadata": {
+                "project_id": "project_default",
+                "agent_design_id": agent["id"],
+                "agent_version_id": None,
+                "run_id": run["id"],
+                "scenario_id": scenario["id"],
+                "eval_contract_id": contract["id"],
+                "eval_result_id": eval_result["id"],
+                "judge_output_id": eval_result["judge_output_ids"][0],
+                "judge_mode": "deterministic",
+                "raw_score": 2,
+                "check_count": 2,
+                "passed": True,
+                "source": "edd-platform",
+            },
+        },
+        {"flushed": True},
+    ]
+
+    eval_artifact = client.get(
+        f"/api/projects/project_default/artifacts/{eval_result['artifact_ids'][0]}"
+    ).json()
+    judge_artifact = client.get(
+        f"/api/projects/project_default/artifacts/{eval_result['artifact_ids'][1]}"
+    ).json()
+    for artifact in (eval_artifact, judge_artifact):
+        assert artifact["external_refs"] == [
+            {
+                "provider": "langfuse",
+                "ref_type": "score",
+                "external_id": f"score_{eval_result['id']}",
+                "url": None,
+                "label": "Langfuse score",
+                "metadata": {
+                    "project_id": "project_default",
+                    "agent_design_id": agent["id"],
+                    "agent_version_id": None,
+                    "run_id": run["id"],
+                    "scenario_id": scenario["id"],
+                    "eval_contract_id": contract["id"],
+                    "eval_result_id": eval_result["id"],
+                    "judge_output_id": eval_result["judge_output_ids"][0],
+                    "judge_mode": "deterministic",
+                    "raw_score": 2,
+                    "check_count": 2,
+                    "passed": True,
+                    "source": "edd-platform",
+                    "sync_mode": "live",
+                    "trace_id": "trace_score_fake",
+                    "score_name": "edd_eval_pass_rate",
+                    "score_value": 1.0,
+                },
+            }
+        ]
 
 
 def test_live_run_requires_openai_api_key(monkeypatch) -> None:

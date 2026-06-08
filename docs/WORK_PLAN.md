@@ -173,6 +173,10 @@ This phase makes the backbone usable without hiding the system model.
 - [x] Show trace links inside evidence context.
 - [x] Instrument canonical live agent runs with Langfuse trace capture.
 - [x] Auto-create trace references for traced live runs.
+- [x] Create Langfuse datasets and dataset items for scenarios when explicit
+      live sync is enabled.
+- [x] Write Langfuse score refs for live run evaluations when explicit score
+      sync is enabled.
 - [x] Add live E2E script for agent creation, live run, live eval, and trace lookup.
 - [x] Keep platform artifacts as the source of truth.
 
