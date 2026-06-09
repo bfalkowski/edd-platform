@@ -1556,6 +1556,7 @@
               "dataset_item",
               "prompt",
               "score",
+              "comment",
               "experiment"
             ],
             "title": "Ref Type",
@@ -2540,6 +2541,89 @@
           "updated_at"
         ],
         "title": "Project",
+        "type": "object"
+      },
+      "ReviewNote": {
+        "properties": {
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "target_artifact_id": {
+            "title": "Target Artifact Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "target_artifact_id",
+          "body",
+          "author",
+          "metadata",
+          "artifact_ids",
+          "created_at"
+        ],
+        "title": "ReviewNote",
+        "type": "object"
+      },
+      "ReviewNoteCreate": {
+        "properties": {
+          "author": {
+            "default": "platform",
+            "title": "Author",
+            "type": "string"
+          },
+          "body": {
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "target_artifact_id": {
+            "minLength": 1,
+            "title": "Target Artifact Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_artifact_id",
+          "body"
+        ],
+        "title": "ReviewNoteCreate",
         "type": "object"
       },
       "RunCreate": {
@@ -5575,6 +5659,160 @@
           }
         },
         "summary": "Get Judge Prompt Template"
+      }
+    },
+    "/api/projects/{project_id}/review-notes": {
+      "get": {
+        "operationId": "list_review_notes_api_projects__project_id__review_notes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_artifact_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewNote"
+                  },
+                  "title": "Response List Review Notes Api Projects  Project Id  Review Notes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Review Notes"
+      },
+      "post": {
+        "operationId": "create_review_note_api_projects__project_id__review_notes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewNoteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewNote"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Review Note"
+      }
+    },
+    "/api/projects/{project_id}/review-notes/{review_note_id}": {
+      "get": {
+        "operationId": "get_review_note_api_projects__project_id__review_notes__review_note_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "review_note_id",
+            "required": true,
+            "schema": {
+              "title": "Review Note Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewNote"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Note"
       }
     },
     "/api/projects/{project_id}/runs": {

@@ -341,6 +341,48 @@ decided_by
 created_at
 ```
 
+### Review Notes
+
+Review notes are platform-owned human comments on evidence artifacts. They can
+optionally mirror to Langfuse comments when the target artifact carries a
+Langfuse trace or prompt reference.
+
+```text
+GET  /api/projects/{project_id}/review-notes
+POST /api/projects/{project_id}/review-notes
+GET  /api/projects/{project_id}/review-notes/{review_note_id}
+```
+
+Create request:
+
+```json
+{
+  "target_artifact_id": "artifact_123",
+  "body": "This trace shows the agent skipped escalation evidence.",
+  "author": "reviewer@example.com",
+  "metadata": {
+    "review_type": "trace_diagnosis"
+  }
+}
+```
+
+Minimum response fields:
+
+```text
+id
+project_id
+target_artifact_id
+body
+author
+metadata
+artifact_ids
+created_at
+```
+
+Langfuse comments are for lightweight discussion and trace/prompt notes. They
+are distinct from Langfuse annotation queues, which are a later workflow for
+structured human evaluation over many traces or sessions.
+
 ### Scenarios
 
 Scenarios define what a runner executes.

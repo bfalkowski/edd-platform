@@ -216,7 +216,7 @@ class AgentVersion(BaseModel):
 
 class ExternalArtifactRef(BaseModel):
     provider: str = Field(min_length=1)
-    ref_type: Literal["trace", "dataset", "dataset_item", "prompt", "score", "experiment"]
+    ref_type: Literal["trace", "dataset", "dataset_item", "prompt", "score", "comment", "experiment"]
     external_id: str = Field(min_length=1)
     url: Optional[str] = None
     label: str = ""
@@ -337,6 +337,24 @@ class TraceRef(BaseModel):
     external_trace_id: str
     run_id: str
     url: str
+    metadata: Dict[str, object]
+    artifact_ids: List[str]
+    created_at: datetime
+
+
+class ReviewNoteCreate(BaseModel):
+    target_artifact_id: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    author: str = "platform"
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
+class ReviewNote(BaseModel):
+    id: str
+    project_id: str
+    target_artifact_id: str
+    body: str
+    author: str
     metadata: Dict[str, object]
     artifact_ids: List[str]
     created_at: datetime

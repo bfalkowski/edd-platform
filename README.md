@@ -163,9 +163,15 @@ When Langfuse credentials are configured:
   dataset items for scenarios;
 - `EDD_PLATFORM_LANGFUSE_SCORE_SYNC=live` writes eval pass-rate scores for
   live run evaluations and stores score refs on eval and judge artifacts.
+- `EDD_PLATFORM_LANGFUSE_COMMENT_SYNC=live` mirrors platform review notes to
+  Langfuse comments on linked traces or prompts.
 
-Both Langfuse dataset and score writes are explicit opt-in paths. Deterministic
-local and CI behavior do not require Langfuse credentials.
+Langfuse dataset, score, and comment writes are explicit opt-in paths.
+Deterministic local and CI behavior do not require Langfuse credentials.
+
+Langfuse comments are lightweight trace or prompt notes. Annotation queues are
+separate structured human-evaluation workflows and are not part of the default
+comment sync path.
 
 ## Verification
 

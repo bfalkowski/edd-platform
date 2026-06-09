@@ -179,6 +179,8 @@ This phase makes the backbone usable without hiding the system model.
       sync is enabled.
 - [x] Link agent, agent-version, and judge prompt records to Langfuse prompt
       names, versions, and labels.
+- [x] Mirror platform review notes to Langfuse comments when explicit comment
+      sync is enabled.
 - [x] Add live E2E script for agent creation, live run, live eval, and trace lookup.
 - [x] Keep platform artifacts as the source of truth.
 

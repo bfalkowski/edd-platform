@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from base64 import b64encode
 from hashlib import sha256
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +44,8 @@ from edd_platform_api.schemas import (
     RunRecord,
     TraceRefCreate,
     TraceRef,
+    ReviewNoteCreate,
+    ReviewNote,
     AgentRunResult,
     EvalCheck,
     EvalCheckResult,
@@ -112,6 +115,7 @@ _gate_decisions: Dict[str, GateDecision] = store.load_collection(
 _agent_versions: Dict[str, AgentVersion] = store.load_collection("agent_versions", AgentVersion)
 _runs: Dict[str, RunRecord] = store.load_collection("runs", RunRecord)
 _trace_refs: Dict[str, TraceRef] = store.load_collection("trace_refs", TraceRef)
+_review_notes: Dict[str, ReviewNote] = store.load_collection("review_notes", ReviewNote)
 _eval_results: Dict[str, EvalResult] = store.load_collection("eval_results", EvalResult)
 _judge_outputs: Dict[str, JudgeOutput] = store.load_collection("judge_outputs", JudgeOutput)
 _failure_packets: Dict[str, FailurePacket] = store.load_collection("failure_packets", FailurePacket)
@@ -253,6 +257,13 @@ def get_trace_ref_or_404(project_id: str, trace_ref_id: str) -> TraceRef:
     if trace_ref is None or trace_ref.project_id != project_id:
         raise HTTPException(status_code=404, detail="Trace reference not found.")
     return trace_ref
+
+
+def get_review_note_or_404(project_id: str, review_note_id: str) -> ReviewNote:
+    review_note = _review_notes.get(review_note_id)
+    if review_note is None or review_note.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Review note not found.")
+    return review_note
 
 
 def get_failure_packet_or_404(project_id: str, failure_packet_id: str) -> FailurePacket:
@@ -574,6 +585,134 @@ def sync_langfuse_scenario_dataset_refs(
 
 def langfuse_score_sync_enabled() -> bool:
     return os.environ.get("EDD_PLATFORM_LANGFUSE_SCORE_SYNC", "").strip().lower() == "live"
+
+
+def langfuse_comment_sync_enabled() -> bool:
+    return os.environ.get("EDD_PLATFORM_LANGFUSE_COMMENT_SYNC", "").strip().lower() == "live"
+
+
+def langfuse_base_url() -> str:
+    return (
+        os.environ.get("LANGFUSE_HOST", "").strip()
+        or os.environ.get("LANGFUSE_BASE_URL", "").strip()
+        or "https://cloud.langfuse.com"
+    ).rstrip("/")
+
+
+def langfuse_basic_auth_header() -> str:
+    credentials = (
+        f"{os.environ.get('LANGFUSE_PUBLIC_KEY', '').strip()}:"
+        f"{os.environ.get('LANGFUSE_SECRET_KEY', '').strip()}"
+    )
+    return "Basic " + b64encode(credentials.encode("utf-8")).decode("ascii")
+
+
+def langfuse_comment_object_ref(target_artifact: ArtifactRecord) -> Optional[ExternalArtifactRef]:
+    for ref in target_artifact.external_refs:
+        if ref.provider == "langfuse" and ref.ref_type in {"trace", "prompt"}:
+            return ref
+    return None
+
+
+def langfuse_comment_object_type(ref: ExternalArtifactRef) -> str:
+    if ref.ref_type == "trace":
+        return "TRACE"
+    if ref.ref_type == "prompt":
+        return "PROMPT"
+    return ref.ref_type.upper()
+
+
+def create_langfuse_comment(
+    *,
+    object_type: str,
+    object_id: str,
+    content: str,
+) -> Dict[str, object]:
+    request = Request(
+        f"{langfuse_base_url()}/api/public/comments",
+        data=json.dumps(
+            {
+                "objectType": object_type,
+                "objectId": object_id,
+                "content": content,
+            }
+        ).encode("utf-8"),
+        headers={
+            "Authorization": langfuse_basic_auth_header(),
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Langfuse comment request failed with status {exc.code}: {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Langfuse comment request failed: {exc.reason}") from exc
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+def sync_langfuse_comment_ref(
+    *,
+    target_artifact: ArtifactRecord,
+    review_note_id: str,
+    body: str,
+) -> List[ExternalArtifactRef]:
+    target_ref = langfuse_comment_object_ref(target_artifact)
+    if target_ref is None:
+        return []
+
+    object_type = langfuse_comment_object_type(target_ref)
+    metadata: Dict[str, object] = {
+        "sync_requested": "live",
+        "object_type": object_type,
+        "object_id": target_ref.external_id,
+        "review_note_id": review_note_id,
+        "target_artifact_id": target_artifact.id,
+    }
+    planned_ref = ExternalArtifactRef(
+        provider="langfuse",
+        ref_type="comment",
+        external_id=f"comment:{review_note_id}",
+        label="Langfuse comment",
+        metadata={**metadata, "sync_mode": "planned"},
+    )
+    if not langfuse_comment_sync_enabled():
+        return []
+    if not langfuse_credentials_configured():
+        return [
+            planned_ref.model_copy(
+                update={"metadata": {**planned_ref.metadata, "sync_error": "missing_langfuse_credentials"}}
+            )
+        ]
+
+    try:
+        response = create_langfuse_comment(
+            object_type=object_type,
+            object_id=target_ref.external_id,
+            content=body,
+        )
+    except Exception as exc:
+        return [
+            planned_ref.model_copy(
+                update={"metadata": {**planned_ref.metadata, "sync_error": str(exc)}}
+            )
+        ]
+
+    comment_id = str(response.get("id") or response.get("commentId") or f"comment:{review_note_id}")
+    return [
+        ExternalArtifactRef(
+            provider="langfuse",
+            ref_type="comment",
+            external_id=comment_id,
+            label="Langfuse comment",
+            metadata={**metadata, "sync_mode": "live"},
+        )
+    ]
 
 
 def find_langfuse_trace_ref_for_run(project_id: str, run_id: str) -> Optional[TraceRef]:
@@ -2685,6 +2824,82 @@ def create_trace_ref(project_id: str, payload: TraceRefCreate) -> TraceRef:
 def get_trace_ref(project_id: str, trace_ref_id: str) -> TraceRef:
     get_project_or_404(project_id)
     return get_trace_ref_or_404(project_id, trace_ref_id)
+
+
+@app.get("/api/projects/{project_id}/review-notes")
+def list_review_notes(
+    project_id: str,
+    target_artifact_id: Optional[str] = None,
+) -> List[ReviewNote]:
+    get_project_or_404(project_id)
+    review_notes = [
+        review_note
+        for review_note in _review_notes.values()
+        if review_note.project_id == project_id
+        and (
+            target_artifact_id is None
+            or review_note.target_artifact_id == target_artifact_id
+        )
+    ]
+    return sorted(review_notes, key=lambda review_note: review_note.created_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/review-notes", status_code=201)
+def create_review_note(
+    project_id: str,
+    payload: ReviewNoteCreate,
+) -> ReviewNote:
+    get_project_or_404(project_id)
+    target_artifact = get_artifact_or_404(project_id, payload.target_artifact_id)
+    now = datetime.now(timezone.utc)
+    review_note_id = f"review_note_{uuid4().hex[:12]}"
+    external_refs = sync_langfuse_comment_ref(
+        target_artifact=target_artifact,
+        review_note_id=review_note_id,
+        body=payload.body.strip(),
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="REVIEW_NOTE",
+        artifact_id=review_note_id,
+        title=f"Review note: {target_artifact.title}",
+        body=(
+            f"Author\n{payload.author.strip()}\n\n"
+            f"Target artifact\n{target_artifact.id}\n\n"
+            f"Note\n{payload.body.strip()}\n\n"
+            f"Metadata\n{json.dumps(payload.metadata, sort_keys=True)}"
+        ),
+        source="review-note",
+        agent_design_id=target_artifact.agent_design_id,
+        now=now,
+        external_refs=external_refs,
+    )
+    link_artifacts(
+        project_id=project_id,
+        source_artifact_id=artifact.id,
+        target_artifact_id=target_artifact.id,
+        relationship_type="COMMENTS_ON",
+        now=now,
+    )
+    review_note = ReviewNote(
+        id=review_note_id,
+        project_id=project_id,
+        target_artifact_id=target_artifact.id,
+        body=payload.body.strip(),
+        author=payload.author.strip(),
+        metadata=payload.metadata,
+        artifact_ids=[artifact.id],
+        created_at=now,
+    )
+    _review_notes[review_note.id] = review_note
+    store.save_record("review_notes", review_note.id, review_note)
+    return review_note
+
+
+@app.get("/api/projects/{project_id}/review-notes/{review_note_id}")
+def get_review_note(project_id: str, review_note_id: str) -> ReviewNote:
+    get_project_or_404(project_id)
+    return get_review_note_or_404(project_id, review_note_id)
 
 
 @app.post("/api/projects/{project_id}/runs/{run_id}/evaluate", status_code=201)

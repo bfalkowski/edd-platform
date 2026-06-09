@@ -43,6 +43,8 @@ REQUIRED_PATHS = {
     "/api/projects/{project_id}/runs",
     "/api/projects/{project_id}/runs/{run_id}",
     "/api/projects/{project_id}/runs/{run_id}/evaluate",
+    "/api/projects/{project_id}/review-notes",
+    "/api/projects/{project_id}/review-notes/{review_note_id}",
     "/api/projects/{project_id}/scenarios",
     "/api/projects/{project_id}/scenarios/{scenario_id}",
 }

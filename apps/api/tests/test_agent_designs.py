@@ -1983,6 +1983,175 @@ def test_trace_ref_requires_known_run() -> None:
     assert response.status_code == 404
 
 
+def test_create_review_note_links_to_target_artifact(monkeypatch) -> None:
+    client = TestClient(app)
+    monkeypatch.delenv("EDD_PLATFORM_LANGFUSE_COMMENT_SYNC", raising=False)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Review Note Agent", "intent": "Gather evidence."},
+    ).json()["agent"]
+    design_artifact = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "AGENT_DESIGN"},
+    ).json()[0]
+
+    response = client.post(
+        "/api/projects/project_default/review-notes",
+        json={
+            "target_artifact_id": design_artifact["id"],
+            "body": "Reviewer observed the prompt needs a clearer escalation path.",
+            "author": "reviewer@example.com",
+            "metadata": {"review_type": "prompt"},
+        },
+    )
+
+    assert response.status_code == 201
+    review_note = response.json()
+    assert review_note["target_artifact_id"] == design_artifact["id"]
+    assert review_note["body"] == "Reviewer observed the prompt needs a clearer escalation path."
+    assert review_note["author"] == "reviewer@example.com"
+
+    list_response = client.get(
+        "/api/projects/project_default/review-notes",
+        params={"target_artifact_id": design_artifact["id"]},
+    )
+    get_response = client.get(
+        f"/api/projects/project_default/review-notes/{review_note['id']}"
+    )
+    artifact = client.get(
+        f"/api/projects/project_default/artifacts/{review_note['artifact_ids'][0]}"
+    ).json()
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{artifact['id']}/links"
+    )
+
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["id"] == review_note["id"]
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == review_note["id"]
+    assert artifact["artifact_type"] == "REVIEW_NOTE"
+    assert artifact["external_refs"] == []
+    assert "Reviewer observed" in artifact["body"]
+    assert any(
+        link["relationship_type"] == "COMMENTS_ON"
+        and link["target_artifact_id"] == design_artifact["id"]
+        for link in links_response.json()
+    )
+
+
+def test_create_review_note_live_syncs_langfuse_comment(monkeypatch) -> None:
+    client = TestClient(app)
+    seen_requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return json.dumps({"id": "comment_live_123"}).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        seen_requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setenv("EDD_PLATFORM_LANGFUSE_COMMENT_SYNC", "live")
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setattr(api_main, "urlopen", fake_urlopen)
+
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Comment Sync Agent", "intent": "Gather evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Comment sync scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Comment sync contract",
+            "scenario_id": scenario["id"],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+    trace_ref = client.post(
+        "/api/projects/project_default/trace-refs",
+        json={
+            "provider": "langfuse",
+            "external_trace_id": "trace_comment_123",
+            "run_id": run["id"],
+            "url": "https://cloud.langfuse.com/project/demo/traces/trace_comment_123",
+            "metadata": {"environment": "local"},
+            "related_artifact_ids": run["artifact_ids"],
+        },
+    ).json()
+    trace_artifact = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "TRACE_REF"},
+    ).json()[0]
+
+    response = client.post(
+        "/api/projects/project_default/review-notes",
+        json={
+            "target_artifact_id": trace_artifact["id"],
+            "body": "This trace shows the agent skipped the required escalation step.",
+            "author": "platform-review",
+        },
+    )
+
+    assert response.status_code == 201
+    review_note = response.json()
+    assert len(seen_requests) == 1
+    request, timeout = seen_requests[0]
+    assert timeout == 30
+    assert request.full_url == "https://cloud.langfuse.com/api/public/comments"
+    assert json.loads(request.data.decode("utf-8")) == {
+        "objectType": "TRACE",
+        "objectId": "trace_comment_123",
+        "content": "This trace shows the agent skipped the required escalation step.",
+    }
+    assert request.headers["Authorization"].startswith("Basic ")
+    assert trace_ref["external_trace_id"] == "trace_comment_123"
+
+    artifact = client.get(
+        f"/api/projects/project_default/artifacts/{review_note['artifact_ids'][0]}"
+    ).json()
+    assert artifact["external_refs"] == [
+        {
+            "provider": "langfuse",
+            "ref_type": "comment",
+            "external_id": "comment_live_123",
+            "url": None,
+            "label": "Langfuse comment",
+            "metadata": {
+                "sync_requested": "live",
+                "object_type": "TRACE",
+                "object_id": "trace_comment_123",
+                "review_note_id": review_note["id"],
+                "target_artifact_id": trace_artifact["id"],
+                "sync_mode": "live",
+            },
+        }
+    ]
+
+
 def test_contract_driven_run_evaluation_can_fail() -> None:
     client = TestClient(app)
     create_response = client.post(
