@@ -8,6 +8,64 @@ system for improving agent behavior. Users define explicit scenarios and eval
 contracts, run agent versions against them, inspect failures, propose bounded
 fixes, compare candidates, and make promotion decisions from linked artifacts.
 
+The platform starts from a simple belief: reliable AI products improve when
+teams study real behavior, name recurring failure modes, measure those failures,
+and make design changes from evidence instead of vibes.
+
+EDD Platform turns agent traces into failure modes, failure modes into evals,
+evals into bounded fixes, and fixes into evidence-backed promotion decisions.
+
+## Evaluation-Driven Design Loop
+
+EDD Platform operationalizes an evidence loop for improving AI agents:
+
+```text
+Observe -> Analyze -> Measure -> Improve -> Compare -> Gate
+```
+
+Observe: produce or import traces from agent runs, local runners, Langfuse, or
+other observability systems.
+
+Analyze: inspect representative runs and traces to understand how the agent
+fails. Human review notes, failure packets, and emerging failure modes capture
+the first evidence of what needs to improve.
+
+Measure: turn recurring failure modes into eval contracts, deterministic
+checks, rubric dimensions, or LLM-as-judge prompts. The goal is to quantify
+failure rates, severity, and regression risk.
+
+Improve: propose bounded prompt, tool, retrieval, or workflow changes linked to
+specific failures.
+
+Compare: rerun baseline and candidate versions against the same scenarios and
+eval contracts, then compare scores, fixed failures, remaining failures, and
+new regressions.
+
+Gate: promote only when the evidence supports the decision.
+
+In short: traces reveal failure modes; failure modes become evals; evals drive
+fixes; fixes are promoted only when comparison and gate evidence support them.
+
+## Product Thesis
+
+Most AI eval tooling starts with scores. EDD starts one step earlier. Before a
+team can know what to measure, it needs to understand how the agent fails.
+EDD Platform helps teams move from qualitative evidence to quantitative
+evaluation:
+
+```text
+review traces
+  -> name failure modes
+  -> encode eval contracts
+  -> run repeatable checks
+  -> propose bounded fixes
+  -> compare versions
+  -> gate promotion
+```
+
+This makes evaluation part of the design process, not just a dashboard after
+the fact.
+
 ## Product Spine
 
 ```text
@@ -57,12 +115,13 @@ The current app supports the full eval-driven proof loop:
 4. Evaluate the run with deterministic checks or an optional live judge.
 5. Store `RUN_RESULT`, `EVAL_RESULT`, and `JUDGE_OUTPUT` evidence.
 6. Create failure packets when checks fail.
-7. Propose bounded fixes linked to failures.
-8. Create candidate agent versions.
-9. Run and evaluate candidates against the same contract.
-10. Compare baseline and candidate evidence.
-11. Create gate definitions and gate decisions.
-12. Assemble evidence context packs and optional evidence summaries.
+7. Add review notes that open-code failure modes before proposing fixes.
+8. Propose bounded fixes linked to failures.
+9. Create candidate agent versions.
+10. Run and evaluate candidates against the same contract.
+11. Compare baseline and candidate evidence.
+12. Create gate definitions and gate decisions.
+13. Assemble evidence context packs for the proof loop.
 
 The platform also supports:
 
@@ -71,11 +130,20 @@ The platform also supports:
 - built-in and mock tool execution through the runner;
 - first-class tool call and tool result evidence;
 - optional OpenAI live agent runs and live judge calls;
+- optional evidence summaries through the API;
 - optional Langfuse trace refs, scenario dataset refs, and eval score refs;
+- optional Langfuse comment mirroring for review notes on linked traces or
+  prompts;
 - deterministic seeded demo data for portfolio and local walkthroughs.
 
 Langfuse remains observability and experiment infrastructure. Platform artifacts
 remain the source of truth.
+
+The current proof loop is strongest in the Measure -> Improve -> Compare ->
+Gate portion of the workflow. The planned error-analysis workflow strengthens
+the front of the loop by making human trace review, open-coded notes,
+failure-mode taxonomy, and failure-mode regression first-class platform
+concepts.
 
 ## Local Development
 
@@ -140,6 +208,30 @@ Then start:
 
 Local Langfuse is optional. If it is already running on
 `http://localhost:3001`, `./scripts/dev.sh` uses the seeded local keys.
+
+### Langfuse Boundary
+
+Langfuse is treated as observability and experiment infrastructure. It can
+provide traces, spans, datasets, scores, and deep links into raw execution
+detail.
+
+EDD Platform owns the evaluation-driven workflow:
+
+```text
+trace evidence
+  -> failure packets
+  -> failure modes
+  -> eval contracts
+  -> fix proposals
+  -> comparisons
+  -> gate decisions
+  -> evidence context
+```
+
+The normal workflow should keep users in the EDD Platform UI. Langfuse is a
+source of evidence and a deep-link target when raw trace detail is needed, not
+the primary workspace for error analysis, fix proposals, comparisons, or
+promotion decisions.
 
 To start Langfuse and the app together:
 
@@ -230,4 +322,10 @@ and Langfuse trace URL.
   implementation kinds are still planned.
 - Evidence summaries are available through the API, but UI display is still
   planned.
+- Error analysis is currently represented through failure packets, review
+  notes, and evidence artifacts. A dedicated trace review queue, open-coded
+  human notes, failure-mode taxonomy, and failure-mode regression views are
+  planned.
+- Langfuse trace references, dataset refs, score refs, and comment refs exist
+  as integration points. Production-grade trace import is still planned.
 - README screenshot and external public docs are still portfolio-polish tasks.

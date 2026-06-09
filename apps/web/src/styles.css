@@ -17,6 +17,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -399,6 +400,7 @@ label {
 }
 
 input,
+select,
 textarea {
   border: 1px solid #d8d9e0;
   border-radius: 14px;
@@ -414,6 +416,7 @@ textarea {
 }
 
 input:focus,
+select:focus,
 textarea:focus {
   border-color: #9da3b4;
   box-shadow: 0 0 0 3px #eceef5;
@@ -1131,6 +1134,85 @@ dd {
   margin: 0;
 }
 
+.failure-analysis-panel {
+  background: #ffffff;
+  border: 1px solid #e2e3ea;
+  border-radius: 16px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
+  padding: 18px;
+}
+
+.failure-analysis-summary h4 {
+  color: #202123;
+  font-size: 20px;
+  line-height: 1.15;
+  margin: 0 0 6px;
+}
+
+.failure-analysis-summary p,
+.failure-analysis-form span,
+.analysis-action-row span {
+  color: #606373;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.failed-check-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.failed-check-list span {
+  background: #f7f7f8;
+  border: 1px solid #ececf1;
+  border-radius: 12px;
+  color: #606373;
+  display: grid;
+  gap: 4px;
+  line-height: 1.4;
+  padding: 10px 12px;
+}
+
+.failed-check-list strong {
+  color: #202123;
+  overflow-wrap: anywhere;
+}
+
+.failure-analysis-form {
+  display: grid;
+  gap: 14px;
+}
+
+.analysis-field-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 150px;
+}
+
+.failure-analysis-form textarea {
+  min-height: 112px;
+}
+
+.analysis-action-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.failure-analysis-form .saved-analysis-chip {
+  background: #eef7f0;
+  border: 1px solid #cfe7d4;
+  border-radius: 999px;
+  color: #256636;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 11px;
+}
+
 .artifact-card {
   background: #f7f7f8;
   border: 1px solid #ececf1;
@@ -1506,6 +1588,16 @@ dd {
   }
 
   .next-action-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .failure-analysis-panel,
+  .analysis-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .analysis-action-row {
     align-items: stretch;
     flex-direction: column;
   }

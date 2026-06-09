@@ -258,6 +258,17 @@ type FailurePacket = {
   updated_at: string;
 };
 
+type ReviewNote = {
+  id: string;
+  project_id: string;
+  target_artifact_id: string;
+  body: string;
+  author: string;
+  metadata: Record<string, unknown>;
+  artifact_ids: string[];
+  created_at: string;
+};
+
 type FixProposal = {
   id: string;
   project_id: string;
@@ -698,6 +709,26 @@ async function listFailurePackets(
   return response.json();
 }
 
+async function createReviewNote(
+  projectId: string,
+  payload: {
+    target_artifact_id: string;
+    body: string;
+    author?: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<ReviewNote> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/review-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to save review note.");
+  }
+  return response.json();
+}
+
 async function createFixProposal(
   projectId: string,
   agentDesignId: string,
@@ -1129,6 +1160,11 @@ function App() {
   const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
+  const [analysisNote, setAnalysisNote] = useState<ReviewNote | null>(null);
+  const [analysisNoteText, setAnalysisNoteText] = useState("");
+  const [analysisFailureMode, setAnalysisFailureMode] = useState("");
+  const [analysisSeverity, setAnalysisSeverity] = useState("medium");
+  const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [fixEditText, setFixEditText] = useState("");
   const [isSavingFix, setIsSavingFix] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
@@ -1225,6 +1261,16 @@ function App() {
   ).slice(0, 4);
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
+  const failedBaselineChecks =
+    eddFlow.baselineEval?.checks.filter((check) => !check.passed) ?? [];
+  const baselineTraceArtifact = currentTraceArtifacts.find((artifact) =>
+    eddFlow.baselineRun ? artifact.body.includes(eddFlow.baselineRun.id) : false,
+  );
+  const analysisTargetArtifactId =
+    baselineTraceArtifact?.id ??
+    eddFlow.baselineEval?.artifact_ids[0] ??
+    eddFlow.baselineRun?.artifact_ids[0] ??
+    "";
   const reviewFixProposal =
     reviewArtifact?.artifact_type === "FIX_PROPOSAL" && eddFlow.fixProposal?.id === reviewArtifact.artifact_id
       ? eddFlow.fixProposal
@@ -1284,6 +1330,10 @@ function App() {
     }
     let isCurrent = true;
     setEddFlow({ failurePackets: [] });
+    setAnalysisNote(null);
+    setAnalysisNoteText("");
+    setAnalysisFailureMode("");
+    setAnalysisSeverity("medium");
     setIsLoadingContext(true);
     Promise.all([
       buildContextPack(project.id, selectedId ?? undefined),
@@ -1677,6 +1727,10 @@ function App() {
         requiredPhrase.trim(),
       );
       setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
+      setAnalysisNote(null);
+      setAnalysisNoteText("");
+      setAnalysisFailureMode("");
+      setAnalysisSeverity("medium");
       setActivity("Test is ready. Run the current version next.");
       await refreshContext();
     } catch (err) {
@@ -1735,6 +1789,41 @@ function App() {
       setActivity(null);
     } finally {
       setIsFlowBusy(false);
+    }
+  }
+
+  async function handleSaveAnalysisNote() {
+    if (!project || !eddFlow.baselineEval || !analysisTargetArtifactId) {
+      return;
+    }
+    if (!analysisNoteText.trim()) {
+      setError("Add a brief failure note before proposing a fix.");
+      return;
+    }
+    setError(null);
+    setActivity("Saving failure analysis.");
+    setIsSavingAnalysis(true);
+    try {
+      const note = await createReviewNote(project.id, {
+        target_artifact_id: analysisTargetArtifactId,
+        body: analysisNoteText.trim(),
+        author: "platform",
+        metadata: {
+          failure_mode: analysisFailureMode.trim(),
+          severity: analysisSeverity,
+          eval_result_id: eddFlow.baselineEval.id,
+          failed_check_ids: failedBaselineChecks.map((check) => check.check_id),
+        },
+      });
+      setAnalysisNote(note);
+      setActivity("Failure analysis saved.");
+      await refreshContext();
+      await reviewFirstArtifact(note.artifact_ids);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save failure analysis.");
+      setActivity(null);
+    } finally {
+      setIsSavingAnalysis(false);
     }
   }
 
@@ -1885,6 +1974,10 @@ function App() {
       baselineEval: flow.candidateEval,
       failurePackets: nextFailurePackets,
     }));
+    setAnalysisNote(null);
+    setAnalysisNoteText("");
+    setAnalysisFailureMode("");
+    setAnalysisSeverity("medium");
     setActivity(`Continuing from ${eddFlow.candidateVersion.version_label}.`);
     setReviewArtifact(null);
     setReviewLinks([]);
@@ -1914,6 +2007,11 @@ function App() {
     },
     ...(improvementNeeded
       ? [
+          {
+            label: "Analyze failure",
+            done: Boolean(analysisNote),
+            detail: analysisNote ? "Failure mode saved" : "Open-code the failed evidence",
+          },
           {
             label: "Propose fix",
             done: Boolean(eddFlow.fixProposal),
@@ -1997,6 +2095,16 @@ function App() {
         label: "Done",
         onClick: undefined,
         disabled: true,
+      };
+    }
+    if (improvementNeeded && !analysisNote) {
+      return {
+        eyebrow: "Next action",
+        title: "Analyze the failed evidence",
+        detail: "Name the failure mode before turning it into a targeted fix.",
+        label: "Save analysis",
+        onClick: handleSaveAnalysisNote,
+        disabled: isFlowBusy || isSavingAnalysis || !analysisNoteText.trim() || !analysisTargetArtifactId,
       };
     }
     if (!eddFlow.fixProposal && eddFlow.failurePackets.length > 0) {
@@ -2416,6 +2524,80 @@ function App() {
                       </button>
                     ) : null}
                   </div>
+                  {improvementNeeded && eddFlow.baselineEval ? (
+                    <div className="failure-analysis-panel">
+                      <div className="failure-analysis-summary">
+                        <p className="artifact-type">Failure analysis</p>
+                        <h4>Open-code the failed evidence</h4>
+                        <p>
+                          Capture the observed failure mode before proposing a fix.
+                        </p>
+                        <div className="failed-check-list">
+                          {failedBaselineChecks.length === 0 ? (
+                            <span>No failed checks were returned.</span>
+                          ) : (
+                            failedBaselineChecks.map((check) => (
+                              <span key={check.check_id}>
+                                <strong>{check.check_id}</strong>
+                                {check.comment || check.observed}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <div className="failure-analysis-form">
+                        <div className="analysis-field-row">
+                          <label className="compact-label">
+                            <span>Failure mode</span>
+                            <input
+                              value={analysisFailureMode}
+                              onChange={(event) => setAnalysisFailureMode(event.target.value)}
+                              placeholder="failed expected phrase"
+                            />
+                          </label>
+                          <label className="compact-label">
+                            <span>Severity</span>
+                            <select
+                              value={analysisSeverity}
+                              onChange={(event) => setAnalysisSeverity(event.target.value)}
+                            >
+                              <option value="low">Low</option>
+                              <option value="medium">Medium</option>
+                              <option value="high">High</option>
+                            </select>
+                          </label>
+                        </div>
+                        <label className="compact-label">
+                          <span>Review note</span>
+                          <textarea
+                            value={analysisNoteText}
+                            onChange={(event) => setAnalysisNoteText(event.target.value)}
+                            placeholder="The response did not satisfy the explicit success criteria because..."
+                          />
+                        </label>
+                        <div className="analysis-action-row">
+                          {analysisNote ? (
+                            <span className="saved-analysis-chip">Analysis saved</span>
+                          ) : (
+                            <span>Targeting current failure evidence</span>
+                          )}
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={handleSaveAnalysisNote}
+                            disabled={
+                              isFlowBusy ||
+                              isSavingAnalysis ||
+                              !analysisNoteText.trim() ||
+                              !analysisTargetArtifactId
+                            }
+                          >
+                            Save analysis
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                   {eddFlow.comparison ? (
                     <div className="comparison-summary">
                       <strong>{eddFlow.comparison.summary}</strong>
