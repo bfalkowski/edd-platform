@@ -1154,6 +1154,9 @@ function App() {
   const [scenarioInput, setScenarioInput] = useState(defaultScenarioInput);
   const [requiredPhrase, setRequiredPhrase] = useState("");
   const [runMode, setRunMode] = useState<"mock" | "live">("mock");
+  const [workspaceTab, setWorkspaceTab] = useState<
+    "agent" | "proof" | "error-analysis" | "evidence" | "readiness"
+  >("proof");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
   const [eddFlow, setEddFlow] = useState<EddFlowState>({ failurePackets: [] });
   const [gates, setGates] = useState<GateDefinition[]>([]);
@@ -1250,7 +1253,7 @@ function App() {
     const runMatch = artifact.body.match(/Run\n(.+)/);
     return runMatch ? currentProofRunIdSet.has(runMatch[1].trim()) : false;
   });
-  const evidencePreviewArtifacts = [
+  const evidenceArtifacts = [
     ...currentTraceArtifacts,
     ...currentProofArtifacts,
     ...visibleArtifacts.filter((artifact) => artifact.artifact_type === "TRACE_REF"),
@@ -1258,7 +1261,7 @@ function App() {
   ].filter(
     (artifact, index, artifacts) =>
       artifacts.findIndex((candidate) => candidate.id === artifact.id) === index,
-  ).slice(0, 4);
+  );
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
   const failedBaselineChecks =
@@ -1388,6 +1391,7 @@ function App() {
       setScratchError(null);
       setScratchArtifact(null);
       setScratchTraceUrl(null);
+      setWorkspaceTab("proof");
       setName("");
       setIntent("");
     } catch (err) {
@@ -1415,6 +1419,7 @@ function App() {
         setScratchError(null);
         setScratchArtifact(null);
         setScratchTraceUrl(null);
+        setWorkspaceTab("proof");
       }
       setDeleteCandidate(null);
       setOpenAgentMenuId(null);
@@ -1985,6 +1990,8 @@ function App() {
 
   const baselinePassed = eddFlow.baselineEval?.passed === true;
   const improvementNeeded = eddFlow.baselineEval?.passed === false;
+  const showFailureAnalysis = improvementNeeded && Boolean(eddFlow.baselineEval);
+  const showNextActionPanel = !(showFailureAnalysis && !analysisNote);
   const baselineLabel = eddFlow.baselineVersion?.version_label ?? "current";
   const candidateLabel = eddFlow.candidateVersion?.version_label ?? "next";
   const loopSteps = [
@@ -2209,6 +2216,7 @@ function App() {
               setToolsPanelOpen(false);
               setScratchPanelOpen(false);
               setActivity(null);
+              setWorkspaceTab("proof");
             }}
           >
             <PencilLine size={22} />
@@ -2282,6 +2290,7 @@ function App() {
                     setScratchError(null);
                     setScratchArtifact(null);
                     setScratchTraceUrl(null);
+                    setWorkspaceTab("proof");
                   }}
                 >
                   <span>{agent.name}</span>
@@ -2339,39 +2348,17 @@ function App() {
       </aside>
 
       <main className="workspace">
-        <header className="topbar">
-          <div>
-            <h1>{selectedAgent ? "Agent workspace" : "New agent"}</h1>
-            <p>
-              {selectedAgent
-                ? "Create the agent, then test and improve it with saved evidence."
-                : project?.description ??
-                "Describe an agent and persist the first platform design."}
-            </p>
-          </div>
-          <div className="topbar-actions">
-            {selectedAgent ? (
-              <div className="run-mode-shell">
-                <div className="run-mode-control topbar-run-mode" aria-label="Run mode">
-                  <button
-                    className={runMode === "mock" ? "mode-option active" : "mode-option"}
-                    type="button"
-                    onClick={() => setRunMode("mock")}
-                  >
-                    Mock
-                  </button>
-                  <button
-                    className={runMode === "live" ? "mode-option active" : "mode-option"}
-                    type="button"
-                    onClick={() => setRunMode("live")}
-                  >
-                    Live OpenAI
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </header>
+        {!selectedAgent ? (
+          <header className="topbar">
+            <div>
+              <h1>New agent</h1>
+              <p>
+                {project?.description ??
+                  "Describe an agent and persist the first platform design."}
+              </p>
+            </div>
+          </header>
+        ) : null}
 
         <section className={selectedAgent ? "canvas canvas-workspace" : "canvas"}>
           {!selectedAgent ? (
@@ -2404,37 +2391,91 @@ function App() {
           ) : null}
 
           {selectedAgent ? (
-          <section className="evidence-panel evidence-workspace">
-            <p className="eyebrow">Agent test workflow</p>
-            <h2>Prove this agent gets better.</h2>
-              <div className="artifact-stack">
-                <section className="agent-setup-panel">
-                  <div>
-                    <p className="artifact-type">Created agent</p>
-                    <h3>{selectedAgent.name}</h3>
+            <section className="agent-workspace">
+              <div className="workspace-tabbar">
+                <div className="workspace-tabs" role="tablist" aria-label="Agent workspace">
+                  <button
+                    className={workspaceTab === "agent" ? "workspace-tab active" : "workspace-tab"}
+                    type="button"
+                    role="tab"
+                    aria-selected={workspaceTab === "agent"}
+                    onClick={() => setWorkspaceTab("agent")}
+                  >
+                    Agent
+                  </button>
+                  <button
+                    className={workspaceTab === "proof" ? "workspace-tab active" : "workspace-tab"}
+                    type="button"
+                    role="tab"
+                    aria-selected={workspaceTab === "proof"}
+                    onClick={() => setWorkspaceTab("proof")}
+                  >
+                    Proof loop
+                  </button>
+                  <button
+                    className={
+                      workspaceTab === "error-analysis" ? "workspace-tab active" : "workspace-tab"
+                    }
+                    type="button"
+                    role="tab"
+                    aria-selected={workspaceTab === "error-analysis"}
+                    onClick={() => setWorkspaceTab("error-analysis")}
+                  >
+                    Error analysis
+                  </button>
+                  <button
+                    className={workspaceTab === "evidence" ? "workspace-tab active" : "workspace-tab"}
+                    type="button"
+                    role="tab"
+                    aria-selected={workspaceTab === "evidence"}
+                    onClick={() => setWorkspaceTab("evidence")}
+                  >
+                    Evidence
+                    <span>{evidenceArtifacts.length}</span>
+                  </button>
+                  <button
+                    className={workspaceTab === "readiness" ? "workspace-tab active" : "workspace-tab"}
+                    type="button"
+                    role="tab"
+                    aria-selected={workspaceTab === "readiness"}
+                    onClick={() => setWorkspaceTab("readiness")}
+                  >
+                    Readiness
+                  </button>
+                </div>
+                <div className="run-mode-control workspace-run-mode" aria-label="Run mode">
+                  <button
+                    className={runMode === "mock" ? "mode-option active" : "mode-option"}
+                    type="button"
+                    onClick={() => setRunMode("mock")}
+                  >
+                    Mock
+                  </button>
+                  <button
+                    className={runMode === "live" ? "mode-option active" : "mode-option"}
+                    type="button"
+                    onClick={() => setRunMode("live")}
+                  >
+                    Live OpenAI
+                  </button>
+                </div>
+              </div>
+
+              {workspaceTab === "agent" ? (
+                <section className="agent-context-strip workspace-tab-panel">
+                  <div className="agent-context-main">
+                    <p className="artifact-type">Selected agent</p>
+                    <h2>{selectedAgent.name}</h2>
                     <p>{selectedAgent.intent}</p>
                   </div>
-                  <div className="agent-setup-tools">
+                  <div className="agent-context-tools">
                     <div>
-                      <p className="artifact-type">Tools</p>
-                      <p>
+                      <span>Tools</span>
+                      <strong>
                         {selectedAgent.allowed_tool_names.length === 0
-                          ? "No tools enabled for live execution."
-                          : `${selectedAgent.allowed_tool_names.length} tool${
-                              selectedAgent.allowed_tool_names.length === 1 ? "" : "s"
-                            } enabled for live execution.`}
-                      </p>
-                      <div className="tool-chip-row">
-                        {selectedAgent.allowed_tool_names.length === 0 ? (
-                          <span className="muted-chip">None enabled</span>
-                        ) : (
-                          selectedAgent.allowed_tool_names.map((toolName) => (
-                            <span className="tool-chip" key={toolName}>
-                              {toolName}
-                            </span>
-                          ))
-                        )}
-                      </div>
+                          ? "None enabled"
+                          : `${selectedAgent.allowed_tool_names.length} enabled`}
+                      </strong>
                     </div>
                     <button
                       className="secondary-button"
@@ -2450,7 +2491,10 @@ function App() {
                     </button>
                   </div>
                 </section>
-                <section className="edd-loop-panel primary-workflow-panel">
+              ) : null}
+
+              {workspaceTab === "proof" ? (
+                <section className="edd-loop-panel primary-workflow-panel workspace-tab-panel">
                   <div className="edd-loop-header">
                     <div>
                       <p className="artifact-type">Proof loop</p>
@@ -2505,26 +2549,28 @@ function App() {
                       </div>
                     ))}
                   </div>
-                  <div className="next-action-panel">
-                    <div>
-                      <p className="artifact-type">{currentLoopAction.eyebrow}</p>
-                      <h4>{currentLoopAction.title}</h4>
-                      <p>{currentLoopAction.detail}</p>
-                      {activity ? <p className="activity-text">{activity}</p> : null}
-                      {error ? <p className="error-text">{error}</p> : null}
+                  {showNextActionPanel ? (
+                    <div className="next-action-panel">
+                      <div>
+                        <p className="artifact-type">{currentLoopAction.eyebrow}</p>
+                        <h4>{currentLoopAction.title}</h4>
+                        <p>{currentLoopAction.detail}</p>
+                        {activity ? <p className="activity-text">{activity}</p> : null}
+                        {error ? <p className="error-text">{error}</p> : null}
+                      </div>
+                      {currentLoopAction.onClick ? (
+                        <button
+                          className="primary-button"
+                          type="button"
+                          onClick={currentLoopAction.onClick}
+                          disabled={currentLoopAction.disabled}
+                        >
+                          {currentLoopAction.label}
+                        </button>
+                      ) : null}
                     </div>
-                    {currentLoopAction.onClick ? (
-                      <button
-                        className="primary-button"
-                        type="button"
-                        onClick={currentLoopAction.onClick}
-                        disabled={currentLoopAction.disabled}
-                      >
-                        {currentLoopAction.label}
-                      </button>
-                    ) : null}
-                  </div>
-                  {improvementNeeded && eddFlow.baselineEval ? (
+                  ) : null}
+                  {showFailureAnalysis ? (
                     <div className="failure-analysis-panel">
                       <div className="failure-analysis-summary">
                         <p className="artifact-type">Failure analysis</p>
@@ -2575,6 +2621,8 @@ function App() {
                             placeholder="The response did not satisfy the explicit success criteria because..."
                           />
                         </label>
+                        {activity ? <p className="activity-text">{activity}</p> : null}
+                        {error ? <p className="error-text">{error}</p> : null}
                         <div className="analysis-action-row">
                           {analysisNote ? (
                             <span className="saved-analysis-chip">Analysis saved</span>
@@ -2608,90 +2656,109 @@ function App() {
                       </span>
                     </div>
                   ) : null}
-                  <div className="workflow-evidence-panel">
-                    <div className="workflow-evidence-header">
-                      <div>
-                        <p className="artifact-type">Evidence</p>
-                        <h4>Proof artifacts</h4>
-                      </div>
-                      <span>{visibleArtifacts.length} saved</span>
-                    </div>
-                    <div className="workflow-evidence-list">
-                      {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
-                      {!isLoadingContext && evidencePreviewArtifacts.length === 0 ? (
-                        <p className="muted-copy">No proof artifacts yet.</p>
-                      ) : null}
-                      {evidencePreviewArtifacts.map((artifact) => {
-                        const traceUrl = traceUrlFromArtifact(artifact);
-                        return (
-                          <div className="workflow-evidence-row" key={artifact.id}>
-                            <button
-                              className="workflow-evidence-item"
-                              type="button"
-                              onClick={() => handleReviewArtifact(artifact.id)}
-                            >
-                              <span>{artifactRoleLabel(artifact.artifact_type)}</span>
-                              <strong>{artifact.title}</strong>
-                              <PanelRight size={17} />
-                            </button>
-                            {traceUrl ? (
-                              <a
-                                className="workflow-trace-link"
-                                href={traceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open trace
-                              </a>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="readiness-panel">
-                    <div>
-                      <p className="artifact-type">Promotion readiness</p>
-                      <h4>
-                        {latestGateDecision
-                          ? latestGateDecision.decision === "passed"
-                            ? "Ready"
-                            : "Blocked"
-                          : latestGate
-                            ? "Gate ready"
-                            : "No gate yet"}
-                      </h4>
-                      <p>
-                        {latestGateDecision
-                          ? latestGateDecision.rationale
-                          : latestGate
-                            ? "Run the gate after comparison evidence exists."
-                            : "Create a gate to turn eval evidence into an explicit readiness decision."}
-                      </p>
-                    </div>
-                    {!latestGate ? (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={handleCreatePromotionGate}
-                        disabled={isGateBusy}
-                      >
-                        Create gate
-                      </button>
-                    ) : (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={handleRunPromotionGate}
-                        disabled={isGateBusy || !eddFlow.candidateEval || !eddFlow.comparison}
-                      >
-                        {latestGateDecision ? "Run again" : "Run gate"}
-                      </button>
-                    )}
+                </section>
+              ) : null}
+
+              {workspaceTab === "error-analysis" ? (
+                <section className="error-analysis-placeholder workspace-tab-panel">
+                  <div>
+                    <p className="artifact-type">Error analysis</p>
+                    <h3>Under construction</h3>
+                    <p>
+                      This workspace will collect traces, open-code failures, group failure
+                      modes, and prioritize what to fix next.
+                    </p>
                   </div>
                 </section>
-              </div>
-          </section>
+              ) : null}
+
+              {workspaceTab === "evidence" ? (
+                <section className="workflow-evidence-panel workspace-tab-panel">
+                  <div className="workflow-evidence-header">
+                    <div>
+                      <p className="artifact-type">Evidence</p>
+                      <h3>Proof artifacts</h3>
+                    </div>
+                    <span>{evidenceArtifacts.length} saved</span>
+                  </div>
+                  <div className="workflow-evidence-list">
+                    {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
+                    {!isLoadingContext && evidenceArtifacts.length === 0 ? (
+                      <p className="muted-copy">No proof artifacts yet.</p>
+                    ) : null}
+                    {evidenceArtifacts.map((artifact) => {
+                      const traceUrl = traceUrlFromArtifact(artifact);
+                      return (
+                        <div className="workflow-evidence-row" key={artifact.id}>
+                          <button
+                            className="workflow-evidence-item"
+                            type="button"
+                            onClick={() => handleReviewArtifact(artifact.id)}
+                          >
+                            <span>{artifactRoleLabel(artifact.artifact_type)}</span>
+                            <strong>{artifact.title}</strong>
+                            <PanelRight size={17} />
+                          </button>
+                          {traceUrl ? (
+                            <a
+                              className="workflow-trace-link"
+                              href={traceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open trace
+                            </a>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+
+              {workspaceTab === "readiness" ? (
+                <section className="readiness-panel workspace-tab-panel">
+                  <div>
+                    <p className="artifact-type">Promotion readiness</p>
+                    <h3>
+                      {latestGateDecision
+                        ? latestGateDecision.decision === "passed"
+                          ? "Ready"
+                          : "Blocked"
+                        : latestGate
+                          ? "Gate ready"
+                          : "No gate yet"}
+                    </h3>
+                    <p>
+                      {latestGateDecision
+                        ? latestGateDecision.rationale
+                        : latestGate
+                          ? "Run the gate after comparison evidence exists."
+                          : "Create a gate to turn eval evidence into an explicit readiness decision."}
+                    </p>
+                  </div>
+                  {!latestGate ? (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleCreatePromotionGate}
+                      disabled={isGateBusy}
+                    >
+                      Create gate
+                    </button>
+                  ) : (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={handleRunPromotionGate}
+                      disabled={isGateBusy || !eddFlow.candidateEval || !eddFlow.comparison}
+                    >
+                      {latestGateDecision ? "Run again" : "Run gate"}
+                    </button>
+                  )}
+                </section>
+              ) : null}
+            </section>
           ) : null}
         </section>
       </main>
