@@ -24,21 +24,21 @@ Statuses:
 | Evidence context packs | HLD-001 | covered | partial | covered | Purpose-specific deterministic context packs exist for prompt review, fix proposal generation, gate review, and version comparison. |
 | Evidence summaries | HLD-001 | covered | gap | partial | Deterministic and optional live summaries exist with cache and token/cost telemetry; UI display is missing. |
 | Agent design | HLD-002, HLD-003 | covered | covered | covered | Create/list/delete and left-nav UI exist. |
-| Platform tools | HLD-002, HLD-004 | partial | partial | partial | Tool definitions exist; editing/governance UI is missing. |
-| Agent versions | HLD-001, HLD-004 | partial | gap | partial | Create/list/get API exists; versioned runs and comparison are missing. |
-| Scenarios | HLD-003, HLD-004 | partial | partial | partial | Create/list/get API exists; playground is not yet driven by scenario records. |
-| Eval contracts | HLD-003, HLD-004 | partial | gap | partial | Create/list/get API exists; evaluation does not yet consume contracts. |
-| Runs | HLD-002, HLD-003, HLD-004 | partial | partial | partial | Canonical project-scoped run API exists; contract-driven evaluation is missing. |
-| Tool call evidence | HLD-004 | partial | partial | partial | Stored in run artifact body; should become first-class evidence. |
-| Eval results | HLD-003, HLD-004 | partial | partial | partial | Contract-driven run evaluation API exists; failure packets are next. |
-| Judge prompts | HLD-002, HLD-003, HLD-004 | covered | gap | partial | Prompt templates are stored as artifacts and can be linked to eval contracts. |
-| Judge outputs | HLD-001, HLD-004 | partial | gap | partial | Deterministic and optional live judge output artifacts are created during run evaluation. |
-| Failure packets | HLD-001, HLD-003, HLD-004 | partial | gap | partial | API and automatic failed-eval creation exist; UI is missing. |
-| Fix proposals | HLD-001, HLD-003, HLD-004 | partial | gap | partial | API and evidence artifact links exist; UI is missing. |
-| Comparisons | HLD-001, HLD-004 | partial | gap | partial | API and comparison artifacts exist; UI is missing. |
-| Gates | HLD-002, HLD-003 | covered | partial | partial | Gate definitions are stored as artifacts and can be created from the EDD loop. |
+| Platform tools | HLD-002, HLD-004 | partial | partial | partial | Tool definitions, approval, search/filter, draft creation, and agent allowlists exist; adapters for `http`, `mcp`, and `python` are still planned. |
+| Agent versions | HLD-001, HLD-004 | partial | partial | partial | Baseline and candidate versions are created through the proof loop; broader version management UI is still planned. |
+| Scenarios | HLD-003, HLD-004 | partial | partial | partial | Scenario APIs exist and the UI creates scenario-backed test cases with single-turn, conversation, and trace-replay shapes. |
+| Eval contracts | HLD-003, HLD-004 | partial | partial | partial | The UI creates contracts for rubric judge, tool-use, and exact-text checks; richer contract editing is still planned. |
+| Runs | HLD-002, HLD-003, HLD-004 | partial | partial | partial | Project-scoped runs and proof-loop run actions exist; run history and broader replay UI are still planned. |
+| Tool call evidence | HLD-004 | partial | partial | covered | Tool calls and tool results are emitted as first-class evidence artifacts and shown in related evidence. |
+| Eval results | HLD-003, HLD-004 | partial | partial | covered | Contract-driven run evaluation exists for deterministic checks and optional live judges. |
+| Judge prompts | HLD-002, HLD-003, HLD-004 | covered | partial | partial | Prompt templates are stored as artifacts and can be linked to eval contracts; direct prompt-template management UI is still planned. |
+| Judge outputs | HLD-001, HLD-004 | partial | partial | covered | Deterministic and optional live judge output artifacts are created during run evaluation and linked into evidence. |
+| Failure packets | HLD-001, HLD-003, HLD-004 | partial | partial | partial | API and automatic failed-eval creation exist; the proof loop supports open-coded failure notes, while full taxonomy/error-analysis views are planned. |
+| Fix proposals | HLD-001, HLD-003, HLD-004 | partial | partial | partial | API, evidence links, and proof-loop actions exist; richer editing/version management is still planned. |
+| Comparisons | HLD-001, HLD-004 | partial | partial | partial | API and proof-loop comparison artifacts exist; broader comparison review UI is still planned. |
+| Gates | HLD-002, HLD-003 | covered | partial | partial | Gate definitions are stored as artifacts and can be created from the readiness view. |
 | Gate decisions | HLD-001, HLD-002 | covered | partial | partial | Gate decisions create readiness artifacts linked to gate and supporting evidence. |
-| Langfuse trace refs | HLD-001, HLD-002 | covered | partial | covered | Trace refs are stored as artifacts with links to external Langfuse traces; adapter package builds platform payloads. |
+| Langfuse trace refs | HLD-001, HLD-002 | covered | partial | covered | Trace refs are stored as artifacts with Open trace links; live agent runs create Langfuse agent observations with child generation observations for raw OpenAI calls. |
 | Frontend design language | Frontend guide | n/a | covered | covered | Use `docs/design/FRONTEND_GUIDE.md`. |
 | AI-agent development guardrails | Engineering guide | n/a | n/a | covered | Use `docs/engineering/AI_AGENT_DEVELOPMENT.md`. |
 

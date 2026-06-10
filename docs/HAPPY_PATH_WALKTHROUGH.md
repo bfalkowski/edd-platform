@@ -61,38 +61,55 @@ Mock
 
 Expected result:
 
-- The header says the platform is local.
-- Mock mode copy explains that deterministic local behavior is used.
+- Mock mode is selected in the run mode control.
+- Runs use deterministic local behavior until **Live OpenAI** is selected.
 
 ### 3. Define The Test
 
-In **Proof loop**, define a scenario and success criteria.
+In **Proof loop**, click **New test**.
 
-Example scenario:
+The right panel opens the test case editor. Use:
+
+```text
+Test shape: Single turn
+Judge method: Rubric judge
+```
+
+Example prompt:
 
 ```text
 A customer reports that a production deployment failed after a permissions migration.
 The customer is blocked and asks what to do next.
 ```
 
-Example success criteria:
+Example rubric:
 
 ```text
-safe rollback plan
+A good answer should acknowledge the deployment failure, avoid claiming the
+deployment is fixed, ask for missing evidence if needed, and recommend a safe
+next diagnostic or rollback action.
 ```
 
-Click **Define test**.
+Click **Save test**.
 
 Expected result:
 
 - A scenario is stored.
 - An eval contract is stored.
+- The scenario records the selected test shape in `setup_context`.
 - Evidence artifacts appear for the scenario and contract.
 - The next action advances to running the original agent.
 
+Other supported test shapes:
+
+- **Conversation:** prior messages plus the next user turn.
+- **Trace replay:** a replay seed for selected prior spans, messages, or
+  evidence. Full trace-span picking is planned; today the replay seed is stored
+  as scenario input.
+
 ### 4. Run The Original Agent
 
-Click **Run original**.
+Click **Run current**.
 
 Expected result:
 
@@ -103,7 +120,7 @@ Expected result:
 
 ### 5. Check The Original Run
 
-Click **Check original**.
+Click **Check answer**.
 
 Expected result:
 
@@ -116,6 +133,9 @@ Expected result:
 - In live mode, the saved evidence should show an **Open trace** link for the
   run when Langfuse is configured. This should be true whether the check passes
   or fails.
+- In live mode, the linked Langfuse trace should contain the agent run
+  observation and a child `openai.responses` generation for raw OpenAI model
+  calls.
 
 The remaining improvement steps are only required when the original answer
 fails the contract.
@@ -132,7 +152,7 @@ Expected result:
 
 ### 7. Create The Candidate
 
-Click **Create candidate**.
+Click **Create v1**.
 
 Expected result:
 
@@ -142,7 +162,7 @@ Expected result:
 
 ### 8. Run The Candidate
 
-Click **Run candidate**.
+Click **Run v1**.
 
 Expected result:
 
@@ -152,7 +172,7 @@ Expected result:
 
 ### 9. Check The Candidate
 
-Click **Check candidate**.
+Click **Check answer**.
 
 Expected result:
 
@@ -191,9 +211,9 @@ In the agent workspace, click **Manage tools**.
 
 Expected result:
 
-- The right panel opens to **Available tools**.
-- Draft tools appear above the tool creation form.
-- Approved tools appear under **Assigned to this agent**.
+- The right panel opens to the tool manager.
+- Draft tools can be created or approved.
+- Approved tools can be searched, filtered, and assigned to the selected agent.
 
 ### 2. Create A Draft Tool
 
@@ -316,7 +336,7 @@ Expected result:
 The happy path is healthy when a user can:
 
 1. Create an agent.
-2. Define a scenario and success criteria.
+2. Define a test case with a shape and judge method.
 3. Run the original behavior.
 4. Evaluate the original behavior.
 5. Complete the loop when the original answer passes.

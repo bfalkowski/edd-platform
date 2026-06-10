@@ -355,9 +355,58 @@ def test_list_tool_definitions_includes_approved_weather_tool() -> None:
 
     assert response.status_code == 200
     tools = response.json()
-    assert tools[0]["name"] == "get_weather"
-    assert tools[0]["status"] == "approved"
-    assert tools[0]["implementation_key"] == "open_meteo_weather"
+    weather_tool = next(tool for tool in tools if tool["name"] == "get_weather")
+    assert weather_tool["status"] == "approved"
+    assert weather_tool["implementation_key"] == "open_meteo_weather"
+
+
+def test_default_sentiment_observer_agent_has_all_observer_tools_enabled() -> None:
+    client = TestClient(app)
+
+    agents_response = client.get("/api/projects/project_default/agent-designs")
+    tools_response = client.get("/api/projects/project_default/tools")
+
+    assert agents_response.status_code == 200
+    assert tools_response.status_code == 200
+    agent = next(
+        agent
+        for agent in agents_response.json()
+        if agent["id"] == "agent_sentiment_observer"
+    )
+    expected_tool_names = {
+        "score_conversation_sentiment",
+        "detect_escalation_risk",
+        "summarize_conversation_signals",
+    }
+    assert agent["name"] == "Sentiment Observer"
+    assert "long-running observer" in agent["intent"]
+    assert "emotional arc" in agent["intent"]
+    assert expected_tool_names.issubset(set(agent["allowed_tool_names"]))
+
+    tools_by_name = {tool["name"]: tool for tool in tools_response.json()}
+    for tool_name in expected_tool_names:
+        assert tools_by_name[tool_name]["status"] == "approved"
+        assert tools_by_name[tool_name]["implementation_kind"] == "mock"
+    assert (
+        "previous_sentiment_score"
+        in tools_by_name["score_conversation_sentiment"]["input_schema"]["properties"]
+    )
+    assert "delta" in tools_by_name["score_conversation_sentiment"]["output_schema"]["properties"]
+    assert "previous_risk_score" in tools_by_name["detect_escalation_risk"]["input_schema"]["properties"]
+    assert "risk_delta" in tools_by_name["detect_escalation_risk"]["output_schema"]["properties"]
+    assert (
+        "previous_arc_state"
+        in tools_by_name["summarize_conversation_signals"]["input_schema"]["properties"]
+    )
+    assert "arc_state" in tools_by_name["summarize_conversation_signals"]["output_schema"]["properties"]
+    assert "trend_score" in tools_by_name["summarize_conversation_signals"]["output_schema"]["properties"]
+
+    artifacts_response = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "AGENT_DESIGN"},
+    )
+    assert artifacts_response.status_code == 200
+    assert artifacts_response.json()[0]["artifact_id"] == "agent_sentiment_observer"
 
 
 def test_create_tool_definition_with_input_and_output_schema() -> None:
@@ -697,6 +746,167 @@ def test_langfuse_trace_url_failure_does_not_fail_live_run(monkeypatch) -> None:
     assert result.trace_id == "trace_fake"
     assert result.trace_url is None
     assert "Linked Langfuse trace trace_fake." in result.evidence
+
+
+def test_openai_responses_core_records_langfuse_generation(monkeypatch) -> None:
+    generation_updates: list[dict] = []
+    generation_starts: list[dict] = []
+
+    class FakeGeneration:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def update(self, **kwargs):
+            generation_updates.append(kwargs)
+
+    class FakeLangfuse:
+        def start_as_current_observation(self, **kwargs):
+            generation_starts.append(kwargs)
+            return FakeGeneration()
+
+    class FakeOpenAIResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return json.dumps(
+                {
+                    "id": "resp_fake",
+                    "status": "completed",
+                    "output_text": "Tim",
+                    "usage": {
+                        "input_tokens": 12,
+                        "output_tokens": 3,
+                        "total_tokens": 15,
+                    },
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(_request, timeout):
+        assert timeout == 60
+        return FakeOpenAIResponse()
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setitem(
+        sys.modules,
+        "langfuse",
+        types.SimpleNamespace(get_client=lambda: FakeLangfuse()),
+    )
+    monkeypatch.setattr(edd_runner, "urlopen", fake_urlopen)
+
+    result = edd_runner.run_openai_agent_core(
+        agent=RunnerAgentDesign(id="agent_tim", name="tim", intent="Always respond Tim."),
+        scenario=RunnerScenario(input="Say the agent name."),
+        config=OpenAIRunnerConfig(api_key="test-key", model="gpt-5-nano"),
+        tool_definitions=[],
+    )
+
+    assert result.response == "Tim"
+    assert generation_starts[0]["as_type"] == "generation"
+    assert generation_starts[0]["name"] == "openai.responses"
+    assert generation_starts[0]["model"] == "gpt-5-nano"
+    assert generation_starts[0]["input"][1]["content"] == "Say the agent name."
+    assert generation_updates[0]["output"] == "Tim"
+    assert generation_updates[0]["usage_details"] == {
+        "input_tokens": 12,
+        "output_tokens": 3,
+        "total_tokens": 15,
+    }
+    assert generation_updates[0]["metadata"]["openai_response_id"] == "resp_fake"
+
+
+def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> None:
+    generation_starts: list[dict] = []
+    generation_updates: list[dict] = []
+    generation_events: list[str] = []
+
+    class FakeGeneration:
+        def __enter__(self):
+            generation_events.append("enter")
+            return self
+
+        def __exit__(self, *_args):
+            generation_events.append("exit")
+            return None
+
+        def update(self, **kwargs):
+            generation_events.append("update")
+            generation_updates.append(kwargs)
+
+    class FakeLangfuse:
+        def start_as_current_observation(self, **kwargs):
+            generation_starts.append(kwargs)
+            return FakeGeneration()
+
+        def flush(self):
+            generation_events.append("flush")
+
+    class FakeOpenAIResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return json.dumps(
+                {
+                    "id": "resp_judge_fake",
+                    "status": "completed",
+                    "output_text": "PASS: The answer satisfies the rubric.",
+                    "usage": {
+                        "input_tokens": 20,
+                        "output_tokens": 6,
+                        "total_tokens": 26,
+                    },
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(_request, timeout):
+        assert timeout == 60
+        return FakeOpenAIResponse()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setitem(
+        sys.modules,
+        "langfuse",
+        types.SimpleNamespace(get_client=lambda: FakeLangfuse()),
+    )
+    monkeypatch.setattr(api_main, "urlopen", fake_urlopen)
+
+    response_text, model, token_usage = api_main.run_live_judge(
+        "Judge this answer.",
+        trace_id="trace_fake",
+    )
+
+    assert response_text.startswith("PASS")
+    assert model == "gpt-5-nano"
+    assert token_usage == {
+        "input_tokens": 20,
+        "output_tokens": 6,
+        "total_tokens": 26,
+    }
+    assert generation_starts[0]["trace_context"] == {"trace_id": "trace_fake"}
+    assert generation_starts[0]["as_type"] == "generation"
+    assert generation_starts[0]["name"] == "openai.responses.judge"
+    assert generation_starts[0]["model"] == "gpt-5-nano"
+    assert generation_updates[0]["output"] == response_text
+    assert generation_updates[0]["usage_details"] == {
+        "input_tokens": 20,
+        "output_tokens": 6,
+        "total_tokens": 26,
+    }
+    assert generation_updates[0]["metadata"]["openai_response_id"] == "resp_judge_fake"
+    assert generation_events == ["enter", "update", "exit", "flush"]
 
 
 def test_artifact_links_create_and_list_related_artifacts() -> None:
@@ -1751,8 +1961,9 @@ def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
     monkeypatch.setenv("EDD_OPENAI_INPUT_COST_PER_1M", "1.00")
     monkeypatch.setenv("EDD_OPENAI_OUTPUT_COST_PER_1M", "2.00")
 
-    def fake_live_judge(prompt: str):
+    def fake_live_judge(prompt: str, trace_id: str | None = None):
         seen_prompt["value"] = prompt
+        seen_prompt["trace_id"] = trace_id
         return "Live judge explanation cites the provided evidence.", "test-judge-model", {
             "input_tokens": 10,
             "output_tokens": 5,
@@ -1812,6 +2023,7 @@ def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
     eval_result = eval_response.json()
     assert eval_result["mode"] == "live"
     assert "stored judge prompt" in seen_prompt["value"]
+    assert seen_prompt["trace_id"] is None
     assert run["output"] in seen_prompt["value"]
     judge_output = api_main._judge_outputs[eval_result["judge_output_ids"][0]]
     assert judge_output.model == "test-judge-model"
@@ -1827,7 +2039,7 @@ def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
 def test_live_judge_requires_openai_api_key(monkeypatch) -> None:
     client = TestClient(app)
 
-    def fake_live_judge(prompt: str):
+    def fake_live_judge(prompt: str, trace_id: str | None = None):
         raise RuntimeError("OPENAI_API_KEY is required for live OpenAI runs.")
 
     monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)

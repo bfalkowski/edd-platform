@@ -7,7 +7,7 @@ from base64 import b64encode
 from hashlib import sha256
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -878,6 +878,228 @@ def upsert_tool_definition_artifact(tool: ToolDefinition, now: datetime) -> Arti
     )
 
 
+previous_sentiment_observer_intent = (
+    "Monitor conversations, score sentiment, identify escalation risk, "
+    "summarize emotional trajectory, and produce concise observer notes "
+    "without taking over the conversation."
+)
+sentiment_observer_intent = (
+    "Run as a long-running observer for conversations. Maintain a running "
+    "model of the emotional arc, score sentiment and escalation movement, "
+    "summarize trajectory changes, and produce concise observer notes "
+    "that downstream APIs can use without taking over the conversation."
+)
+
+sentiment_observer_tools = [
+    ToolDefinition(
+        id="tool_score_conversation_sentiment",
+        project_id=default_project.id,
+        name="score_conversation_sentiment",
+        description="Score sentiment for the latest conversation window and report movement from prior state.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "conversation_id": {
+                    "type": "string",
+                    "description": "Stable id for the conversation being monitored.",
+                },
+                "conversation_text": {
+                    "type": "string",
+                    "description": "Conversation transcript or message text to score.",
+                },
+                "speaker": {
+                    "type": "string",
+                    "description": "Optional speaker or participant to focus on.",
+                },
+                "previous_sentiment_score": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1,
+                    "description": "Prior normalized score for this conversation, if known.",
+                },
+            },
+            "required": ["conversation_text"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "label": {"type": "string", "enum": ["positive", "neutral", "negative", "mixed"]},
+                "score": {"type": "number", "minimum": -1, "maximum": 1},
+                "delta": {"type": "number", "description": "Score movement from prior state."},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "rationale": {"type": "string"},
+            },
+            "required": ["label", "score", "confidence", "rationale"],
+        },
+        output_description="Sentiment label, normalized score, delta, confidence, and rationale.",
+        implementation_kind="mock",
+        implementation_key="mock.score_conversation_sentiment",
+        config_schema={},
+        mock_response=(
+            "Sentiment: mixed. Score: -0.25. Delta: -0.18. Confidence: 0.82. "
+            "Rationale: the customer is frustrated but still cooperative."
+        ),
+        status="approved",
+        created_at=seeded_at,
+        updated_at=seeded_at,
+    ),
+    ToolDefinition(
+        id="tool_detect_escalation_risk",
+        project_id=default_project.id,
+        name="detect_escalation_risk",
+        description="Detect escalation risk and risk movement from language, urgency, and unresolved blockers.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "conversation_text": {
+                    "type": "string",
+                    "description": "Conversation transcript or message text to assess.",
+                },
+                "known_issue_age_hours": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Optional age of the issue in hours.",
+                },
+                "previous_risk_score": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Prior escalation risk score for this conversation, if known.",
+                },
+            },
+            "required": ["conversation_text"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "risk_level": {"type": "string", "enum": ["low", "medium", "high"]},
+                "risk_score": {"type": "number", "minimum": 0, "maximum": 1},
+                "risk_delta": {"type": "number", "description": "Risk movement from prior state."},
+                "triggers": {"type": "array", "items": {"type": "string"}},
+                "recommended_observer_note": {"type": "string"},
+            },
+            "required": ["risk_level", "risk_score", "triggers"],
+        },
+        output_description="Escalation risk level, score, triggers, and observer note.",
+        implementation_kind="mock",
+        implementation_key="mock.detect_escalation_risk",
+        config_schema={},
+        mock_response=(
+            "Escalation risk: high. Score: 0.78. Delta: +0.21. Triggers: repeated blocker, "
+            "urgent language, unresolved ownership."
+        ),
+        status="approved",
+        created_at=seeded_at,
+        updated_at=seeded_at,
+    ),
+    ToolDefinition(
+        id="tool_summarize_conversation_signals",
+        project_id=default_project.id,
+        name="summarize_conversation_signals",
+        description="Summarize sentiment drivers, emotional trajectory, and the updated running arc state.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "conversation_text": {
+                    "type": "string",
+                    "description": "Conversation transcript or message text to summarize.",
+                },
+                "include_recommendations": {
+                    "type": "boolean",
+                    "description": "Whether to include recommended monitoring actions.",
+                },
+                "previous_arc_state": {
+                    "type": "object",
+                    "description": "Prior conversation emotional-arc state maintained by the consumer.",
+                    "additionalProperties": True,
+                },
+            },
+            "required": ["conversation_text"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "sentiment_drivers": {"type": "array", "items": {"type": "string"}},
+                "trajectory": {
+                    "type": "string",
+                    "enum": ["improving", "stable", "worsening", "unclear"],
+                },
+                "trend_score": {"type": "number", "minimum": -1, "maximum": 1},
+                "arc_state": {
+                    "type": "object",
+                    "description": "Updated running emotional-arc state for downstream consumers.",
+                    "additionalProperties": True,
+                },
+                "recommended_actions": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["summary", "sentiment_drivers", "trajectory", "trend_score", "arc_state"],
+        },
+        output_description="Concise monitoring summary with drivers, trajectory, trend score, and updated arc state.",
+        implementation_kind="mock",
+        implementation_key="mock.summarize_conversation_signals",
+        config_schema={},
+        mock_response=(
+            "Summary: customer sentiment is worsening around unresolved deployment impact. "
+            "Trajectory: worsening. Trend score: -0.34. Drivers: uncertainty, repeated failure, "
+            "lack of timeline. Arc state updated for downstream monitoring."
+        ),
+        status="approved",
+        created_at=seeded_at,
+        updated_at=seeded_at,
+    ),
+]
+
+
+def seed_sentiment_observer_defaults() -> None:
+    now = seeded_at
+    for tool in sentiment_observer_tools:
+        existing = _tool_definitions.get(tool.id)
+        seeded_tool = tool if existing is None else tool.model_copy(
+            update={
+                "created_at": existing.created_at,
+                "updated_at": now,
+            }
+        )
+        _tool_definitions[seeded_tool.id] = seeded_tool
+        store.save_record("tool_definitions", seeded_tool.id, seeded_tool)
+        upsert_tool_definition_artifact(seeded_tool, now)
+
+    tool_names = [tool.name for tool in sentiment_observer_tools]
+    existing_agent = _agent_designs.get("agent_sentiment_observer")
+    if existing_agent is None:
+        agent = AgentDesign(
+            id="agent_sentiment_observer",
+            project_id=default_project.id,
+            name="Sentiment Observer",
+            intent=sentiment_observer_intent,
+            status="designing",
+            allowed_tool_names=tool_names,
+            created_at=now,
+            updated_at=now,
+        )
+    else:
+        allowed_tool_names = list(dict.fromkeys(existing_agent.allowed_tool_names + tool_names))
+        intent = (
+            sentiment_observer_intent
+            if existing_agent.intent == previous_sentiment_observer_intent
+            else existing_agent.intent
+        )
+        agent = existing_agent.model_copy(
+            update={
+                "intent": intent,
+                "allowed_tool_names": allowed_tool_names,
+                "updated_at": existing_agent.updated_at,
+            }
+        )
+    _agent_designs[agent.id] = agent
+    store.save_record("agent_designs", agent.id, agent)
+    sync_agent_design_artifact(agent, now)
+
+
+seed_sentiment_observer_defaults()
+
+
 def link_artifacts(
     *,
     project_id: str,
@@ -1315,7 +1537,8 @@ def build_live_judge_prompt(
         f"Run input:\n{run.input}\n\n"
         f"Run output:\n{run.output}\n\n"
         f"Deterministic check results:\n{check_lines or 'No deterministic checks defined.'}\n\n"
-        "Return a concise judge explanation. Do not invent evidence not shown above."
+        "For rubric_judge checks, put PASS or FAIL as the first word of the response, "
+        "then give a concise judge explanation. Do not invent evidence not shown above."
     )
 
 
@@ -1365,7 +1588,64 @@ def contract_generated_checks(payload: EvalContractCreate) -> List[Dict[str, obj
     return checks
 
 
-def run_live_judge(prompt: str) -> tuple[str, str, Dict[str, object]]:
+def usage_details_from_openai_payload(payload: Dict[str, object]) -> Dict[str, Any]:
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return {}
+    details: Dict[str, Any] = {}
+    for source_key, target_key in [
+        ("input_tokens", "input_tokens"),
+        ("output_tokens", "output_tokens"),
+        ("total_tokens", "total_tokens"),
+    ]:
+        value = usage.get(source_key)
+        if isinstance(value, int):
+            details[target_key] = value
+    return details
+
+
+def live_judge_generation_context(
+    *,
+    model: str,
+    body: Dict[str, object],
+    trace_id: Optional[str],
+):
+    if not langfuse_credentials_configured():
+        return None
+    try:
+        langfuse = get_langfuse_client()
+        return langfuse.start_as_current_observation(
+            trace_context={"trace_id": trace_id} if trace_id else None,
+            as_type="generation",
+            name="openai.responses.judge",
+            model=model,
+            input=body["input"],
+            metadata={
+                "provider": "openai",
+                "endpoint": "/responses",
+                "purpose": "eval_judge",
+                "reasoning_effort": body.get("reasoning", {}).get("effort"),
+                "text_verbosity": body.get("text", {}).get("verbosity"),
+            },
+        )
+    except Exception:
+        return None
+
+
+def flush_langfuse_client() -> None:
+    try:
+        langfuse = get_langfuse_client()
+        flush = getattr(langfuse, "flush", None)
+        if callable(flush):
+            flush()
+    except Exception:
+        pass
+
+
+def run_live_judge(
+    prompt: str,
+    trace_id: Optional[str] = None,
+) -> tuple[str, str, Dict[str, object]]:
     config = openai_config_from_env()
     body = {
         "model": config.model,
@@ -1383,23 +1663,60 @@ def run_live_judge(prompt: str) -> tuple[str, str, Dict[str, object]]:
         ],
         "max_output_tokens": 1200,
     }
-    request = Request(
-        f"{config.base_url}/responses",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
+
+    def send_request() -> Dict[str, object]:
+        request = Request(
+            f"{config.base_url}/responses",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {config.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=60) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenAI judge request failed with status {exc.code}: {detail}") from exc
+        except URLError as exc:
+            raise RuntimeError(f"OpenAI judge request failed: {exc.reason}") from exc
+
+        if not isinstance(payload, dict):
+            raise RuntimeError("OpenAI judge request returned an unexpected response.")
+        return payload
+
+    generation_context = live_judge_generation_context(
+        model=config.model,
+        body=body,
+        trace_id=trace_id,
     )
-    try:
-        with urlopen(request, timeout=60) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"OpenAI judge request failed with status {exc.code}: {detail}") from exc
-    except URLError as exc:
-        raise RuntimeError(f"OpenAI judge request failed: {exc.reason}") from exc
+    if generation_context is None:
+        payload = send_request()
+    else:
+        with generation_context as generation:
+            payload = send_request()
+            response_text = extract_response_text(payload)
+            if not response_text:
+                raise RuntimeError(describe_empty_response(payload))
+            token_usage = payload.get("usage", {})
+            if not isinstance(token_usage, dict):
+                token_usage = {}
+            try:
+                generation.update(
+                    output=response_text,
+                    usage_details=usage_details_from_openai_payload(payload),
+                    metadata={
+                        "openai_response_id": payload.get("id"),
+                        "status": payload.get("status"),
+                        "trace_id": trace_id,
+                    },
+                )
+            except Exception:
+                pass
+        flush_langfuse_client()
+        return response_text, config.model, token_usage
 
     response_text = extract_response_text(payload)
     if not response_text:
@@ -1658,6 +1975,10 @@ def evaluate_contract_check(
         )
         observed = run_artifact_body
         comment = f"Run should not call tool {expected!r}."
+    elif check_type == "rubric_judge":
+        passed = False
+        observed = run.output
+        comment = "Live judge required for rubric checks."
     else:
         passed = False
         observed = "manual review required"
@@ -2979,13 +3300,41 @@ def evaluate_run(
             checks=checks,
             template=template,
         )
+        trace_ref = find_langfuse_trace_ref_for_run(project_id, run.id)
         try:
-            judge_output_text, judge_model, token_usage = run_live_judge(prompt)
+            judge_output_text, judge_model, token_usage = run_live_judge(
+                prompt,
+                trace_id=trace_ref.external_trace_id if trace_ref is not None else None,
+            )
         except RuntimeError as exc:
             detail = str(exc)
             status_code = 400 if "OPENAI_API_KEY" in detail else 502
             raise HTTPException(status_code=status_code, detail=detail) from exc
         cost_estimate = estimate_live_judge_cost(token_usage)
+        if any(check.check_type == "rubric_judge" for check in checks):
+            judge_passed = judge_output_text.strip().lower().startswith("pass")
+            checks = [
+                check.model_copy(
+                    update={
+                        "passed": judge_passed,
+                        "observed": run.output,
+                        "comment": (
+                            "Live judge marked the rubric as passed."
+                            if judge_passed
+                            else "Live judge marked the rubric as failed."
+                        ),
+                    }
+                )
+                if check.check_type == "rubric_judge"
+                else check
+                for check in checks
+            ]
+            score = sum(1 for check in checks if check.passed)
+            passed = score == len(checks)
+            check_lines = "\n".join(
+                f"- {check.check_id}: {'pass' if check.passed else 'fail'} - {check.comment}"
+                for check in checks
+            )
 
     score_refs = sync_langfuse_eval_score_refs(
         project_id=project_id,

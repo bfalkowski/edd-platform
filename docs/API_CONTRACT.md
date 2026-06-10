@@ -387,6 +387,12 @@ structured human evaluation over many traces or sessions.
 
 Scenarios define what a runner executes.
 
+The React console presents scenarios as test cases. The current UI stores the
+selected input shape in `setup_context` using `test_shape:{value}`, where value
+is one of `single_turn`, `conversation`, or `trace_replay`. This keeps the API
+model stable while letting the UI distinguish isolated prompts, conversation
+turns, and future trace-replay starts.
+
 ```text
 GET    /api/projects/{project_id}/scenarios
 POST   /api/projects/{project_id}/scenarios

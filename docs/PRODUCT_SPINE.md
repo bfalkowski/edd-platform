@@ -85,6 +85,11 @@ It should describe:
 - expected evidence
 - relevant eval contract
 
+The UI presents scenarios as test cases. A test case can be a single-turn
+prompt, a conversation turn with prior messages, or a trace replay seed. The
+current implementation stores that UI shape in `setup_context` while the runner
+continues to execute the scenario `input`.
+
 Scenarios must support deterministic local/CI execution and optional live
 provider execution.
 

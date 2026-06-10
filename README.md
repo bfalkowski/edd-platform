@@ -15,6 +15,28 @@ and make design changes from evidence instead of vibes.
 EDD Platform turns agent traces into failure modes, failure modes into evals,
 evals into bounded fixes, and fixes into evidence-backed promotion decisions.
 
+![EDD Platform showing the seeded Sentiment Observer agent](./docs/assets/sentiment-observer-agent.png)
+
+## Demo Flow
+
+The seeded Sentiment Observer demo shows more than an agent designer. It walks
+through the EDD loop: select a conversation test, run the current agent version,
+judge the output, and keep every decision tied to durable evidence.
+
+![EDD Platform Proof loop showing a Sentiment Observer conversation test](./docs/assets/sentiment-observer-proof-loop.png)
+
+The Evidence tab collects the proof artifacts for the selected agent: trace
+refs, success criteria, agent versions, and agent designs. This keeps the
+platform decision visible even when the raw trace lives in Langfuse.
+
+![EDD Platform Evidence tab showing linked proof artifacts for Sentiment Observer](./docs/assets/sentiment-observer-evidence.png)
+
+The live demo also links platform evidence to Langfuse observability. Agent
+runs, tool spans, and live judge calls appear on the same trace so a reviewer
+can see both the product decision and the model evidence behind it.
+
+![Langfuse trace showing the live judge generation for a Sentiment Observer eval](./docs/assets/langfuse-live-judge-trace.png)
+
 ## Evaluation-Driven Design Loop
 
 EDD Platform operationalizes an evidence loop for improving AI agents:
@@ -110,7 +132,7 @@ packages/langfuse-adapter
 The current app supports the full eval-driven proof loop:
 
 1. Create an agent design.
-2. Define a scenario and eval contract.
+2. Define a test case backed by a scenario and eval contract.
 3. Run a baseline version in mock or live mode.
 4. Evaluate the run with deterministic checks or an optional live judge.
 5. Store `RUN_RESULT`, `EVAL_RESULT`, and `JUDGE_OUTPUT` evidence.
@@ -129,12 +151,16 @@ The platform also supports:
 - platform-owned tool definitions, approval status, and agent allowlists;
 - built-in and mock tool execution through the runner;
 - first-class tool call and tool result evidence;
+- single-turn, conversation, and trace-replay test case shapes;
 - optional OpenAI live agent runs and live judge calls;
 - optional evidence summaries through the API;
-- optional Langfuse trace refs, scenario dataset refs, and eval score refs;
+- optional Langfuse trace refs, generation observations, scenario dataset refs,
+  and eval score refs;
 - optional Langfuse comment mirroring for review notes on linked traces or
   prompts;
-- deterministic seeded demo data for portfolio and local walkthroughs.
+- deterministic seeded demo data for portfolio and local walkthroughs,
+  including a ready-to-run Sentiment Observer agent with its monitoring tools
+  enabled.
 
 Langfuse remains observability and experiment infrastructure. Platform artifacts
 remain the source of truth.
@@ -287,6 +313,15 @@ Seed deterministic demo data after the app is running:
 python scripts/seed_customer_triage_demo.py
 ```
 
+Seed the Sentiment Observer conversation-monitoring example:
+
+```bash
+python scripts/seed_sentiment_observer_demo.py
+```
+
+See `examples/customer-triage` and `examples/sentiment-observer` for the demo
+walkthroughs.
+
 Run the live OpenAI plus local Langfuse smoke script after
 `./scripts/dev_langfuse.sh` is running. If you use `.env.local`, load it into
 your shell first:
@@ -298,6 +333,8 @@ python scripts/live_langfuse_e2e.py
 
 The script prints the platform run id, eval result id, score, Langfuse trace id,
 and Langfuse trace URL.
+For raw OpenAI Responses calls, the linked Langfuse trace should include an
+`openai.responses` generation observation under the agent run observation.
 
 ## Canonical Docs
 
@@ -323,9 +360,9 @@ and Langfuse trace URL.
 - Evidence summaries are available through the API, but UI display is still
   planned.
 - Error analysis is currently represented through failure packets, review
-  notes, and evidence artifacts. A dedicated trace review queue, open-coded
-  human notes, failure-mode taxonomy, and failure-mode regression views are
-  planned.
+  notes, evidence artifacts, and an Error analysis tab placeholder. A dedicated
+  trace review queue, open-coded human notes, failure-mode taxonomy, and
+  failure-mode regression views are planned.
 - Langfuse trace references, dataset refs, score refs, and comment refs exist
   as integration points. Production-grade trace import is still planned.
 - README screenshot and external public docs are still portfolio-polish tasks.

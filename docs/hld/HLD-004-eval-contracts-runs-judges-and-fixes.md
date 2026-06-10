@@ -137,6 +137,18 @@ Scenario
 Scenarios are first-class because users need to run the same agent version
 against the same input before and after a fix.
 
+In the React console, scenarios appear as test cases. The current UI supports
+three input shapes:
+
+- `single_turn`: one isolated user prompt;
+- `conversation`: prior messages plus the next user turn;
+- `trace_replay`: selected or pasted prior spans/messages/evidence used as the
+  starting context for a replay.
+
+The API keeps this shape in `setup_context` while the runner executes `input`.
+Future trace replay work can replace pasted replay seeds with first-class trace
+span selection without changing the core `Scenario -> Run -> EvalResult` loop.
+
 ### AgentVersion
 
 An agent version is a candidate behavior snapshot.
@@ -187,6 +199,12 @@ Runs should create or link evidence artifacts:
 - `TOOL_CALL`
 - `TOOL_RESULT`
 - `TRACE_REF`
+
+When Langfuse is configured for a live raw OpenAI Responses call, the runner
+should record the outer agent observation and a child `openai.responses`
+generation observation with model input, output, response id, status, and token
+usage. The platform still stores only the normalized run evidence and trace
+reference as product state.
 
 ### EvalResult
 

@@ -75,6 +75,9 @@ type ToolDefinitionCreate = {
   mock_response: string | null;
 };
 
+type EvalMethod = "phrase" | "tool" | "rubric";
+type TestShape = "single_turn" | "conversation" | "trace_replay";
+
 type ArtifactRecord = {
   id: string;
   project_id: string;
@@ -349,8 +352,104 @@ type EddFlowState = {
 };
 
 const apiBase = "/api";
-const defaultScenarioInput =
-  "A customer reports a failed deployment and asks what to do next.";
+const defaultScenarioInput = "What's the weather in Boston today?";
+const defaultConversationInput = `Customer: My deployment failed after the release.
+Agent: What error are you seeing?
+Customer: The rollout says image pull backoff.`;
+const defaultTraceReplayInput =
+  "Paste the prior trace spans, messages, or evidence that should set up the next agent response.";
+const defaultRubricText =
+  "A good answer should directly answer the user request, avoid unsupported claims, and ask for missing details only when they are required.";
+const defaultConversationRubricText =
+  "A good observer output should review the latest customer turn in context, identify that sentiment or escalation risk is worsening, mention the image pull backoff blocker, avoid claiming the issue is fixed, and produce concise downstream-safe observer notes.";
+const defaultTraceReplayRubricText =
+  "A good answer should use the replayed evidence, preserve important context from the trace, and avoid inventing facts not present in the replay.";
+const testShapeLabels: Record<TestShape, string> = {
+  single_turn: "Single turn",
+  conversation: "Conversation",
+  trace_replay: "Trace replay",
+};
+const testShapeInputLabels: Record<TestShape, string> = {
+  single_turn: "Prompt",
+  conversation: "Conversation",
+  trace_replay: "Replay context",
+};
+const testShapeInputHelp: Record<TestShape, string> = {
+  single_turn: "Test one user request in isolation.",
+  conversation: "Include prior messages plus the next user turn.",
+  trace_replay: "Start from selected prior spans, messages, or evidence.",
+};
+function defaultInputForTestShape(shape: TestShape): string {
+  if (shape === "conversation") {
+    return defaultConversationInput;
+  }
+  if (shape === "trace_replay") {
+    return defaultTraceReplayInput;
+  }
+  return defaultScenarioInput;
+}
+function conversationTurnsFromText(input: string): Array<{ speaker: string; text: string }> {
+  const matches = Array.from(input.matchAll(/\b(Customer|Agent):\s*/g));
+  if (matches.length === 0) {
+    return [];
+  }
+  return matches
+    .map((match, index) => {
+      const start = (match.index ?? 0) + match[0].length;
+      const end = matches[index + 1]?.index ?? input.length;
+      return {
+        speaker: match[1],
+        text: input.slice(start, end).trim(),
+      };
+    })
+    .filter((turn) => turn.text.length > 0);
+}
+function renderScenarioInput(input: string | undefined) {
+  const text = input?.trim();
+  if (!text) {
+    return null;
+  }
+  const turns = conversationTurnsFromText(text);
+  if (turns.length < 2) {
+    return <p className="scenario-test-text">{text}</p>;
+  }
+  return (
+    <div className="scenario-turns">
+      {turns.map((turn, index) => (
+        <p key={`${turn.speaker}-${index}`} className="scenario-turn">
+          <strong>{turn.speaker}:</strong> {turn.text}
+        </p>
+      ))}
+    </div>
+  );
+}
+function defaultRubricForTestShape(shape: TestShape): string {
+  if (shape === "conversation") {
+    return defaultConversationRubricText;
+  }
+  if (shape === "trace_replay") {
+    return defaultTraceReplayRubricText;
+  }
+  return defaultRubricText;
+}
+function isDefaultTestInput(input: string): boolean {
+  return [defaultScenarioInput, defaultConversationInput, defaultTraceReplayInput].includes(input);
+}
+function isDefaultRubricText(rubric: string): boolean {
+  return [defaultRubricText, defaultConversationRubricText, defaultTraceReplayRubricText].includes(rubric);
+}
+function setupContextFromTestShape(shape: TestShape): string {
+  return `test_shape:${shape}`;
+}
+function testShapeFromSetupContext(setupContext?: string): TestShape {
+  if (setupContext?.includes("test_shape:conversation")) {
+    return "conversation";
+  }
+  if (setupContext?.includes("test_shape:trace_replay")) {
+    return "trace_replay";
+  }
+  return "single_turn";
+}
 const defaultToolInputSchema = `{
   "type": "object",
   "properties": {
@@ -472,6 +571,22 @@ async function deleteAgentDesign(projectId: string, agentDesignId: string): Prom
   }
 }
 
+async function updateAgentDesign(
+  projectId: string,
+  agentDesignId: string,
+  payload: { name?: string; intent?: string; allowed_tool_names?: string[] },
+): Promise<AgentDesign> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update agent design.");
+  }
+  return response.json();
+}
+
 async function listToolDefinitions(projectId: string): Promise<ToolDefinition[]> {
   const response = await fetch(`${apiBase}/projects/${projectId}/tools`);
   if (!response.ok) {
@@ -516,15 +631,7 @@ async function updateAgentDesignToolAllowlist(
   agentDesignId: string,
   allowedToolNames: string[],
 ): Promise<AgentDesign> {
-  const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ allowed_tool_names: allowedToolNames }),
-  });
-  if (!response.ok) {
-    throw await responseError(response, "Unable to update agent tools.");
-  }
-  return response.json();
+  return updateAgentDesign(projectId, agentDesignId, { allowed_tool_names: allowedToolNames });
 }
 
 async function buildContextPack(projectId: string, agentDesignId?: string): Promise<ContextPack> {
@@ -614,14 +721,16 @@ async function createScenario(
   projectId: string,
   agentDesignId: string,
   input: string,
+  shape: TestShape,
 ): Promise<Scenario> {
   const response = await fetch(`${apiBase}/projects/${projectId}/scenarios`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       agent_design_id: agentDesignId,
-      name: "Test scenario",
+      name: `${testShapeLabels[shape]} test`,
       input,
+      setup_context: setupContextFromTestShape(shape),
     }),
   });
   if (!response.ok) {
@@ -634,27 +743,63 @@ async function createEvalContract(
   projectId: string,
   agentDesignId: string,
   scenarioId: string,
-  requiredPhrase: string,
+  config: {
+    method: EvalMethod;
+    requiredPhrase?: string;
+    requiredToolName?: string;
+    rubric?: string;
+  },
 ): Promise<EvalContract> {
+  const checks = (() => {
+    if (config.method === "phrase") {
+      return [
+        {
+          id: "includes_required_phrase",
+          type: "output_contains",
+          value: config.requiredPhrase ?? "",
+        },
+      ];
+    }
+    if (config.method === "rubric") {
+      return [
+        {
+          id: "satisfies_rubric",
+          type: "rubric_judge",
+          value: config.rubric ?? "",
+        },
+      ];
+    }
+    return [];
+  })();
+  const requiredTools = config.method === "tool" && config.requiredToolName ? [config.requiredToolName] : [];
+  const expectedBehavior =
+    config.method === "tool"
+      ? [`Call ${config.requiredToolName} when answering this test case.`]
+      : config.method === "rubric"
+        ? [config.rubric ?? ""]
+        : [`Include the required phrase: ${config.requiredPhrase}.`];
+  const name =
+    config.method === "tool"
+      ? "Tool use"
+      : config.method === "rubric"
+        ? "Rubric judge"
+        : "Required phrase";
   const response = await fetch(`${apiBase}/projects/${projectId}/eval-contracts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       agent_design_id: agentDesignId,
-      name: "Success criteria",
-      description: "Checks whether the response matches the expected agent behavior.",
+      name,
+      description:
+        config.method === "tool"
+          ? "Checks whether the agent used the expected tool."
+          : config.method === "rubric"
+            ? "Judges whether the answer satisfies the rubric."
+          : "Checks whether the response contains a required phrase.",
       scenario_id: scenarioId,
-      expected_behavior: [
-        `Answer with: ${requiredPhrase}.`,
-      ],
-      required_evidence: ["scenario"],
-      checks: [
-        {
-          id: "includes_expected_response",
-          type: "output_contains",
-          value: requiredPhrase,
-        },
-      ],
+      expected_behavior: expectedBehavior,
+      required_tools: requiredTools,
+      checks,
     }),
   });
   if (!response.ok) {
@@ -684,11 +829,15 @@ async function createProjectRun(
   return response.json();
 }
 
-async function evaluateRun(projectId: string, runId: string): Promise<EvalResult> {
+async function evaluateRun(
+  projectId: string,
+  runId: string,
+  judgeMode: "deterministic" | "live" = "deterministic",
+): Promise<EvalResult> {
   const response = await fetch(`${apiBase}/projects/${projectId}/runs/${runId}/evaluate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ judge_mode: "deterministic" }),
+    body: JSON.stringify({ judge_mode: judgeMode }),
   });
   if (!response.ok) {
     throw await responseError(response, "Unable to evaluate run.");
@@ -1151,8 +1300,12 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [intent, setIntent] = useState("");
+  const [testShape, setTestShape] = useState<TestShape>("single_turn");
   const [scenarioInput, setScenarioInput] = useState(defaultScenarioInput);
   const [requiredPhrase, setRequiredPhrase] = useState("");
+  const [evalMethod, setEvalMethod] = useState<EvalMethod>("rubric");
+  const [rubricText, setRubricText] = useState(defaultRubricText);
+  const [requiredToolName, setRequiredToolName] = useState("");
   const [runMode, setRunMode] = useState<"mock" | "live">("mock");
   const [workspaceTab, setWorkspaceTab] = useState<
     "agent" | "proof" | "error-analysis" | "evidence" | "readiness"
@@ -1171,6 +1324,10 @@ function App() {
   const [fixEditText, setFixEditText] = useState("");
   const [isSavingFix, setIsSavingFix] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
+  const [scenarioEditorOpen, setScenarioEditorOpen] = useState(false);
+  const [toolSearch, setToolSearch] = useState("");
+  const [toolFilter, setToolFilter] = useState<"all" | "enabled" | "available" | "draft">("all");
+  const [toolComposerOpen, setToolComposerOpen] = useState(false);
   const [scratchPanelOpen, setScratchPanelOpen] = useState(false);
   const [openAgentMenuId, setOpenAgentMenuId] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<AgentDesign | null>(null);
@@ -1180,6 +1337,7 @@ function App() {
   const [isFlowBusy, setIsFlowBusy] = useState(false);
   const [isGateBusy, setIsGateBusy] = useState(false);
   const [updatingTools, setUpdatingTools] = useState(false);
+  const [isSavingAgent, setIsSavingAgent] = useState(false);
   const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1193,6 +1351,8 @@ function App() {
   const [toolOutputSchema, setToolOutputSchema] = useState(defaultToolOutputSchema);
   const [toolOutputDescription, setToolOutputDescription] = useState("");
   const [toolMockResponse, setToolMockResponse] = useState("");
+  const [agentEditName, setAgentEditName] = useState("");
+  const [agentEditIntent, setAgentEditIntent] = useState("");
 
   useEffect(() => {
     Promise.all([listProjects(), listServices()])
@@ -1227,6 +1387,11 @@ function App() {
     () => agents.find((agent) => agent.id === selectedId) ?? null,
     [agents, selectedId],
   );
+  useEffect(() => {
+    setAgentEditName(selectedAgent?.name ?? "");
+    setAgentEditIntent(selectedAgent?.intent ?? "");
+  }, [selectedAgent]);
+
   const approvedTools = useMemo(
     () => tools.filter((tool) => tool.status === "approved"),
     [tools],
@@ -1235,6 +1400,54 @@ function App() {
     () => tools.filter((tool) => tool.status === "draft"),
     [tools],
   );
+  const enabledToolDefinitions = useMemo(() => {
+    if (!selectedAgent) {
+      return [];
+    }
+    return approvedTools.filter((tool) => selectedAgent.allowed_tool_names.includes(tool.name));
+  }, [approvedTools, selectedAgent]);
+  useEffect(() => {
+    if (evalMethod !== "tool") {
+      return;
+    }
+    if (enabledToolDefinitions.some((tool) => tool.name === requiredToolName)) {
+      return;
+    }
+    setRequiredToolName(enabledToolDefinitions[0]?.name ?? "");
+  }, [enabledToolDefinitions, evalMethod, requiredToolName]);
+
+  const toolSearchQuery = toolSearch.trim().toLowerCase();
+  const toolMatchesSearch = (tool: ToolDefinition) => {
+    if (!toolSearchQuery) {
+      return true;
+    }
+    return [tool.name, tool.description, tool.implementation_kind]
+      .join(" ")
+      .toLowerCase()
+      .includes(toolSearchQuery);
+  };
+  const filteredApprovedTools = selectedAgent
+    ? approvedTools.filter((tool) => {
+        const isAllowed = selectedAgent.allowed_tool_names.includes(tool.name);
+        if (toolFilter === "draft") {
+          return false;
+        }
+        if (toolFilter === "enabled" && !isAllowed) {
+          return false;
+        }
+        if (toolFilter === "available" && isAllowed) {
+          return false;
+        }
+        return toolMatchesSearch(tool);
+      })
+    : [];
+  const filteredDraftTools =
+    toolFilter === "enabled" || toolFilter === "available"
+      ? []
+      : draftTools.filter(toolMatchesSearch);
+  const agentProfileChanged =
+    Boolean(selectedAgent) &&
+    (agentEditName.trim() !== selectedAgent?.name || agentEditIntent.trim() !== selectedAgent?.intent);
   const latestGate = gates[0] ?? null;
   const latestGateDecision = gateDecisions[0] ?? null;
   const artifactsById = useMemo(() => {
@@ -1313,12 +1526,28 @@ function App() {
   }, [reviewFixProposal?.id]);
 
   const savedExpectedPhrase = eddFlow.contract?.checks.find((check) => check.value)?.value ?? "";
+  const savedRequiredTool = eddFlow.contract?.checks.find((check) => check.tool)?.tool ?? "";
   const savedScenarioInput = eddFlow.scenario?.input ?? "";
+  const canDefineTest =
+    !isFlowBusy &&
+    Boolean(scenarioInput.trim()) &&
+    ((evalMethod === "phrase" && Boolean(requiredPhrase.trim())) ||
+      (evalMethod === "tool" && Boolean(requiredToolName)) ||
+      (evalMethod === "rubric" && Boolean(rubricText.trim())));
   const testOutOfSync = Boolean(
     eddFlow.contract &&
-      ((requiredPhrase.trim() &&
+      (((evalMethod === "phrase" &&
+        requiredPhrase.trim() &&
         savedExpectedPhrase &&
         savedExpectedPhrase !== requiredPhrase.trim()) ||
+        (evalMethod === "tool" &&
+          requiredToolName &&
+          savedRequiredTool &&
+          savedRequiredTool !== requiredToolName) ||
+        (evalMethod === "rubric" &&
+          rubricText.trim() &&
+          savedExpectedPhrase &&
+          savedExpectedPhrase !== rubricText.trim())) ||
         (scenarioInput.trim() &&
           savedScenarioInput &&
           savedScenarioInput !== scenarioInput.trim())),
@@ -1355,14 +1584,28 @@ function App() {
         setGates(loadedGates);
         setGateDecisions(loadedGateDecisions);
         setScenarioInput(flow.scenario?.input ?? defaultScenarioInput);
-        const phrase = flow.contract?.checks.find((check) => check.value)?.value;
+        setTestShape(testShapeFromSetupContext(flow.scenario?.setup_context));
+        const rubric = flow.contract?.checks.find((check) => check.type === "rubric_judge")?.value;
+        const tool = flow.contract?.checks.find((check) => check.tool)?.tool;
+        const phrase = flow.contract?.checks.find((check) => check.type === "output_contains")?.value;
         const inferredPhrase = selectedAgent ? inferExpectedResponse(selectedAgent) : "";
-        if (phrase && phrase !== "bounded resolution") {
+        if (rubric) {
+          setEvalMethod("rubric");
+          setRubricText(rubric);
+        } else if (tool) {
+          setEvalMethod("tool");
+          setRequiredToolName(tool);
+        } else if (phrase && phrase !== "bounded resolution") {
+          setEvalMethod("phrase");
           setRequiredPhrase(phrase);
         } else if (inferredPhrase) {
+          setEvalMethod("phrase");
           setRequiredPhrase(inferredPhrase);
         } else if (selectedAgent) {
-          setRequiredPhrase(inferExpectedResponse(selectedAgent));
+          setEvalMethod("rubric");
+          setRubricText(defaultRubricText);
+          setRequiredPhrase("");
+          setRequiredToolName("");
         }
       })
       .catch((err: Error) => setError(err.message))
@@ -1426,6 +1669,59 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete agent design.");
     }
+  }
+
+  async function handleSaveAgentProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!project || !selectedAgent) {
+      return;
+    }
+    setError(null);
+    setActivity(null);
+    setIsSavingAgent(true);
+    try {
+      const updated = await updateAgentDesign(project.id, selectedAgent.id, {
+        name: agentEditName.trim(),
+        intent: agentEditIntent.trim(),
+      });
+      setAgents((items) => items.map((agent) => (agent.id === updated.id ? updated : agent)));
+      setActivity("Agent profile saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update agent design.");
+    } finally {
+      setIsSavingAgent(false);
+    }
+  }
+
+  function openScenarioEditor() {
+    setScenarioEditorOpen(true);
+    setToolsPanelOpen(false);
+    setReviewArtifact(null);
+    setReviewLinks([]);
+    setScratchPanelOpen(false);
+  }
+
+  function openNewScenarioEditor() {
+    setTestShape("single_turn");
+    setScenarioInput(defaultScenarioInput);
+    setRequiredPhrase("");
+    setEvalMethod("rubric");
+    setRequiredToolName(enabledToolDefinitions[0]?.name ?? "");
+    setRubricText(defaultRubricText);
+    openScenarioEditor();
+  }
+
+  function handleTestShapeChange(nextShape: TestShape) {
+    if (testShape === nextShape) {
+      return;
+    }
+    if (isDefaultTestInput(scenarioInput)) {
+      setScenarioInput(defaultInputForTestShape(nextShape));
+    }
+    if (isDefaultRubricText(rubricText)) {
+      setRubricText(defaultRubricForTestShape(nextShape));
+    }
+    setTestShape(nextShape);
   }
 
   async function handleToggleTool(toolName: string) {
@@ -1632,6 +1928,7 @@ function App() {
       setReviewLinks(links);
       setToolsPanelOpen(false);
       setScratchPanelOpen(false);
+      setScenarioEditorOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load artifact.");
     }
@@ -1711,8 +2008,16 @@ function App() {
     if (!project || !selectedAgent) {
       return;
     }
-    if (!requiredPhrase.trim()) {
-      setError("Add the expected answer text before defining the test.");
+    if (evalMethod === "phrase" && !requiredPhrase.trim()) {
+      setError("Add the required phrase before defining the test.");
+      return;
+    }
+    if (evalMethod === "tool" && !requiredToolName) {
+      setError("Enable a tool on the Agent tab before defining a tool behavior test.");
+      return;
+    }
+    if (evalMethod === "rubric" && !rubricText.trim()) {
+      setError("Add a rubric before defining the test.");
       return;
     }
     setError(null);
@@ -1724,12 +2029,17 @@ function App() {
         instructions: selectedAgent.intent,
         status: "baseline",
       });
-      const scenario = await createScenario(project.id, selectedAgent.id, scenarioInput.trim());
+      const scenario = await createScenario(project.id, selectedAgent.id, scenarioInput.trim(), testShape);
       const contract = await createEvalContract(
         project.id,
         selectedAgent.id,
         scenario.id,
-        requiredPhrase.trim(),
+        {
+          method: evalMethod,
+          requiredPhrase: requiredPhrase.trim(),
+          requiredToolName,
+          rubric: rubricText.trim(),
+        },
       );
       setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
       setAnalysisNote(null);
@@ -1737,6 +2047,7 @@ function App() {
       setAnalysisFailureMode("");
       setAnalysisSeverity("medium");
       setActivity("Test is ready. Run the current version next.");
+      setScenarioEditorOpen(false);
       await refreshContext();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to initialize EDD flow.");
@@ -1781,7 +2092,7 @@ function App() {
     setActivity("Checking the current answer.");
     setIsFlowBusy(true);
     try {
-      const baselineEval = await evaluateRun(project.id, eddFlow.baselineRun.id);
+      const baselineEval = await evaluateRun(project.id, eddFlow.baselineRun.id, currentJudgeMode);
       const failurePackets = await listFailurePackets(project.id, selectedAgent.id);
       setEddFlow((flow) => ({ ...flow, baselineEval, failurePackets }));
       setActivity(
@@ -1927,7 +2238,7 @@ function App() {
     setActivity("Checking the new answer.");
     setIsFlowBusy(true);
     try {
-      const candidateEval = await evaluateRun(project.id, eddFlow.candidateRun.id);
+      const candidateEval = await evaluateRun(project.id, eddFlow.candidateRun.id, currentJudgeMode);
       setEddFlow((flow) => ({ ...flow, candidateEval }));
       setActivity(candidateEval.passed ? "New version passed." : "New version still fails.");
       await refreshContext();
@@ -1991,87 +2302,53 @@ function App() {
   const baselinePassed = eddFlow.baselineEval?.passed === true;
   const improvementNeeded = eddFlow.baselineEval?.passed === false;
   const showFailureAnalysis = improvementNeeded && Boolean(eddFlow.baselineEval);
-  const showNextActionPanel = !(showFailureAnalysis && !analysisNote);
+  const showNextActionPanel = Boolean(eddFlow.contract) && !(showFailureAnalysis && !analysisNote);
   const baselineLabel = eddFlow.baselineVersion?.version_label ?? "current";
-  const candidateLabel = eddFlow.candidateVersion?.version_label ?? "next";
-  const loopSteps = [
-    {
-      label: "Define test",
-      done: Boolean(eddFlow.baselineVersion && eddFlow.scenario && eddFlow.contract && !testOutOfSync),
-      detail: testOutOfSync ? "Needs update" : "Scenario and success criteria",
-    },
-    {
-      label: `Run ${baselineLabel}`,
-      done: Boolean(eddFlow.baselineRun),
-      detail: eddFlow.baselineRun ? "Response saved" : "Capture the current behavior",
-    },
-    {
-      label: `Check ${baselineLabel}`,
-      done: Boolean(eddFlow.baselineEval),
-      detail: eddFlow.baselineEval
-        ? `${eddFlow.baselineEval.score}/${eddFlow.baselineEval.checks.length} checks`
-        : "Judge against the success criteria",
-    },
-    ...(improvementNeeded
-      ? [
-          {
-            label: "Analyze failure",
-            done: Boolean(analysisNote),
-            detail: analysisNote ? "Failure mode saved" : "Open-code the failed evidence",
-          },
-          {
-            label: "Propose fix",
-            done: Boolean(eddFlow.fixProposal),
-            detail: eddFlow.fixProposal ? "Fix linked to the failure" : "Suggest one targeted change",
-          },
-          {
-            label: `Create ${candidateLabel}`,
-            done: Boolean(eddFlow.candidateVersion),
-            detail: eddFlow.candidateVersion ? "New version ready" : "Apply the proposed fix",
-          },
-          {
-            label: `Run ${candidateLabel}`,
-            done: Boolean(eddFlow.candidateRun),
-            detail: eddFlow.candidateRun ? "Response saved" : "Run the same scenario again",
-          },
-          {
-            label: `Check ${candidateLabel}`,
-            done: Boolean(eddFlow.candidateEval),
-            detail: eddFlow.candidateEval
-              ? `${eddFlow.candidateEval.score}/${eddFlow.candidateEval.checks.length} checks`
-              : "Judge the new response",
-          },
-          {
-            label: "Compare",
-            done: Boolean(eddFlow.comparison),
-            detail: eddFlow.comparison?.summary ?? "Did the new version improve?",
-          },
-        ]
-      : []),
-  ];
-  const activeLoopStepIndex = Math.max(
-    0,
-    loopSteps.findIndex((step) => !step.done),
-  );
+  const activeEvalLabel =
+    evalMethod === "phrase" ? "Exact text" : evalMethod === "tool" ? "Tool use" : "Rubric judge";
+  const activeEvalSummary =
+    evalMethod === "phrase"
+      ? requiredPhrase || "No phrase set"
+      : evalMethod === "tool"
+        ? requiredToolName || "No tool selected"
+        : rubricText || "No rubric set";
+  const currentJudgeMode: "deterministic" | "live" =
+    evalMethod === "rubric" ? "live" : "deterministic";
+  const hasSavedScenarioTest = Boolean(eddFlow.scenario && eddFlow.contract);
+  const savedTestShape = testShapeFromSetupContext(eddFlow.scenario?.setup_context);
+  const savedEvalCheck = eddFlow.contract?.checks[0];
+  const savedEvalLabel = savedEvalCheck
+    ? savedEvalCheck.type === "rubric_judge"
+      ? "Rubric judge"
+      : savedEvalCheck.tool
+        ? "Tool use"
+        : "Exact text"
+    : "";
+  const savedEvalSummary =
+    savedEvalCheck?.type === "rubric_judge"
+      ? savedEvalCheck.value || "No rubric set"
+      : savedEvalCheck?.tool
+        ? savedEvalCheck.tool
+        : savedEvalCheck?.value || "No criterion set";
   const currentLoopAction = (() => {
     if (!eddFlow.contract) {
       return {
         eyebrow: "Next action",
-        title: "Define the test",
-        detail: "Save the scenario and success criteria before running the agent.",
-        label: "Define test",
-        onClick: handleInitializeEddFlow,
-        disabled: isFlowBusy || !requiredPhrase.trim(),
+        title: "Create a test case",
+        detail: "Choose an input shape and judge method before running the agent.",
+        label: "New test",
+        onClick: openNewScenarioEditor,
+        disabled: isFlowBusy,
       };
     }
     if (testOutOfSync) {
       return {
         eyebrow: "Next action",
-        title: "Redefine the test",
-        detail: "The saved test does not match the scenario or criteria shown above.",
-        label: "Redefine test",
-        onClick: handleInitializeEddFlow,
-        disabled: isFlowBusy || !requiredPhrase.trim(),
+        title: "Update the test",
+        detail: "The saved test does not match the scenario or eval method shown above.",
+        label: "Edit test",
+        onClick: openScenarioEditor,
+        disabled: isFlowBusy,
       };
     }
     if (!eddFlow.baselineRun) {
@@ -2088,7 +2365,7 @@ function App() {
       return {
         eyebrow: "Next action",
         title: `Check ${baselineLabel}`,
-        detail: "Judge the response against the success criteria and record what failed.",
+        detail: "Judge the response against the saved eval method and record what failed.",
         label: "Check answer",
         onClick: handleEvaluateBaseline,
         disabled: isFlowBusy,
@@ -2188,7 +2465,7 @@ function App() {
     <div
       className={[
         sidebarOpen ? "app-shell" : "app-shell sidebar-collapsed",
-        reviewArtifact || toolsPanelOpen || scratchPanelOpen ? "review-open" : "",
+        reviewArtifact || toolsPanelOpen || scratchPanelOpen || scenarioEditorOpen ? "review-open" : "",
       ].join(" ")}
     >
       <aside className="sidebar">
@@ -2317,6 +2594,7 @@ function App() {
                         setReviewArtifact(null);
                         setReviewLinks([]);
                         setToolsPanelOpen(false);
+                        setScenarioEditorOpen(false);
                         setOpenAgentMenuId(null);
                       }}
                     >
@@ -2462,20 +2740,75 @@ function App() {
               </div>
 
               {workspaceTab === "agent" ? (
-                <section className="agent-context-strip workspace-tab-panel">
-                  <div className="agent-context-main">
-                    <p className="artifact-type">Selected agent</p>
-                    <h2>{selectedAgent.name}</h2>
-                    <p>{selectedAgent.intent}</p>
-                  </div>
-                  <div className="agent-context-tools">
+                <section className="agent-designer-panel workspace-tab-panel">
+                  <form className="agent-profile-form" onSubmit={handleSaveAgentProfile}>
+                    <div className="section-heading-row">
+                      <div>
+                        <p className="artifact-type">Agent design</p>
+                        <h2>{selectedAgent.name}</h2>
+                      </div>
+                      <span className="muted-chip">{selectedAgent.status}</span>
+                    </div>
+                    <label className="compact-label">
+                      <span>Agent name</span>
+                      <input
+                        value={agentEditName}
+                        onChange={(event) => setAgentEditName(event.target.value)}
+                        required
+                      />
+                    </label>
+                    <label className="compact-label">
+                      <span>Core instruction</span>
+                      <textarea
+                        value={agentEditIntent}
+                        onChange={(event) => setAgentEditIntent(event.target.value)}
+                        required
+                      />
+                    </label>
+                    <div className="agent-profile-actions">
+                      {activity ? <p className="activity-text">{activity}</p> : null}
+                      {error ? <p className="error-text">{error}</p> : null}
+                      <button
+                        className="primary-button"
+                        type="submit"
+                        disabled={
+                          isSavingAgent ||
+                          !agentProfileChanged ||
+                          !agentEditName.trim() ||
+                          !agentEditIntent.trim()
+                        }
+                      >
+                        {isSavingAgent ? "Saving" : "Save agent"}
+                      </button>
+                    </div>
+                  </form>
+                  <aside className="agent-tool-summary" aria-label="Agent tools">
                     <div>
-                      <span>Tools</span>
-                      <strong>
+                      <p className="artifact-type">Tools</p>
+                      <h3>
                         {selectedAgent.allowed_tool_names.length === 0
-                          ? "None enabled"
+                          ? "No tools enabled"
                           : `${selectedAgent.allowed_tool_names.length} enabled`}
-                      </strong>
+                      </h3>
+                      <p>
+                        {approvedTools.length} approved · {draftTools.length} draft
+                      </p>
+                    </div>
+                    <div className="tool-chip-row">
+                      {enabledToolDefinitions.length === 0 ? (
+                        <span className="muted-chip">None enabled</span>
+                      ) : (
+                        enabledToolDefinitions.slice(0, 4).map((tool) => (
+                          <span className="tool-chip" key={tool.id}>
+                            {tool.name}
+                          </span>
+                        ))
+                      )}
+                      {selectedAgent.allowed_tool_names.length > enabledToolDefinitions.length ? (
+                        <span className="muted-chip">
+                          +{selectedAgent.allowed_tool_names.length - enabledToolDefinitions.length}
+                        </span>
+                      ) : null}
                     </div>
                     <button
                       className="secondary-button"
@@ -2485,69 +2818,77 @@ function App() {
                         setReviewArtifact(null);
                         setReviewLinks([]);
                         setScratchPanelOpen(false);
+                        setScenarioEditorOpen(false);
                       }}
                     >
                       Manage tools
                     </button>
-                  </div>
+                  </aside>
                 </section>
               ) : null}
 
               {workspaceTab === "proof" ? (
-                <section className="edd-loop-panel primary-workflow-panel workspace-tab-panel">
-                  <div className="edd-loop-header">
-                    <div>
-                      <p className="artifact-type">Proof loop</p>
-                      <h3>Run one scenario. Fix one failure. Compare the next version.</h3>
-                      <p>
-                        Define what good looks like, capture the current behavior, make one
-                        targeted change, and verify whether the next version improved.
-                      </p>
-                    </div>
-                    <div className="proof-setup-grid">
-                      <label className="compact-label">
-                        <span>Scenario</span>
-                        <small>The same input is reused across each version.</small>
-                        <textarea
-                          value={scenarioInput}
-                          onChange={(event) => setScenarioInput(event.target.value)}
-                        />
-                      </label>
-                      <label className="compact-label">
-                        <span>Success criteria</span>
-                        <small>The answer should include this text.</small>
-                        <input
-                          value={requiredPhrase}
-                          onChange={(event) => setRequiredPhrase(event.target.value)}
-                        />
-                      </label>
-                      {eddFlow.contract ? (
+                <section className="edd-loop-panel proof-workspace-panel workspace-tab-panel">
+                  <div className="edd-loop-copy">
+                    <h3>Test cases</h3>
+                    <p>Select a saved test, run it, then improve from failed evidence.</p>
+                  </div>
+                  <div className="proof-scenario-card">
+                    {hasSavedScenarioTest ? (
+                      <div className="scenario-test-summary">
+                        <div>
+                          <p className="artifact-type">Selected test</p>
+                          <h4>{eddFlow.scenario?.name}</h4>
+                          <span className="scenario-shape-pill">{testShapeLabels[savedTestShape]}</span>
+                          {renderScenarioInput(eddFlow.scenario?.input)}
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>Judge</dt>
+                            <dd>{savedEvalLabel}</dd>
+                          </div>
+                          <div>
+                            <dt>Criterion</dt>
+                            <dd>{savedEvalSummary}</dd>
+                          </div>
+                          <div>
+                            <dt>Latest result</dt>
+                            <dd>
+                              {eddFlow.baselineEval
+                                ? eddFlow.baselineEval.passed
+                                  ? "Passed"
+                                  : "Failed"
+                                : "Not run"}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    ) : (
+                      <div className="scenario-empty-state">
+                        <p className="artifact-type">No selected test</p>
+                        <h4>No test case yet</h4>
+                        <p>Create a single-turn, conversation, or replay test. The draft opens in the right panel.</p>
+                      </div>
+                    )}
+                    <div className="scenario-test-actions">
+                      <button className="secondary-button" type="button" onClick={openNewScenarioEditor}>
+                        New test
+                      </button>
+                      {hasSavedScenarioTest ? (
+                        <button className="secondary-button" type="button" onClick={openScenarioEditor}>
+                          Edit test
+                        </button>
+                      ) : null}
+                      {hasSavedScenarioTest ? (
                         <button
                           className="secondary-button compact-button"
                           type="button"
-                          onClick={handleInitializeEddFlow}
-                          disabled={isFlowBusy || !requiredPhrase.trim()}
+                          onClick={() => setWorkspaceTab("evidence")}
                         >
-                          Redefine test
+                          View evidence
                         </button>
                       ) : null}
                     </div>
-                  </div>
-                  <div className="loop-step-grid">
-                    {loopSteps.map((step, index) => (
-                      <div
-                        className={[
-                          "loop-step",
-                          step.done ? "done" : "",
-                          index === activeLoopStepIndex && !step.done ? "current" : "",
-                        ].join(" ")}
-                        key={step.label}
-                      >
-                        <span>{step.done ? "✓" : index + 1}</span>
-                        <strong>{step.label}</strong>
-                        <small>{step.detail}</small>
-                      </div>
-                    ))}
                   </div>
                   {showNextActionPanel ? (
                     <div className="next-action-panel">
@@ -2573,11 +2914,7 @@ function App() {
                   {showFailureAnalysis ? (
                     <div className="failure-analysis-panel">
                       <div className="failure-analysis-summary">
-                        <p className="artifact-type">Failure analysis</p>
-                        <h4>Open-code the failed evidence</h4>
-                        <p>
-                          Capture the observed failure mode before proposing a fix.
-                        </p>
+                        <h4>Failed checks</h4>
                         <div className="failed-check-list">
                           {failedBaselineChecks.length === 0 ? (
                             <span>No failed checks were returned.</span>
@@ -2848,17 +3185,71 @@ function App() {
           </div>
 
           <div className="review-panel-body">
-            <section>
-              <h3>Tool registry</h3>
-              <p>
-                Define draft tools with input and output schemas first. Approved tools can then be
-                enabled for live agent runs.
-              </p>
+            <section className="tool-manager-controls">
+              <div>
+                <h3>Tool manager</h3>
+                <p>
+                  {selectedAgent.allowed_tool_names.length} enabled for {selectedAgent.name}.
+                </p>
+              </div>
+              <label className="tool-search-field">
+                <Search size={18} />
+                <input
+                  value={toolSearch}
+                  onChange={(event) => setToolSearch(event.target.value)}
+                  placeholder="Search tools"
+                />
+              </label>
+              <div className="tool-filter-row" aria-label="Tool filter">
+                {(["all", "enabled", "available", "draft"] as const).map((filter) => (
+                  <button
+                    className={toolFilter === filter ? "tool-filter active" : "tool-filter"}
+                    type="button"
+                    key={filter}
+                    onClick={() => setToolFilter(filter)}
+                  >
+                    {filter}
+                  </button>
+                ))}
+              </div>
             </section>
-            {draftTools.length > 0 ? (
+            {activity ? <p className="activity-text">{activity}</p> : null}
+            {error ? <p className="error-text">{error}</p> : null}
+            <section className="tool-marketplace-list">
+              <div className="tool-section-title">
+                <h3>Approved tools</h3>
+                <span>{filteredApprovedTools.length}</span>
+              </div>
+              {filteredApprovedTools.length === 0 ? (
+                <p>No approved tools match this view.</p>
+              ) : (
+                filteredApprovedTools.map((tool) => {
+                  const isAllowed = selectedAgent.allowed_tool_names.includes(tool.name);
+                  return (
+                    <button
+                      className={isAllowed ? "tool-marketplace-item active" : "tool-marketplace-item"}
+                      type="button"
+                      key={tool.id}
+                      onClick={() => handleToggleTool(tool.name)}
+                      disabled={updatingTools}
+                      aria-pressed={isAllowed}
+                    >
+                      <span>{isAllowed ? "Enabled" : "Available"}</span>
+                      <strong>{tool.name}</strong>
+                      <small>{tool.description}</small>
+                      <em>{tool.implementation_kind}</em>
+                    </button>
+                  );
+                })
+              )}
+            </section>
+            {filteredDraftTools.length > 0 ? (
               <section className="tool-marketplace-list">
-                <h3>Draft tools</h3>
-                {draftTools.map((tool) => (
+                <div className="tool-section-title">
+                  <h3>Draft tools</h3>
+                  <span>{filteredDraftTools.length}</span>
+                </div>
+                {filteredDraftTools.map((tool) => (
                   <button
                     className="tool-marketplace-item draft"
                     type="button"
@@ -2873,115 +3264,206 @@ function App() {
                   </button>
                 ))}
               </section>
-            ) : (
-              <section className="tool-empty-state">
-                <h3>No draft tools yet</h3>
-                <p>Create one below. Drafts are saved to the platform registry but are not assignable.</p>
-              </section>
-            )}
+            ) : null}
+            <section className="tool-composer-section">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setToolComposerOpen((open) => !open)}
+              >
+                {toolComposerOpen ? "Hide new draft" : "New tool draft"}
+              </button>
+              {toolComposerOpen ? (
+                <form className="tool-definition-form" onSubmit={handleCreateTool}>
+                  <div>
+                    <p className="eyebrow">New draft</p>
+                    <h3>Define tool schema</h3>
+                    <p>
+                      Start with the contract: inputs, outputs, and deterministic mock behavior.
+                    </p>
+                  </div>
+                  <label>
+                    Tool name
+                    <input
+                      value={toolName}
+                      onChange={(event) => setToolName(event.target.value)}
+                      placeholder="lookup_ticket"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Description
+                    <textarea
+                      value={toolDescription}
+                      onChange={(event) => setToolDescription(event.target.value)}
+                      placeholder="Look up a support ticket by id."
+                      rows={3}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Input schema
+                    <textarea
+                      className="schema-editor"
+                      value={toolInputSchema}
+                      onChange={(event) => setToolInputSchema(event.target.value)}
+                      rows={10}
+                      spellCheck={false}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Output schema
+                    <textarea
+                      className="schema-editor"
+                      value={toolOutputSchema}
+                      onChange={(event) => setToolOutputSchema(event.target.value)}
+                      rows={8}
+                      spellCheck={false}
+                    />
+                  </label>
+                  <label>
+                    Output description
+                    <input
+                      value={toolOutputDescription}
+                      onChange={(event) => setToolOutputDescription(event.target.value)}
+                      placeholder="Ticket status and summary."
+                      required
+                    />
+                  </label>
+                  <label>
+                    Mock response
+                    <textarea
+                      value={toolMockResponse}
+                      onChange={(event) => setToolMockResponse(event.target.value)}
+                      placeholder="Ticket is open and awaiting customer logs."
+                      rows={3}
+                    />
+                  </label>
+                  <button className="primary-button" type="submit" disabled={updatingTools}>
+                    {updatingTools ? "Creating" : "Create draft"}
+                  </button>
+                </form>
+              ) : null}
+            </section>
+          </div>
+        </aside>
+      ) : null}
+      {scenarioEditorOpen && selectedAgent ? (
+        <aside className="review-panel" aria-label="Test case editor">
+          <div className="review-panel-header">
+            <div>
+              <p className="eyebrow">Test case</p>
+              <h2>{eddFlow.contract ? "Edit test" : "New test"}</h2>
+            </div>
+            <button
+              className="icon-button review-toggle-button"
+              type="button"
+              aria-label="Close test case editor"
+              onClick={() => setScenarioEditorOpen(false)}
+            >
+              <PanelRight size={22} />
+            </button>
+          </div>
+
+          <div className="review-panel-body">
+            <section className="scenario-editor-section">
+              <h3>Test shape</h3>
+              <div className="eval-method-tabs" aria-label="Test shape">
+                {[
+                  { id: "single_turn", label: "Single turn" },
+                  { id: "conversation", label: "Conversation" },
+                  { id: "trace_replay", label: "Trace replay" },
+                ].map((shape) => (
+                  <button
+                    className={testShape === shape.id ? "eval-method-tab active" : "eval-method-tab"}
+                    type="button"
+                    key={shape.id}
+                    onClick={() => handleTestShapeChange(shape.id as TestShape)}
+                  >
+                    {shape.label}
+                  </button>
+                ))}
+              </div>
+              <label className="compact-label">
+                <span>{testShapeInputLabels[testShape]}</span>
+                <small>{testShapeInputHelp[testShape]}</small>
+                <textarea
+                  value={scenarioInput}
+                  onChange={(event) => setScenarioInput(event.target.value)}
+                />
+              </label>
+            </section>
+            <section className="scenario-editor-section">
+              <h3>Judge method</h3>
+              <div className="eval-method-tabs" aria-label="Eval method">
+                {[
+                  { id: "rubric", label: "Rubric judge" },
+                  { id: "tool", label: "Tool use" },
+                  { id: "phrase", label: "Exact text" },
+                ].map((method) => (
+                  <button
+                    className={evalMethod === method.id ? "eval-method-tab active" : "eval-method-tab"}
+                    type="button"
+                    key={method.id}
+                    onClick={() => setEvalMethod(method.id as EvalMethod)}
+                  >
+                    {method.label}
+                  </button>
+                ))}
+              </div>
+              {evalMethod === "phrase" ? (
+                <label className="compact-label">
+                  <span>Required phrase</span>
+                  <small>Deterministic contains check.</small>
+                  <input
+                    value={requiredPhrase}
+                    onChange={(event) => setRequiredPhrase(event.target.value)}
+                  />
+                </label>
+              ) : null}
+              {evalMethod === "tool" ? (
+                <label className="compact-label">
+                  <span>Required tool</span>
+                  <small>The run must call this enabled tool.</small>
+                  <select
+                    value={requiredToolName}
+                    onChange={(event) => setRequiredToolName(event.target.value)}
+                    disabled={enabledToolDefinitions.length === 0}
+                  >
+                    {enabledToolDefinitions.length === 0 ? (
+                      <option value="">No enabled tools</option>
+                    ) : (
+                      enabledToolDefinitions.map((tool) => (
+                        <option value={tool.name} key={tool.id}>
+                          {tool.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+              ) : null}
+              {evalMethod === "rubric" ? (
+                <label className="compact-label">
+                  <span>Rubric</span>
+                  <small>Needs live judge scoring before pass/fail can be saved.</small>
+                  <textarea
+                    value={rubricText}
+                    onChange={(event) => setRubricText(event.target.value)}
+                  />
+                </label>
+              ) : null}
+            </section>
             {activity ? <p className="activity-text">{activity}</p> : null}
             {error ? <p className="error-text">{error}</p> : null}
-            <form className="tool-definition-form" onSubmit={handleCreateTool}>
-              <div>
-                <p className="eyebrow">New draft</p>
-                <h3>Define tool schema</h3>
-                <p>
-                  Start with the contract: inputs, outputs, and deterministic mock behavior.
-                  Execution adapters can be added once the shape is clear.
-                </p>
-              </div>
-              <label>
-                Tool name
-                <input
-                  value={toolName}
-                  onChange={(event) => setToolName(event.target.value)}
-                  placeholder="lookup_ticket"
-                  required
-                />
-              </label>
-              <label>
-                Description
-                <textarea
-                  value={toolDescription}
-                  onChange={(event) => setToolDescription(event.target.value)}
-                  placeholder="Look up a support ticket by id."
-                  rows={3}
-                  required
-                />
-              </label>
-              <label>
-                Input schema
-                <textarea
-                  className="schema-editor"
-                  value={toolInputSchema}
-                  onChange={(event) => setToolInputSchema(event.target.value)}
-                  rows={15}
-                  spellCheck={false}
-                  required
-                />
-              </label>
-              <label>
-                Output schema
-                <textarea
-                  className="schema-editor"
-                  value={toolOutputSchema}
-                  onChange={(event) => setToolOutputSchema(event.target.value)}
-                  rows={14}
-                  spellCheck={false}
-                />
-              </label>
-              <label>
-                Output description
-                <input
-                  value={toolOutputDescription}
-                  onChange={(event) => setToolOutputDescription(event.target.value)}
-                  placeholder="Ticket status and summary."
-                  required
-                />
-              </label>
-              <label>
-                Mock response
-                <textarea
-                  value={toolMockResponse}
-                  onChange={(event) => setToolMockResponse(event.target.value)}
-                  placeholder="Ticket is open and awaiting customer logs."
-                  rows={3}
-                />
-              </label>
-              <button className="primary-button" type="submit" disabled={updatingTools}>
-                {updatingTools ? "Creating" : "Create draft"}
-              </button>
-            </form>
-            <section>
-              <h3>Assigned to this agent</h3>
-              <p>
-                Only approved tools appear here. Built-in and mock tools can run through the
-                runner; HTTP, MCP, and Python adapters come next.
-              </p>
-            </section>
-            <section className="tool-marketplace-list">
-              {approvedTools.length === 0 ? (
-                <p>No approved tools are available yet.</p>
-              ) : (
-                approvedTools.map((tool) => {
-                  const isAllowed = selectedAgent.allowed_tool_names.includes(tool.name);
-                  return (
-                    <button
-                      className={isAllowed ? "tool-marketplace-item active" : "tool-marketplace-item"}
-                      type="button"
-                      key={tool.id}
-                      onClick={() => handleToggleTool(tool.name)}
-                      disabled={updatingTools}
-                      aria-pressed={isAllowed}
-                    >
-                      <span>{isAllowed ? "Enabled" : "Available"}</span>
-                      <strong>{tool.name}</strong>
-                      <small>{tool.description}</small>
-                    </button>
-                  );
-                })
-              )}
-            </section>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={handleInitializeEddFlow}
+              disabled={!canDefineTest}
+            >
+              Save test
+            </button>
           </div>
         </aside>
       ) : null}

@@ -284,6 +284,68 @@ def describe_empty_response(payload: dict) -> str:
     return "OpenAI response did not include output text."
 
 
+def usage_details_from_openai_payload(payload: dict) -> dict[str, Any]:
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return {}
+    details: dict[str, Any] = {}
+    for source_key, target_key in [
+        ("input_tokens", "input_tokens"),
+        ("output_tokens", "output_tokens"),
+        ("total_tokens", "total_tokens"),
+    ]:
+        value = usage.get(source_key)
+        if isinstance(value, int):
+            details[target_key] = value
+    return details
+
+
+def openai_responses_generation_context(config: OpenAIRunnerConfig, body: dict):
+    if not langfuse_tracing_enabled():
+        return None
+    try:
+        from langfuse import get_client
+    except ImportError:
+        return None
+
+    try:
+        langfuse = get_client()
+        return langfuse.start_as_current_observation(
+            as_type="generation",
+            name="openai.responses",
+            model=config.model,
+            input=body["input"],
+            metadata={
+                "provider": "openai",
+                "endpoint": "/responses",
+                "reasoning_effort": body.get("reasoning", {}).get("effort"),
+                "text_verbosity": body.get("text", {}).get("verbosity"),
+            },
+        )
+    except Exception:
+        return None
+
+
+def send_openai_responses_request(config: OpenAIRunnerConfig, body: dict) -> dict:
+    request = Request(
+        f"{config.base_url}/responses",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=60) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"OpenAI request failed with status {exc.code}: {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"OpenAI request failed: {exc.reason}") from exc
+
+
 def run_openai_agent(
     agent: RunnerAgentDesign,
     scenario: RunnerScenario,
@@ -411,27 +473,26 @@ def run_openai_agent_core(
         ],
         "max_output_tokens": 2000,
     }
-    request = Request(
-        f"{config.base_url}/responses",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urlopen(request, timeout=60) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"OpenAI request failed with status {exc.code}: {detail}") from exc
-    except URLError as exc:
-        raise RuntimeError(f"OpenAI request failed: {exc.reason}") from exc
-
-    response_text = extract_response_text(payload)
-    if not response_text:
-        raise RuntimeError(describe_empty_response(payload))
+    generation_context = openai_responses_generation_context(config, body)
+    if generation_context is None:
+        payload = send_openai_responses_request(config, body)
+        response_text = extract_response_text(payload)
+        if not response_text:
+            raise RuntimeError(describe_empty_response(payload))
+    else:
+        with generation_context as generation:
+            payload = send_openai_responses_request(config, body)
+            response_text = extract_response_text(payload)
+            if not response_text:
+                raise RuntimeError(describe_empty_response(payload))
+            generation.update(
+                output=response_text,
+                usage_details=usage_details_from_openai_payload(payload),
+                metadata={
+                    "openai_response_id": payload.get("id"),
+                    "status": payload.get("status"),
+                },
+            )
 
     return RunnerResult(
         id=f"run_{uuid4().hex[:12]}",

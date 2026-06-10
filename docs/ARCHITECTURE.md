@@ -109,12 +109,13 @@ sequenceDiagram
   A->>S: Store AgentDesign + AGENT_DESIGN artifact
   A-->>W: Return design and artifact
 
-  U->>W: Run scenario
+  U->>W: Run test case
   W->>A: Request run
   A->>R: Execute graph with scenario
+  R->>L: Record live agent trace and model generation when configured
   R-->>A: Return response, tool events, trace metadata
   A->>S: Store RUN_RESULT artifact
-  A->>L: Link trace when enabled
+  A->>S: Store TRACE_REF artifact when trace metadata exists
 
   U->>W: Evaluate
   W->>A: Request eval

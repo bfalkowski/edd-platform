@@ -86,7 +86,7 @@ Do this before adding more workflow UI.
 - [x] Add scenario-specific contracts that can describe any agent behavior,
       required evidence, tool expectations, output shape, forbidden behavior,
       and pass/fail criteria.
-- [ ] Add run records that reference agent design/version, scenario, mode,
+- [x] Add run records that reference agent design/version, scenario, mode,
       tools, and optional eval contract.
 - [x] Split tool calls and tool results into first-class evidence artifacts.
 - [x] Replace hardcoded eval checks with contract-driven deterministic checks.
@@ -94,7 +94,7 @@ Do this before adding more workflow UI.
       and contracts.
 - [x] Create failure packet artifacts when contract checks fail.
 - [x] Add bounded fix proposal artifacts linked to failure packets.
-- [ ] Add agent versions so fixes can produce v1, v2, v3, and later candidates.
+- [x] Add agent versions so fixes can produce v1, v2, v3, and later candidates.
 - [x] Add comparison artifacts/API for baseline vs candidate runs.
 - [ ] Keep all new API shapes covered by OpenAPI export, lint, and contract
       tests.
@@ -172,6 +172,8 @@ This phase makes the backbone usable without hiding the system model.
 - [x] Import or link Langfuse traces as evidence artifacts.
 - [x] Show trace links inside evidence context.
 - [x] Instrument canonical live agent runs with Langfuse trace capture.
+- [x] Record raw OpenAI Responses calls as Langfuse generation observations
+      under the live agent trace.
 - [x] Auto-create trace references for traced live runs.
 - [x] Create Langfuse datasets and dataset items for scenarios when explicit
       live sync is enabled.
@@ -208,19 +210,24 @@ This phase makes the backbone usable without hiding the system model.
 
 ## Current UI Status
 
-The UI works for the first vertical slice:
+The UI supports the current proof-loop vertical slice:
 
 1. Start the app with `./scripts/dev.sh`.
 2. Open `http://localhost:5173`.
-3. Create an agent with a name and intent.
-4. The agent appears in the left nav.
-5. The API creates an `AGENT_DESIGN` artifact.
-6. The Evidence panel displays a deterministic `AGENT_PROMPT_REVIEW` context
-   pack containing that artifact.
-7. Local API state persists to Postgres across restarts.
-8. A selected agent can run a deterministic mock scenario from the playground.
-9. The API stores the run output as a `RUN_RESULT` artifact.
-10. The UI can evaluate a run and store deterministic `EVAL_RESULT` evidence.
+3. Create or select an agent from the left rail.
+4. Edit the agent profile and tool allowlist from the Agent tab and right-side
+   tool manager.
+5. In Proof loop, create a test case from the right panel.
+6. Choose a test shape: single turn, conversation, or trace replay.
+7. Choose a judge method: rubric judge, tool use, or exact text.
+8. Run and evaluate the baseline version in mock or live mode.
+9. Open failed checks, add review notes, propose a bounded fix, create a
+   candidate version, rerun, reevaluate, and compare.
+10. Inspect evidence artifacts, related evidence, and Langfuse trace links from
+    the right review panel.
+11. Use the Error analysis tab as a placeholder for the upcoming trace review,
+    open-coding, failure taxonomy, and recoding workflow.
+12. Use the Readiness tab to create gates and gate decisions.
 
-The UI is not yet a full EDD workflow. It does not yet edit artifact sections,
-create gates, or link Langfuse traces.
+Remaining UI work is focused on deeper error-analysis workflow, richer run/test
+management, evidence-summary display, and broader version/replay views.
