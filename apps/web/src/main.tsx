@@ -2997,14 +2997,256 @@ function App() {
               ) : null}
 
               {workspaceTab === "error-analysis" ? (
-                <section className="error-analysis-placeholder workspace-tab-panel">
-                  <div>
-                    <p className="artifact-type">Error analysis</p>
-                    <h3>Under construction</h3>
-                    <p>
-                      This workspace will collect traces, open-code failures, group failure
-                      modes, and prioritize what to fix next.
-                    </p>
+                <section className="error-analysis-workspace workspace-tab-panel">
+                  <div className="error-analysis-intro">
+                    <div>
+                      <p className="artifact-type">Error analysis</p>
+                      <h3>Corpus to eval dataset</h3>
+                      <p>
+                        Pull traces into a review corpus, code the compact packets, then promote
+                        useful examples into a rerunnable eval dataset for version comparison.
+                      </p>
+                    </div>
+                    <div className="analysis-scope-card">
+                      <span>Active analysis</span>
+                      <strong>Sentiment observer escalation set</strong>
+                      <small>Sentiment Observer · live traces linked</small>
+                    </div>
+                  </div>
+
+                  <div className="analysis-flow-lanes">
+                    <section className="analysis-lane-card">
+                      <div>
+                        <span>Review corpus</span>
+                        <strong>24 traces</strong>
+                        <small>Imported from Langfuse · 18 reviewed · 6 uncoded</small>
+                      </div>
+                      <div className="analysis-run-actions">
+                        <button className="secondary-button" type="button">
+                          Import traces
+                        </button>
+                        <button className="secondary-button" type="button">
+                          Remove selected
+                        </button>
+                      </div>
+                    </section>
+                    <section className="analysis-lane-card">
+                      <div>
+                        <span>Eval dataset</span>
+                        <strong>9 runnable cases</strong>
+                        <small>Promoted from reviewed packets · same cases rerun per version</small>
+                      </div>
+                      <div className="analysis-run-actions">
+                        <button className="secondary-button" type="button">
+                          Promote packet
+                        </button>
+                        <button className="primary-button" type="button">
+                          Rerun dataset
+                        </button>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="analysis-run-strip">
+                    <div className="analysis-run-summary">
+                      <span>Current scored version</span>
+                      <strong>Sentiment Observer v0</strong>
+                      <small>9 cases · 6 failure modes · baseline</small>
+                    </div>
+                    <div className="analysis-run-summary muted">
+                      <span>Candidate scored version</span>
+                      <strong>Sentiment Observer v1</strong>
+                      <small>Same 9 cases · ready to compare</small>
+                    </div>
+                    <div className="analysis-run-actions">
+                      <button className="primary-button" type="button">
+                        Compare versions
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="analysis-stats">
+                      <span>
+                        <strong>24</strong>
+                        packets
+                      </span>
+                      <span>
+                        <strong>18</strong>
+                        coded
+                      </span>
+                      <span>
+                        <strong>6</strong>
+                        modes
+                      </span>
+                  </div>
+
+                  <div className="trace-review-layout">
+                    <div className="trace-packet-list" aria-label="Trace review queue">
+                      <button className="trace-packet-item active" type="button">
+                        <span>Needs recode</span>
+                        <strong>Image pull backoff escalation</strong>
+                        <small>run_eccd7a5497d2 · live judge passed</small>
+                      </button>
+                      <button className="trace-packet-item" type="button">
+                        <span>Open coded</span>
+                        <strong>Customer asks for timeline twice</strong>
+                        <small>run_f41c0b2aa019 · high severity</small>
+                      </button>
+                      <button className="trace-packet-item" type="button">
+                        <span>Unreviewed</span>
+                        <strong>Observer misses ownership handoff</strong>
+                        <small>run_b7a91df8009c · judge failed</small>
+                      </button>
+                    </div>
+
+                    <article className="trace-review-packet">
+                      <div className="trace-packet-header">
+                        <div>
+                          <p className="artifact-type">Trace review packet</p>
+                          <h4>Image pull backoff escalation</h4>
+                        </div>
+                        <a
+                          href="http://localhost:3001/project/local-demo/traces/5ac99811dfaf98731d01a44b7c59d7f1"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open trace
+                        </a>
+                      </div>
+
+                      <div className="trace-packet-grid">
+                        <section>
+                          <h5>Conversation window</h5>
+                          <div className="scenario-turns">
+                            <p className="scenario-turn">
+                              <strong>Customer:</strong> My deployment failed after the release.
+                            </p>
+                            <p className="scenario-turn">
+                              <strong>Agent:</strong> What error are you seeing?
+                            </p>
+                            <p className="scenario-turn">
+                              <strong>Customer:</strong> Cant you see this yourself??
+                            </p>
+                          </div>
+                        </section>
+                        <section>
+                          <h5>Compact trace summary</h5>
+                          <ul className="trace-summary-list">
+                            <li>Used sentiment, escalation risk, and signal summary tools.</li>
+                            <li>Detected worsening sentiment and high escalation risk.</li>
+                            <li>Live rubric judge returned PASS with cited evidence.</li>
+                          </ul>
+                        </section>
+                        <section>
+                          <h5>Observed output</h5>
+                          <p>
+                            Observer notes identify frustration, mention unresolved deployment impact,
+                            and recommend ownership plus transparent follow-up.
+                          </p>
+                        </section>
+                        <section>
+                          <h5>Judge signal</h5>
+                          <p>
+                            PASS: reviews the latest customer turn in context, avoids claiming resolution,
+                            and cites worsening sentiment plus escalation risk.
+                          </p>
+                        </section>
+                        <section>
+                          <h5>EDD notes</h5>
+                          <div className="trace-comment-list">
+                            <p>
+                              <strong>Bryan:</strong> Good escalation read, but the blocker should be
+                              named earlier.
+                            </p>
+                            <p>
+                              <strong>EDD:</strong> Mirrored to Langfuse comment.
+                            </p>
+                          </div>
+                        </section>
+                        <section>
+                          <h5>Langfuse comments</h5>
+                          <div className="trace-comment-list">
+                            <p>
+                              <strong>Imported:</strong> Customer frustration starts on the final turn.
+                            </p>
+                            <button className="secondary-button" type="button">
+                              Import as open code
+                            </button>
+                          </div>
+                        </section>
+                      </div>
+                    </article>
+                  </div>
+
+                  <div className="coding-workspace">
+                    <section className="open-code-panel">
+                      <div className="section-title-row">
+                        <div>
+                          <p className="artifact-type">Open coding</p>
+                          <h4>Reviewer notes</h4>
+                        </div>
+                        <button className="secondary-button" type="button">
+                          Add note
+                        </button>
+                      </div>
+                      <div className="open-code-list">
+                        <div className="open-code-item">
+                          <strong>latest-turn frustration detected</strong>
+                          <p>
+                            The customer moves from reporting a failed deployment to accusing the
+                            agent of lacking visibility.
+                          </p>
+                          <span>High · output + judge</span>
+                        </div>
+                        <div className="open-code-item">
+                          <strong>safe handoff recommended</strong>
+                          <p>
+                            The observer suggests ownership and transparent follow-up without taking
+                            over the customer conversation.
+                          </p>
+                          <span>Medium · tool summary</span>
+                        </div>
+                        <div className="open-code-item">
+                          <strong>blocker label could be sharper</strong>
+                          <p>
+                            The output mentions deployment impact, but should name image pull backoff
+                            as the blocker in the first observer note.
+                          </p>
+                          <span>Medium · candidate failure</span>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="axial-code-panel">
+                      <div className="section-title-row">
+                        <div>
+                          <p className="artifact-type">Axial codes</p>
+                          <h4>Failure modes by version</h4>
+                        </div>
+                        <button className="secondary-button" type="button">
+                          Create eval
+                        </button>
+                      </div>
+                      <p className="mode-table-note">
+                        Counts compare the same dataset scored against each version.
+                      </p>
+                      <div className="failure-mode-table">
+                        {[
+                          ["misses emotional escalation", "12", "4", "-8", "High"],
+                          ["blocker not named early", "8", "2", "-6", "Medium"],
+                          ["unsupported resolution claim", "5", "1", "-4", "High"],
+                          ["over-escalates neutral tone", "0", "3", "+3 new", "Medium"],
+                        ].map(([mode, v0, v1, delta, severity]) => (
+                          <div className="failure-mode-row" key={mode}>
+                            <strong>{mode}</strong>
+                            <span>{v0}</span>
+                            <span>{v1}</span>
+                            <em>{delta}</em>
+                            <small>{severity}</small>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   </div>
                 </section>
               ) : null}

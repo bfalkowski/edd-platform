@@ -365,4 +365,3 @@ For raw OpenAI Responses calls, the linked Langfuse trace should include an
   failure-mode regression views are planned.
 - Langfuse trace references, dataset refs, score refs, and comment refs exist
   as integration points. Production-grade trace import is still planned.
-- README screenshot and external public docs are still portfolio-polish tasks.
