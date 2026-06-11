@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONDONTWRITEBYTECODE=1
 
 echo "Scanning tracked files for secrets"
 python "$ROOT_DIR/scripts/secret_scan.py"
