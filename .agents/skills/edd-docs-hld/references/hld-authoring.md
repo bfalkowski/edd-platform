@@ -49,4 +49,4 @@ Avoid older or ambiguous terms:
 - Does it keep CI deterministic?
 - Does it distinguish deterministic checks from live LLM behavior?
 - Does it describe how a user can inspect evidence?
-- Does it avoid private context and portfolio-unfriendly language?
+- Does it avoid private context and public-unfriendly language?

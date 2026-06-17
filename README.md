@@ -158,7 +158,7 @@ The platform also supports:
   and eval score refs;
 - optional Langfuse comment mirroring for review notes on linked traces or
   prompts;
-- deterministic seeded demo data for portfolio and local walkthroughs,
+- deterministic seeded demo data for public and local walkthroughs,
   including a ready-to-run Sentiment Observer agent with its monitoring tools
   enabled.
 

@@ -66,4 +66,4 @@ Task tracking is here to prevent these failure modes:
 - committing changes without clear verification
 
 If a task does not connect to the product spine, the eval loop, the evidence
-model, or the portfolio story, pause and re-scope it before coding.
+model, or the product story, pause and re-scope it before coding.

@@ -168,7 +168,7 @@ Recommended fields:
 - expected evidence
 - expected constraints
 
-Scenarios must run in deterministic mock mode for CI and portfolio demos.
+Scenarios must run in deterministic mock mode for CI and public demos.
 
 ### 7. Runs And Evals
 

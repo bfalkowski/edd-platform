@@ -116,9 +116,9 @@ Commits should be:
 - free of secrets and local run artifacts
 - supported by relevant verification
 
-## Portfolio Signal
+## Engineering Signal
 
-For hiring reviewers, this repo should demonstrate:
+For engineering reviewers, this repo should demonstrate:
 
 - practical AI-assisted engineering discipline
 - evaluation infrastructure thinking

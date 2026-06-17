@@ -20,6 +20,10 @@ Statuses:
 | Capability | Primary HLD | API contract | UI model | Status | Notes |
 |---|---|---|---|---|---|
 | Clean-room consolidation | HLD-000 | n/a | n/a | covered | Establishes one repo, one UI, one API. |
+| Requirements and constraints | Architecture readiness brief, Requirements and constraints | n/a | n/a | covered | Product users, functional requirements, non-functional requirements, assumptions, and success criteria are documented. |
+| System tradeoffs | System tradeoffs | n/a | n/a | covered | Core architecture tradeoffs are documented for artifacts, contracts, checks, tools, Langfuse, repo shape, and async growth. |
+| Operability and failure modes | Operability and failure modes | partial | partial | covered | Expected behavior is documented for provider failures, trace sync failures, invalid tools, regressions, stale context, and cost spikes. |
+| Architecture deep dives | Architecture deep dives | partial | partial | covered | Eval evidence pipeline, tool governance, evidence context, and promotion readiness have expanded design notes. |
 | Evidence artifacts | HLD-001, HLD-002 | covered | partial | covered | Artifact list/search/detail/link exist. |
 | Evidence context packs | HLD-001 | covered | partial | covered | Purpose-specific deterministic context packs exist for prompt review, fix proposal generation, gate review, and version comparison. |
 | Evidence summaries | HLD-001 | covered | gap | partial | Deterministic and optional live summaries exist with cache and token/cost telemetry; UI display is missing. |
@@ -45,7 +49,9 @@ Statuses:
 ## Immediate Planning Gaps
 
 The Phase 2 EDD backbone is now covered by HLD and OpenAPI contracts. The next
-gaps are workflow UI and deeper judge/tool evidence modeling.
+gaps are implementation hardening for tool adapters, broader run/replay views,
+evidence-summary UI, deeper error-analysis workflow, and eventual async
+execution design for long-running run/eval workloads.
 
 ## Rule
 

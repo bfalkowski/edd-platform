@@ -5,6 +5,14 @@ EDD Platform is a single product repo for evaluation-driven agent development.
 The product has one React console, one platform API, shared domain objects, a
 LangGraph-capable runner layer, and optional Langfuse trace evidence.
 
+Planning companions:
+
+- [`ARCHITECTURE_READINESS_BRIEF.md`](ARCHITECTURE_READINESS_BRIEF.md) summarizes users, requirements, constraints, and the system shape.
+- [`REQUIREMENTS_AND_CONSTRAINTS.md`](REQUIREMENTS_AND_CONSTRAINTS.md) defines functional and non-functional requirements.
+- [`SYSTEM_TRADEOFFS.md`](SYSTEM_TRADEOFFS.md) records the main architecture tradeoffs.
+- [`OPERABILITY_AND_FAILURE_MODES.md`](OPERABILITY_AND_FAILURE_MODES.md) describes expected failure behavior and recovery paths.
+- [`ARCHITECTURE_DEEP_DIVES.md`](ARCHITECTURE_DEEP_DIVES.md) expands the eval pipeline, tool governance, evidence context, and readiness flows.
+
 ## System Context
 
 ```mermaid
@@ -210,9 +218,71 @@ Each example should exercise the same platform services:
 | Domain package | shared object vocabulary and schemas |
 | Runner package | LangChain/LangGraph execution, platform-approved tools, scenarios, replay |
 | Langfuse adapter | trace references and observability integration |
-| Examples | seeded portfolio/demo projects using the shared backend |
+| Examples | seeded demo projects using the shared backend |
 
-## Portfolio Signal
+## Requirements Summary
+
+The architecture is shaped by three primary users:
+
+- AI engineers who need to prove that a candidate agent version improved;
+- evaluation leads who need explicit expectations, failures, and gates;
+- platform owners who need deterministic defaults, tool governance, and
+  provider-cost control.
+
+The main functional requirements are project-scoped agent designs, scenarios,
+eval contracts, runs, eval results, failure packets, fix proposals, comparisons,
+gate decisions, and evidence context packs.
+
+The main non-functional requirements are deterministic local/CI execution,
+traceable evidence, governed tool use, optional live-provider calls, bounded
+judge cost, and reviewable promotion decisions.
+
+## Consistency Model
+
+The platform favors durable evidence consistency over optimistic workflow
+shortcuts.
+
+A run, eval, comparison, or gate decision should not be treated as complete
+unless the corresponding platform record and supporting artifacts have been
+written. External trace systems can enrich evidence, but they do not determine
+the source-of-truth state.
+
+This means a Langfuse sync failure can leave a run usable, while a failed
+platform evidence write should leave the operation incomplete.
+
+## Failure Posture
+
+The default recovery strategy is to preserve inspectable status and continue to
+support deterministic workflows.
+
+Examples:
+
+- live provider failures should not break mock mode;
+- Langfuse sync failures should not erase normalized platform evidence;
+- invalid tool schemas should keep tools out of executable allowlists;
+- candidate regressions should remain visible in comparisons;
+- gate decisions should link to supporting evidence rather than infer readiness
+  from the latest score.
+
+See [`OPERABILITY_AND_FAILURE_MODES.md`](OPERABILITY_AND_FAILURE_MODES.md) for
+the detailed failure-mode catalog.
+
+## Tradeoff Summary
+
+The most important design choices are:
+
+- use artifacts and links as the common evidence surface;
+- keep eval contracts as product data instead of hardcoded branches;
+- run deterministic checks before optional LLM judges;
+- keep tool definitions and allowlists platform-owned;
+- treat Langfuse as observability, not product state;
+- keep one monorepo while preserving package boundaries;
+- start synchronous for product clarity, then move long-running work to workers
+  when scale requires it.
+
+See [`SYSTEM_TRADEOFFS.md`](SYSTEM_TRADEOFFS.md) for the full tradeoff record.
+
+## Product Signal
 
 The architecture is meant to show that the repo is not a one-off agent demo.
 

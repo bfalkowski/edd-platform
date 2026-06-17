@@ -44,4 +44,4 @@ Read the relevant HLD after identifying the product area.
 - Do not create broad TODO lists detached from HLD/API/UI evidence.
 - Keep private context out of public docs.
 - Do not require provider-key env vars such as `OPENAI_API_KEY` in CI or deterministic docs/examples.
-- Keep docs portfolio-safe and product-focused.
+- Keep docs public-safe and product-focused.

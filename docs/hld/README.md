@@ -27,3 +27,18 @@ to use the consolidated product language:
 - [Rubric-driven agent improvement](notes-rubric-driven-agent-improvement.md)
   is captured by `HLD-004` and should be revisited when implementing optional
   LLM-as-judge behavior.
+
+## Architecture Companions
+
+The HLD set is supported by product architecture docs at the repo root:
+
+- [`../ARCHITECTURE_READINESS_BRIEF.md`](../ARCHITECTURE_READINESS_BRIEF.md)
+  summarizes users, requirements, constraints, boundaries, and scale path.
+- [`../REQUIREMENTS_AND_CONSTRAINTS.md`](../REQUIREMENTS_AND_CONSTRAINTS.md)
+  defines functional and non-functional requirements.
+- [`../SYSTEM_TRADEOFFS.md`](../SYSTEM_TRADEOFFS.md) records architecture
+  tradeoffs.
+- [`../OPERABILITY_AND_FAILURE_MODES.md`](../OPERABILITY_AND_FAILURE_MODES.md)
+  describes failure modes and recovery behavior.
+- [`../ARCHITECTURE_DEEP_DIVES.md`](../ARCHITECTURE_DEEP_DIVES.md) expands the
+  eval evidence, tool governance, context, and readiness flows.

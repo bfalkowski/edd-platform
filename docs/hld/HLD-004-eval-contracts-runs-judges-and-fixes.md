@@ -577,7 +577,7 @@ This HLD is ready for implementation when:
 
 ## Success Criteria
 
-The first implementation succeeds when a portfolio reviewer can see:
+The first implementation succeeds when an engineering reviewer can see:
 
 ```text
 v0 did X.

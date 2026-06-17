@@ -15,7 +15,7 @@
     {
       "id": "add-new-architecture-idea",
       "prompt": "I have a new idea for storing human feedback as part of eval results. Where should this go?",
-      "expected_output": "A response that places the idea in the product spine/HLD coverage context, updates or proposes the smallest relevant HLD/API/work-plan change, and keeps docs portfolio-safe.",
+      "expected_output": "A response that places the idea in the product spine/HLD coverage context, updates or proposes the smallest relevant HLD/API/work-plan change, and keeps docs public-safe.",
       "assertions": [
         "The response maps human feedback to evidence artifacts or the eval loop.",
         "The response identifies the correct docs to update.",
