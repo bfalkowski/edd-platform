@@ -264,6 +264,26 @@
             "minLength": 1,
             "title": "Scenario Input",
             "type": "string"
+          },
+          "target": {
+            "default": "agent",
+            "enum": [
+              "agent",
+              "url"
+            ],
+            "title": "Target",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
           }
         },
         "title": "AgentRunCreate",

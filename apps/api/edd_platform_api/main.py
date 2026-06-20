@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -1913,6 +1914,178 @@ def run_agent_with_runner(
     return runner_result, artifact, tool_artifacts
 
 
+def validate_website_url(url: Optional[str]) -> str:
+    if url is None or not url.strip():
+        raise HTTPException(status_code=422, detail="URL is required when target is url.")
+    target_url = url.strip()
+    parsed = urlparse(target_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=422, detail="URL must use http or https.")
+    return target_url
+
+
+def call_website_for_agent(
+    *,
+    project_id: str,
+    agent: AgentDesign,
+    url: str,
+) -> AgentRunResult:
+    target_url = validate_website_url(url)
+    run_id = f"run_{uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    request = Request(target_url, headers={"User-Agent": "edd-platform-url-trace/1.0"})
+    trace_id: Optional[str] = None
+    trace_url: Optional[str] = None
+    status_code: Optional[int] = None
+    headers: Dict[str, str] = {}
+    body_bytes = b""
+    error: Optional[str] = None
+    request_attempted = False
+
+    def execute_request() -> None:
+        nonlocal status_code, headers, body_bytes, error, request_attempted
+        request_attempted = True
+        try:
+            with urlopen(request, timeout=10) as response:
+                status_code = response.getcode()
+                headers = {key: value for key, value in response.headers.items()}
+                body_bytes = response.read(4096)
+        except HTTPError as exc:
+            status_code = exc.code
+            headers = {key: value for key, value in exc.headers.items()} if exc.headers else {}
+            body_bytes = exc.read(4096)
+            error = f"HTTP {exc.code}"
+        except URLError as exc:
+            error = str(exc.reason)
+
+    if langfuse_credentials_configured():
+        try:
+            langfuse = get_langfuse_client()
+            with langfuse.start_as_current_observation(
+                as_type="span",
+                name="edd-url-call",
+                input={"method": "GET", "url": target_url},
+                metadata={
+                    "source": "edd-platform",
+                    "runner_mode": "url",
+                    "agent_design_id": agent.id,
+                    "ad_hoc": True,
+                },
+            ) as observation:
+                execute_request()
+                observation.update(
+                    output={
+                        "status_code": status_code,
+                        "content_type": headers.get("Content-Type"),
+                        "bytes_captured": len(body_bytes),
+                        "error": error,
+                    }
+                )
+                trace_id = langfuse.get_current_trace_id() or observation.trace_id
+                if trace_id:
+                    try:
+                        trace_url = langfuse.get_trace_url(trace_id=trace_id)
+                    except Exception:
+                        trace_url = None
+            try:
+                langfuse.flush()
+            except Exception:
+                pass
+        except Exception as exc:
+            error = f"Langfuse trace unavailable: {exc}"
+            if not request_attempted:
+                execute_request()
+    else:
+        execute_request()
+
+    decoded_body = body_bytes.decode("utf-8", errors="replace")
+    content_type = headers.get("Content-Type", "unknown")
+    result_summary = (
+        f"GET {target_url} returned "
+        f"{status_code if status_code is not None else 'no status'} "
+        f"with {content_type}."
+    )
+    if error is not None:
+        result_summary = f"{result_summary} Error: {error}."
+
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="RUN_RESULT",
+        artifact_id=run_id,
+        title=f"URL call: {target_url}",
+        body=(
+            f"Response\n{result_summary}\n\n"
+            f"URL\n{target_url}\n\n"
+            f"Status\n{status_code if status_code is not None else 'unavailable'}\n\n"
+            f"Content type\n{content_type}\n\n"
+            f"Bytes captured\n{len(body_bytes)}\n\n"
+            f"Body excerpt\n{decoded_body[:1000]}"
+        ),
+        source="runner:url",
+        agent_design_id=agent.id,
+        now=now,
+    )
+    link_to_agent_design(
+        project_id=project_id,
+        agent_design_id=agent.id,
+        artifact=artifact,
+        now=now,
+    )
+    trace_artifact: Optional[ArtifactRecord] = None
+    artifact_ids = [artifact.id]
+    if trace_id and trace_url:
+        trace_artifact = create_runner_trace_artifact(
+            project_id=project_id,
+            agent_design_id=agent.id,
+            provider="langfuse",
+            trace_id=trace_id,
+            trace_url=trace_url,
+            run_id=run_id,
+            metadata={
+                "runner_mode": "url",
+                "provider": "http",
+                "ad_hoc": True,
+                "url": target_url,
+                "status_code": status_code,
+            },
+            related_artifact_ids=artifact_ids,
+            now=now,
+        )
+        artifact_ids.append(trace_artifact.id)
+
+    evidence = [
+        "Called the URL directly without an agent or model provider.",
+        f"Captured HTTP status {status_code if status_code is not None else 'unavailable'}.",
+    ]
+    if trace_id:
+        evidence.append(f"Linked Langfuse trace {trace_id}.")
+    elif not langfuse_credentials_configured():
+        evidence.append("Langfuse trace not created because credentials are not configured.")
+
+    return AgentRunResult(
+        id=run_id,
+        project_id=project_id,
+        agent_design_id=agent.id,
+        mode="url",
+        scenario_input=target_url,
+        response=result_summary,
+        tool_calls=[
+            {
+                "name": "http_get",
+                "input": target_url,
+                "output": result_summary,
+            }
+        ],
+        evidence=evidence,
+        trace_id=trace_id,
+        trace_url=trace_url,
+        artifact=artifact,
+        trace_artifact=trace_artifact,
+        artifact_ids=artifact_ids,
+        created_at=now,
+    )
+
+
 def evaluate_run_text(body: str) -> List[EvalCheck]:
     normalized = body.lower()
     return [
@@ -3790,6 +3963,13 @@ def run_agent_design(
 ) -> AgentRunResult:
     get_project_or_404(project_id)
     agent = get_agent_design_or_404(project_id, agent_id)
+    if payload.target == "url":
+        return call_website_for_agent(
+            project_id=project_id,
+            agent=agent,
+            url=payload.url or payload.scenario_input,
+        )
+
     prompt_refs = active_prompt_refs_for_run(
         project_id=project_id,
         agent=agent,

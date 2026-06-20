@@ -129,7 +129,7 @@ type AgentRunResult = {
   mode: string;
   scenario_input: string;
   response: string;
-  tool_calls: { name: string; output: string }[];
+  tool_calls: { name: string; input?: string; output: string }[];
   evidence: string[];
   trace_id: string | null;
   trace_url: string | null;
@@ -670,11 +670,13 @@ async function runAgentDesign(
   agentDesignId: string,
   scenarioInput: string,
   mode: "mock" | "live",
+  target: "agent" | "url" = "agent",
+  url?: string,
 ): Promise<AgentRunResult> {
   const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}/runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scenario_input: scenarioInput, mode }),
+    body: JSON.stringify({ scenario_input: scenarioInput, mode, target, url }),
   });
   if (!response.ok) {
     throw await responseError(response, "Unable to run agent scenario.");
@@ -1307,6 +1309,8 @@ function App() {
   const [rubricText, setRubricText] = useState(defaultRubricText);
   const [requiredToolName, setRequiredToolName] = useState("");
   const [runMode, setRunMode] = useState<"mock" | "live">("mock");
+  const [scratchTarget, setScratchTarget] = useState<"agent" | "url">("agent");
+  const [scratchUrl, setScratchUrl] = useState("https://example.com");
   const [workspaceTab, setWorkspaceTab] = useState<
     "agent" | "proof" | "error-analysis" | "evidence" | "readiness"
   >("proof");
@@ -1828,7 +1832,17 @@ function App() {
     setActivity(null);
     setError(null);
     setScratchError(null);
-    setScratchActivity(runMode === "live" ? "Running live ad hoc scenario." : "Running mock ad hoc scenario.");
+    if (scratchTarget === "url" && !scratchUrl.trim()) {
+      setScratchError("Enter a URL to call.");
+      return;
+    }
+    setScratchActivity(
+      scratchTarget === "url"
+        ? "Calling URL directly."
+        : runMode === "live"
+          ? "Running live ad hoc scenario."
+          : "Running mock ad hoc scenario.",
+    );
     setScratchArtifact(null);
     setScratchTraceUrl(null);
     setIsRunning(true);
@@ -1838,6 +1852,8 @@ function App() {
         selectedAgent.id,
         scenarioInput.trim(),
         runMode,
+        scratchTarget,
+        scratchTarget === "url" ? scratchUrl.trim() : undefined,
       );
       setActivity("Ad hoc evidence saved.");
       setContextPack((pack) =>
@@ -3361,19 +3377,48 @@ function App() {
           <div className="review-panel-body">
             <section className="run-playground panel-run-playground">
               <div>
-                <h3>Try a scenario</h3>
+                <h3>{scratchTarget === "url" ? "Call a URL" : "Try a scenario"}</h3>
                 <p>
-                  Run this agent without advancing the proof loop. The output is still saved as
-                  evidence and linked to a trace when live tracing is enabled.
+                  {scratchTarget === "url"
+                    ? "Call a website without the agent layer. The response is still saved as evidence and linked to a trace when Langfuse is configured."
+                    : "Run this agent without advancing the proof loop. The output is still saved as evidence and linked to a trace when live tracing is enabled."}
                 </p>
               </div>
-              <label>
-                Scenario input
-                <textarea
-                  value={scenarioInput}
-                  onChange={(event) => setScenarioInput(event.target.value)}
-                />
-              </label>
+              <div className="run-mode-control scratch-target-control" aria-label="Ad hoc target">
+                <button
+                  className={scratchTarget === "agent" ? "mode-option active" : "mode-option"}
+                  type="button"
+                  onClick={() => setScratchTarget("agent")}
+                >
+                  Agent
+                </button>
+                <button
+                  className={scratchTarget === "url" ? "mode-option active" : "mode-option"}
+                  type="button"
+                  onClick={() => setScratchTarget("url")}
+                >
+                  URL
+                </button>
+              </div>
+              {scratchTarget === "url" ? (
+                <label>
+                  URL
+                  <input
+                    type="url"
+                    value={scratchUrl}
+                    onChange={(event) => setScratchUrl(event.target.value)}
+                    placeholder="https://example.com"
+                  />
+                </label>
+              ) : (
+                <label>
+                  Scenario input
+                  <textarea
+                    value={scenarioInput}
+                    onChange={(event) => setScenarioInput(event.target.value)}
+                  />
+                </label>
+              )}
               <button
                 className="primary-button"
                 type="button"
@@ -3381,7 +3426,7 @@ function App() {
                 disabled={isRunning}
               >
                 <Play size={18} />
-                {isRunning ? "Running" : "Run ad hoc"}
+                {isRunning ? "Running" : scratchTarget === "url" ? "Call URL" : "Run ad hoc"}
               </button>
               {scratchActivity ? <p className="activity-text">{scratchActivity}</p> : null}
               {scratchError ? <p className="error-text">{scratchError}</p> : null}

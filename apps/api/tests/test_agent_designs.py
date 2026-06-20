@@ -112,6 +112,75 @@ def test_create_and_list_agent_designs() -> None:
     assert context_pack["artifacts"][0]["artifact_id"] == agent["id"]
 
 
+def test_ad_hoc_url_run_saves_http_evidence(monkeypatch) -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "URL Trace Agent", "intent": "Inspect simple URL calls."},
+    ).json()["agent"]
+
+    class FakeResponse:
+        headers = {"Content-Type": "text/html"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def getcode(self) -> int:
+            return 200
+
+        def read(self, _limit: int) -> bytes:
+            return b"<html><title>Example</title></html>"
+
+    def fake_urlopen(request, timeout):
+        assert request.full_url == "https://example.com"
+        assert timeout == 10
+        return FakeResponse()
+
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    monkeypatch.setattr(api_main, "urlopen", fake_urlopen)
+
+    response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
+        json={"target": "url", "url": "https://example.com"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["mode"] == "url"
+    assert payload["scenario_input"] == "https://example.com"
+    assert payload["response"] == "GET https://example.com returned 200 with text/html."
+    assert payload["tool_calls"] == [
+        {
+            "name": "http_get",
+            "input": "https://example.com",
+            "output": "GET https://example.com returned 200 with text/html.",
+        }
+    ]
+    assert payload["trace_url"] is None
+    assert payload["artifact"]["artifact_type"] == "RUN_RESULT"
+    assert "Body excerpt\n<html><title>Example</title></html>" in payload["artifact"]["body"]
+
+
+def test_ad_hoc_url_run_requires_http_url() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "URL Validation Agent", "intent": "Reject invalid URL calls."},
+    ).json()["agent"]
+
+    response = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
+        json={"target": "url", "url": "not-a-url"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "URL must use http or https."
+
+
 def test_agent_version_and_judge_prompt_store_langfuse_prompt_refs() -> None:
     client = TestClient(app)
     create_response = client.post(

@@ -1085,6 +1085,10 @@ dd {
   background: #f7f7f8;
 }
 
+.scratch-target-control {
+  justify-self: start;
+}
+
 .mode-option {
   background: transparent;
   border: 0;

@@ -292,6 +292,8 @@ class AgentRunCreate(BaseModel):
         min_length=1,
     )
     mode: Literal["mock", "live"] = "mock"
+    target: Literal["agent", "url"] = "agent"
+    url: Optional[str] = None
 
 
 class RunCreate(BaseModel):
