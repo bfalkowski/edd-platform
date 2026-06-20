@@ -162,12 +162,100 @@ default_tool = ToolDefinition(
     created_at=seeded_at,
     updated_at=seeded_at,
 )
-if default_tool.id not in _tool_definitions:
-    _tool_definitions[default_tool.id] = default_tool
-    store.save_record("tool_definitions", default_tool.id, default_tool)
-elif _tool_definitions[default_tool.id].implementation_key == "local_weather_fixture":
-    _tool_definitions[default_tool.id] = default_tool
-    store.save_record("tool_definitions", default_tool.id, default_tool)
+web_page_tool = ToolDefinition(
+    id="tool_fetch_web_page",
+    project_id=default_project.id,
+    name="fetch_web_page",
+    description="Fetch a public web page by URL and return a compact response summary.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "HTTP or HTTPS URL to fetch.",
+            }
+        },
+        "required": ["url"],
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "status_code": {"type": "integer"},
+            "content_type": {"type": "string"},
+            "excerpt": {"type": "string"},
+        },
+        "required": ["summary"],
+    },
+    output_description="HTTP status, content type, and a short body excerpt.",
+    implementation_kind="builtin",
+    implementation_key="fetch_web_page",
+    config_schema={},
+    mock_response="Fetched https://example.com: HTTP 200; content-type text/html; excerpt: Example Domain.",
+    status="approved",
+    created_at=seeded_at,
+    updated_at=seeded_at,
+)
+rendered_page_tool = ToolDefinition(
+    id="tool_render_web_page",
+    project_id=default_project.id,
+    name="render_web_page",
+    description="Render a public web page with a browser and return visible text plus useful links.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "HTTP or HTTPS URL to render.",
+            },
+            "query": {
+                "type": "string",
+                "description": "Optional extraction goal for the rendered page.",
+            },
+            "max_chars": {
+                "type": "integer",
+                "minimum": 500,
+                "maximum": 8000,
+                "description": "Maximum visible text characters to return.",
+            },
+        },
+        "required": ["url"],
+    },
+    output_schema={
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "visible_text": {"type": "string"},
+            "links": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["visible_text"],
+    },
+    output_description="Rendered page title, visible text excerpt, and useful links.",
+    implementation_kind="builtin",
+    implementation_key="render_web_page",
+    config_schema={},
+    mock_response=(
+        "Rendered https://example.com\nTitle\nExample Domain\n\n"
+        "Visible text excerpt\nExample Domain\n\nLinks\nNo links captured."
+    ),
+    status="approved",
+    created_at=seeded_at,
+    updated_at=seeded_at,
+)
+for seeded_tool_definition in [default_tool, web_page_tool, rendered_page_tool]:
+    existing_tool_definition = _tool_definitions.get(seeded_tool_definition.id)
+    if existing_tool_definition is None or (
+        seeded_tool_definition.id == default_tool.id
+        and existing_tool_definition.implementation_key == "local_weather_fixture"
+    ):
+        _tool_definitions[seeded_tool_definition.id] = seeded_tool_definition
+        store.save_record(
+            "tool_definitions",
+            seeded_tool_definition.id,
+            seeded_tool_definition,
+        )
 
 
 @app.get("/health")
@@ -1099,6 +1187,45 @@ def seed_sentiment_observer_defaults() -> None:
 
 
 seed_sentiment_observer_defaults()
+
+
+apartment_search_agent_intent = (
+    "Find rental listings for a requested location and return a concrete list of homes or apartments. "
+    "Use fetch_web_page first for simple pages. If the fetched page looks like a JavaScript app shell, "
+    "use render_web_page on the same URL to inspect visible listings. For Zillow-style searches, return "
+    "listing name or address, visible rent, bedrooms when shown, and a source link. Do not mark the task "
+    "complete with only a limitation explanation unless both static fetch and rendered page inspection fail."
+)
+
+
+def seed_apartment_search_agent_defaults() -> None:
+    now = seeded_at
+    tool_names = ["fetch_web_page", "render_web_page"]
+    existing_agent = _agent_designs.get("agent_apartment_search")
+    if existing_agent is None:
+        agent = AgentDesign(
+            id="agent_apartment_search",
+            project_id=default_project.id,
+            name="Apartment Search Agent",
+            intent=apartment_search_agent_intent,
+            status="designing",
+            allowed_tool_names=tool_names,
+            created_at=now,
+            updated_at=now,
+        )
+    else:
+        agent = existing_agent.model_copy(
+            update={
+                "allowed_tool_names": list(dict.fromkeys(existing_agent.allowed_tool_names + tool_names)),
+                "updated_at": existing_agent.updated_at,
+            }
+        )
+    _agent_designs[agent.id] = agent
+    store.save_record("agent_designs", agent.id, agent)
+    sync_agent_design_artifact(agent, now)
+
+
+seed_apartment_search_agent_defaults()
 
 
 def link_artifacts(

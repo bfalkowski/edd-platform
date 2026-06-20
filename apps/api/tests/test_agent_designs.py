@@ -427,6 +427,16 @@ def test_list_tool_definitions_includes_approved_weather_tool() -> None:
     weather_tool = next(tool for tool in tools if tool["name"] == "get_weather")
     assert weather_tool["status"] == "approved"
     assert weather_tool["implementation_key"] == "open_meteo_weather"
+    web_page_tool = next(tool for tool in tools if tool["name"] == "fetch_web_page")
+    assert web_page_tool["status"] == "approved"
+    assert web_page_tool["implementation_kind"] == "builtin"
+    assert web_page_tool["implementation_key"] == "fetch_web_page"
+    assert web_page_tool["input_schema"]["required"] == ["url"]
+    rendered_page_tool = next(tool for tool in tools if tool["name"] == "render_web_page")
+    assert rendered_page_tool["status"] == "approved"
+    assert rendered_page_tool["implementation_kind"] == "builtin"
+    assert rendered_page_tool["implementation_key"] == "render_web_page"
+    assert rendered_page_tool["input_schema"]["required"] == ["url"]
 
 
 def test_default_sentiment_observer_agent_has_all_observer_tools_enabled() -> None:
@@ -467,15 +477,32 @@ def test_default_sentiment_observer_agent_has_all_observer_tools_enabled() -> No
         "previous_arc_state"
         in tools_by_name["summarize_conversation_signals"]["input_schema"]["properties"]
     )
-    assert "arc_state" in tools_by_name["summarize_conversation_signals"]["output_schema"]["properties"]
     assert "trend_score" in tools_by_name["summarize_conversation_signals"]["output_schema"]["properties"]
+    assert "arc_state" in tools_by_name["summarize_conversation_signals"]["output_schema"]["properties"]
+
+
+def test_default_apartment_search_agent_has_web_tools_enabled() -> None:
+    client = TestClient(app)
+
+    agents_response = client.get("/api/projects/project_default/agent-designs")
+
+    assert agents_response.status_code == 200
+    agent = next(
+        agent
+        for agent in agents_response.json()
+        if agent["id"] == "agent_apartment_search"
+    )
+    assert agent["name"] == "Apartment Search Agent"
+    assert "Zillow-style searches" in agent["intent"]
+    assert set(agent["allowed_tool_names"]) >= {"fetch_web_page", "render_web_page"}
 
     artifacts_response = client.get(
         "/api/projects/project_default/artifacts",
         params={"agent_design_id": agent["id"], "artifact_type": "AGENT_DESIGN"},
     )
     assert artifacts_response.status_code == 200
-    assert artifacts_response.json()[0]["artifact_id"] == "agent_sentiment_observer"
+    assert artifacts_response.json()[0]["artifact_id"] == "agent_apartment_search"
+    assert "Allowed tools: fetch_web_page, render_web_page" in artifacts_response.json()[0]["body"]
 
 
 def test_create_tool_definition_with_input_and_output_schema() -> None:
@@ -725,6 +752,132 @@ def test_approved_weather_tool_adapts_to_langchain_tool(monkeypatch) -> None:
         "Current weather for 06511 New Haven, CT: 76°F and clear sky. "
         "Source: Open-Meteo current forecast."
     )
+
+
+def test_approved_web_page_tool_adapts_to_langchain_tool(monkeypatch) -> None:
+    class FakeResponse:
+        headers = {"Content-Type": "text/html"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def getcode(self) -> int:
+            return 200
+
+        def read(self, _limit: int) -> bytes:
+            return b"<html><title>Example</title><body>Hello page</body></html>"
+
+    def fake_urlopen(request, timeout):
+        assert request.full_url == "https://example.com"
+        assert request.headers["User-agent"] == "edd-platform-agent-tool/1.0"
+        assert timeout == 10
+        return FakeResponse()
+
+    monkeypatch.setattr(edd_runner, "urlopen", fake_urlopen)
+
+    tools = build_langchain_tools(
+        [
+            RunnerToolDefinition(
+                name="fetch_web_page",
+                description="Fetch a public web page by URL.",
+                input_schema={
+                    "type": "object",
+                    "properties": {"url": {"type": "string", "format": "uri"}},
+                    "required": ["url"],
+                },
+                output_description="HTTP response summary.",
+                implementation_kind="builtin",
+                implementation_key="fetch_web_page",
+                status="approved",
+            )
+        ]
+    )
+
+    assert tools[0].name == "fetch_web_page"
+    assert tools[0].invoke({"url": "https://example.com"}) == (
+        "Fetched https://example.com: HTTP 200; content-type text/html; "
+        "excerpt: <html><title>Example</title><body>Hello page</body></html>"
+    )
+
+
+def test_approved_rendered_page_tool_adapts_to_langchain_tool(monkeypatch) -> None:
+    class FakePage:
+        def goto(self, url, wait_until, timeout):
+            assert url == "https://example.com"
+            assert wait_until == "domcontentloaded"
+            assert timeout == 20000
+
+        def wait_for_timeout(self, timeout):
+            assert timeout == 3000
+
+        def evaluate(self, _script):
+            return {
+                "title": "Example Domain",
+                "url": "https://example.com",
+                "text": "Example Domain This domain is for use in illustrative examples.",
+                "links": [{"text": "More information", "href": "https://www.iana.org/help/example-domains"}],
+            }
+
+    class FakeBrowser:
+        def new_page(self, user_agent):
+            assert user_agent == "edd-platform-render-tool/1.0"
+            return FakePage()
+
+        def close(self):
+            return None
+
+    class FakeChromium:
+        def launch(self, headless):
+            assert headless is True
+            return FakeBrowser()
+
+    class FakePlaywright:
+        chromium = FakeChromium()
+
+    class FakePlaywrightContext:
+        def __enter__(self):
+            return FakePlaywright()
+
+        def __exit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(edd_runner, "get_sync_playwright", lambda: FakePlaywrightContext())
+
+    tools = build_langchain_tools(
+        [
+            RunnerToolDefinition(
+                name="render_web_page",
+                description="Render a public web page.",
+                input_schema={
+                    "type": "object",
+                    "properties": {"url": {"type": "string", "format": "uri"}},
+                    "required": ["url"],
+                },
+                output_description="Rendered page text and links.",
+                implementation_kind="builtin",
+                implementation_key="render_web_page",
+                status="approved",
+            )
+        ]
+    )
+
+    result = tools[0].invoke(
+        {
+            "url": "https://example.com",
+            "query": "Find example content.",
+            "max_chars": 1000,
+        }
+    )
+
+    assert tools[0].name == "render_web_page"
+    assert "Rendered https://example.com" in result
+    assert "Title\nExample Domain" in result
+    assert "Query\nFind example content." in result
+    assert "Example Domain This domain is for use in illustrative examples." in result
+    assert "- More information: https://www.iana.org/help/example-domains" in result
 
 
 def test_approved_mock_tool_adapts_to_langchain_tool() -> None:

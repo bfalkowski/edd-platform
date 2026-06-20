@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -176,6 +177,99 @@ def get_weather(zip_code: str) -> str:
         return f"Weather lookup unavailable for ZIP {normalized}: {exc}"
 
 
+def fetch_web_page(url: str) -> str:
+    """Fetch a public web page and return a compact response summary."""
+    target_url = url.strip()
+    parsed = urlparse(target_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return "Web page fetch unavailable: URL must use http or https."
+    request = Request(target_url, headers={"User-Agent": "edd-platform-agent-tool/1.0"})
+    try:
+        with urlopen(request, timeout=10) as response:
+            status_code = response.getcode()
+            content_type = response.headers.get("Content-Type", "unknown")
+            body = response.read(4096).decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        status_code = exc.code
+        content_type = exc.headers.get("Content-Type", "unknown") if exc.headers else "unknown"
+        body = exc.read(4096).decode("utf-8", errors="replace")
+    except URLError as exc:
+        return f"Web page fetch unavailable for {target_url}: {exc.reason}"
+
+    excerpt = re.sub(r"\s+", " ", body).strip()[:1000]
+    return (
+        f"Fetched {target_url}: HTTP {status_code}; content-type {content_type}; "
+        f"excerpt: {excerpt or 'empty response'}"
+    )
+
+
+def get_sync_playwright():
+    from playwright.sync_api import sync_playwright
+
+    return sync_playwright()
+
+
+def render_web_page(url: str, query: str = "", max_chars: int = 4000) -> str:
+    """Render a public web page and return visible text plus useful links."""
+    target_url = url.strip()
+    parsed = urlparse(target_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return "Rendered page unavailable: URL must use http or https."
+    try:
+        char_limit = max(500, min(int(max_chars), 8000))
+    except (TypeError, ValueError):
+        char_limit = 4000
+    try:
+        playwright_context = get_sync_playwright()
+    except ImportError:
+        return "Rendered page unavailable: Playwright is not installed in the runner environment."
+
+    try:
+        with playwright_context as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                page = browser.new_page(user_agent="edd-platform-render-tool/1.0")
+                page.goto(target_url, wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(3000)
+                payload = page.evaluate(
+                    """() => {
+                        const text = document.body
+                          ? document.body.innerText.replace(/\\s+/g, " ").trim()
+                          : "";
+                        const links = Array.from(document.querySelectorAll("a[href]"))
+                          .map((link) => ({
+                            text: (link.innerText || "").replace(/\\s+/g, " ").trim(),
+                            href: link.href
+                          }))
+                          .filter((link) => link.text && link.href)
+                          .slice(0, 40);
+                        return { title: document.title, url: location.href, text, links };
+                    }"""
+                )
+            finally:
+                browser.close()
+    except Exception as exc:
+        return f"Rendered page unavailable for {target_url}: {exc}"
+
+    title = str(payload.get("title") or "")
+    resolved_url = str(payload.get("url") or target_url)
+    text = str(payload.get("text") or "")[:char_limit]
+    links = payload.get("links") if isinstance(payload.get("links"), list) else []
+    query_note = f"\nQuery\n{query.strip()}\n" if query.strip() else ""
+    link_lines = "\n".join(
+        f"- {str(link.get('text', ''))[:120]}: {link.get('href')}"
+        for link in links[:20]
+        if isinstance(link, dict)
+    )
+    return (
+        f"Rendered {resolved_url}\n"
+        f"Title\n{title}\n"
+        f"{query_note}\n"
+        f"Visible text excerpt\n{text or 'No visible text captured.'}\n\n"
+        f"Links\n{link_lines or 'No links captured.'}"
+    )
+
+
 def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
     try:
         from langchain_core.tools import StructuredTool
@@ -195,6 +289,22 @@ def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
                 return get_weather(zip_code)
 
             tools.append(weather_tool)
+        elif definition.implementation_key == "fetch_web_page":
+
+            @tool("fetch_web_page")
+            def web_page_tool(url: str) -> str:
+                """Fetch a public web page by URL and return a compact response summary."""
+                return fetch_web_page(url)
+
+            tools.append(web_page_tool)
+        elif definition.implementation_key == "render_web_page":
+
+            @tool("render_web_page")
+            def rendered_web_page_tool(url: str, query: str = "", max_chars: int = 4000) -> str:
+                """Render a public web page and return visible text and links."""
+                return render_web_page(url, query=query, max_chars=max_chars)
+
+            tools.append(rendered_web_page_tool)
         elif definition.implementation_kind == "mock" or definition.implementation_key.startswith("mock."):
             def make_mock_tool(response: str):
                 def mock_tool(**_kwargs: Any) -> str:
