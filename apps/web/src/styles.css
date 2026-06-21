@@ -372,6 +372,13 @@ textarea {
   padding: 28px;
 }
 
+.intent-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .evidence-workspace {
   display: grid;
   gap: 18px;

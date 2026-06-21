@@ -113,6 +113,13 @@ type NewAgentResponse = {
   artifact: ArtifactRecord;
 };
 
+type OutcomeAgentResponse = NewAgentResponse & {
+  version: AgentVersion;
+  scenario: Scenario;
+  eval_contract: EvalContract;
+  draft_tools: ToolDefinition[];
+};
+
 type ContextPack = {
   id: string;
   project_id: string;
@@ -560,6 +567,21 @@ async function createAgentDesign(
   }
   const payload = (await response.json()) as NewAgentResponse;
   return payload.agent;
+}
+
+async function createAgentDesignFromOutcome(
+  projectId: string,
+  outcome: string,
+): Promise<OutcomeAgentResponse> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/from-outcome`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ outcome }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to draft agent from outcome.");
+  }
+  return response.json();
 }
 
 async function deleteAgentDesign(projectId: string, agentDesignId: string): Promise<void> {
@@ -1341,6 +1363,7 @@ function App() {
   const [isFlowBusy, setIsFlowBusy] = useState(false);
   const [isGateBusy, setIsGateBusy] = useState(false);
   const [updatingTools, setUpdatingTools] = useState(false);
+  const [isDraftingAgent, setIsDraftingAgent] = useState(false);
   const [isSavingAgent, setIsSavingAgent] = useState(false);
   const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
@@ -1643,6 +1666,70 @@ function App() {
       setIntent("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create agent design.");
+    }
+  }
+
+  async function handleDraftFromOutcome() {
+    setError(null);
+    setActivity(null);
+    setIsDraftingAgent(true);
+
+    try {
+      if (!project) {
+        throw new Error("No active project is available.");
+      }
+      const outcome = intent.trim();
+      const drafted = await createAgentDesignFromOutcome(project.id, outcome);
+      setAgents((items) => [drafted.agent, ...items]);
+      setTools((items) => {
+        const draftedById = new Map(drafted.draft_tools.map((tool) => [tool.id, tool]));
+        return [
+          ...drafted.draft_tools,
+          ...items.filter((tool) => !draftedById.has(tool.id)),
+        ];
+      });
+      setSelectedId(drafted.agent.id);
+      setReviewArtifact(drafted.artifact);
+      setReviewLinks([]);
+      setToolsPanelOpen(false);
+      setScratchPanelOpen(false);
+      setScratchActivity(null);
+      setScratchError(null);
+      setScratchArtifact(null);
+      setScratchTraceUrl(null);
+      setWorkspaceTab("proof");
+      setScenarioInput(drafted.scenario.input);
+      setTestShape(testShapeFromSetupContext(drafted.scenario.setup_context));
+      const draftedTool = drafted.eval_contract.checks.find((check) => check.tool)?.tool;
+      const draftedRubric = drafted.eval_contract.checks.find(
+        (check) => check.type === "rubric_judge",
+      )?.value;
+      if (draftedTool) {
+        setEvalMethod("tool");
+        setRequiredToolName(draftedTool);
+      } else if (draftedRubric) {
+        setEvalMethod("rubric");
+        setRubricText(draftedRubric);
+      }
+      setEddFlow({
+        baselineVersion: drafted.version,
+        scenario: drafted.scenario,
+        contract: drafted.eval_contract,
+        failurePackets: [],
+      });
+      setName("");
+      setIntent("");
+      const draftToolLabel =
+        drafted.draft_tools.length === 1 ? "1 needed tool" : `${drafted.draft_tools.length} needed tools`;
+      setActivity(
+        drafted.draft_tools.length
+          ? `Drafted v0, scenario, eval contract, and ${draftToolLabel}.`
+          : "Drafted v0, scenario, and eval contract from the requested outcome.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to draft agent from outcome.");
+    } finally {
+      setIsDraftingAgent(false);
     }
   }
 
@@ -2648,7 +2735,7 @@ function App() {
               <h1>New agent</h1>
               <p>
                 {project?.description ??
-                  "Describe an agent and persist the first platform design."}
+                  "Describe the outcome and persist the first platform design."}
               </p>
             </div>
           </header>
@@ -2657,7 +2744,7 @@ function App() {
         <section className={selectedAgent ? "canvas canvas-workspace" : "canvas"}>
           {!selectedAgent ? (
             <form className="intent-form" onSubmit={handleCreate}>
-              <p className="eyebrow">Start from intent</p>
+              <p className="eyebrow">Start from outcome</p>
               <h2>What agent are we building?</h2>
               <label>
                 Agent name
@@ -2669,17 +2756,27 @@ function App() {
                 />
               </label>
               <label>
-                Agent intent
+                Desired outcome
                 <textarea
                   value={intent}
                   onChange={(event) => setIntent(event.target.value)}
-                  placeholder="Determine why an issue escalated, gather evidence, and recommend a safe next action."
+                  placeholder="Give me a list of apartments in Greenwich CT from Zillow."
                   required
                 />
               </label>
-              <button className="primary-button" type="submit">
-                Create agent
-              </button>
+              <div className="intent-actions">
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={!intent.trim() || isDraftingAgent}
+                  onClick={handleDraftFromOutcome}
+                >
+                  {isDraftingAgent ? "Drafting..." : "Draft from outcome"}
+                </button>
+                <button className="secondary-button" type="submit">
+                  Create manually
+                </button>
+              </div>
               {error ? <p className="error-text">{error}</p> : null}
             </form>
           ) : null}
