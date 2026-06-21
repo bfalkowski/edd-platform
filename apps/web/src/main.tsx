@@ -1324,6 +1324,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [intent, setIntent] = useState("");
+  const [manualCreateOpen, setManualCreateOpen] = useState(false);
   const [testShape, setTestShape] = useState<TestShape>("single_turn");
   const [scenarioInput, setScenarioInput] = useState(defaultScenarioInput);
   const [requiredPhrase, setRequiredPhrase] = useState("");
@@ -1664,6 +1665,7 @@ function App() {
       setWorkspaceTab("proof");
       setName("");
       setIntent("");
+      setManualCreateOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create agent design.");
     }
@@ -1719,6 +1721,7 @@ function App() {
       });
       setName("");
       setIntent("");
+      setManualCreateOpen(false);
       const draftToolLabel =
         drafted.draft_tools.length === 1 ? "1 needed tool" : `${drafted.draft_tools.length} needed tools`;
       setActivity(
@@ -2745,22 +2748,13 @@ function App() {
           {!selectedAgent ? (
             <form className="intent-form" onSubmit={handleCreate}>
               <p className="eyebrow">Start from outcome</p>
-              <h2>What agent are we building?</h2>
-              <label>
-                Agent name
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Customer Service Triage Agent"
-                  required
-                />
-              </label>
+              <h2>What result should the agent produce?</h2>
               <label>
                 Desired outcome
                 <textarea
                   value={intent}
                   onChange={(event) => setIntent(event.target.value)}
-                  placeholder="Give me a list of apartments in Greenwich CT from Zillow."
+                  placeholder="Determine where the next Formula 1 race is."
                   required
                 />
               </label>
@@ -2773,10 +2767,34 @@ function App() {
                 >
                   {isDraftingAgent ? "Drafting..." : "Draft from outcome"}
                 </button>
-                <button className="secondary-button" type="submit">
-                  Create manually
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setManualCreateOpen((open) => !open)}
+                >
+                  {manualCreateOpen ? "Hide manual fields" : "Create manually"}
                 </button>
               </div>
+              {manualCreateOpen ? (
+                <div className="manual-create-fields">
+                  <label>
+                    Agent name
+                    <input
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      placeholder="Customer Service Triage Agent"
+                      required={manualCreateOpen}
+                    />
+                  </label>
+                  <button
+                    className="secondary-button"
+                    type="submit"
+                    disabled={!name.trim() || !intent.trim()}
+                  >
+                    Save manual agent
+                  </button>
+                </div>
+              ) : null}
               {error ? <p className="error-text">{error}</p> : null}
             </form>
           ) : null}

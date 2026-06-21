@@ -379,6 +379,18 @@ textarea {
   gap: 10px;
 }
 
+.manual-create-fields {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 14px;
+  margin-top: 4px;
+  padding-top: 16px;
+}
+
+.manual-create-fields .secondary-button {
+  justify-self: start;
+}
+
 .evidence-workspace {
   display: grid;
   gap: 18px;
