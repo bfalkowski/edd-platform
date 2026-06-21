@@ -1539,6 +1539,225 @@ def test_eval_contract_fields_generate_deterministic_checks() -> None:
     )
 
 
+def test_agent_design_from_outcome_creates_v0_test_and_contract() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/projects/project_default/agent-designs/from-outcome",
+        json={"outcome": "Give me a list of apartments in Greenwich CT from Zillow."},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    agent = payload["agent"]
+    version = payload["version"]
+    scenario = payload["scenario"]
+    contract = payload["eval_contract"]
+
+    assert agent["name"] == "Rental Search Agent"
+    assert agent["allowed_tool_names"] == ["fetch_web_page", "render_web_page"]
+    assert version["version_label"] == "v0"
+    assert version["status"] == "baseline"
+    assert version["tool_policy"]["allowed_tool_names"] == [
+        "fetch_web_page",
+        "render_web_page",
+    ]
+    assert scenario["input"] == "Give me a list of apartments in Greenwich CT from Zillow."
+    assert scenario["agent_design_id"] == agent["id"]
+    assert contract["scenario_id"] == scenario["id"]
+    assert contract["required_tools"] == ["render_web_page"]
+    assert "apartment" in contract["output_requirements"]
+    assert any(check["type"] == "rubric_judge" for check in contract["checks"])
+    assert any("Do not mark the task complete" in item for item in contract["expected_behavior"])
+
+    artifacts_response = client.get("/api/projects/project_default/artifacts")
+    artifact_types = {
+        artifact["artifact_type"]
+        for artifact in artifacts_response.json()
+        if artifact["agent_design_id"] == agent["id"]
+    }
+    assert {"AGENT_DESIGN", "AGENT_VERSION", "SCENARIO", "EVAL_CONTRACT"} <= artifact_types
+
+
+def test_agent_design_from_schedule_outcome_auto_creates_needed_tool() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/projects/project_default/agent-designs/from-outcome",
+        json={
+            "outcome": (
+                "Based on today's date, when is the next Formula One race?"
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    agent = payload["agent"]
+    contract = payload["eval_contract"]
+
+    assert agent["name"] == "Schedule Lookup Agent"
+    assert agent["allowed_tool_names"] == ["lookup_event_schedule"]
+    assert payload["draft_tools"] == []
+    assert contract["required_tools"] == ["lookup_event_schedule"]
+    assert {"race", "date", "source"} <= set(contract["output_requirements"])
+    assert "real-time access" in contract["forbidden_behavior"]
+
+    tools_response = client.get("/api/projects/project_default/tools")
+    assert tools_response.status_code == 200
+    schedule_tools = [
+        tool for tool in tools_response.json() if tool["name"] == "lookup_event_schedule"
+    ]
+    assert len(schedule_tools) == 1
+    assert schedule_tools[0]["status"] == "approved"
+    assert schedule_tools[0]["implementation_kind"] == "mock"
+    assert schedule_tools[0]["input_schema"]["required"] == ["series", "reference_date"]
+
+
+def test_agent_design_from_f1_typo_schedule_outcome_auto_creates_schedule_tool() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/projects/project_default/agent-designs/from-outcome",
+        json={"outcome": "Deterime where the nexgt 1 race is"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    agent = payload["agent"]
+    contract = payload["eval_contract"]
+
+    assert agent["name"] == "Schedule Lookup Agent"
+    assert agent["allowed_tool_names"] == ["lookup_event_schedule"]
+    assert payload["draft_tools"] == []
+    assert contract["required_tools"] == ["lookup_event_schedule"]
+    assert {"race", "date", "source"} <= set(contract["output_requirements"])
+    assert "real-time access" in contract["forbidden_behavior"]
+
+
+def test_agent_design_from_schedule_outcome_uses_existing_approved_tool() -> None:
+    client = TestClient(app)
+    tools_response = client.get("/api/projects/project_default/tools")
+    existing_tool = next(
+        (
+            tool
+            for tool in tools_response.json()
+            if tool["name"] == "lookup_event_schedule"
+        ),
+        None,
+    )
+    if existing_tool is None:
+        tool_response = client.post(
+            "/api/projects/project_default/tools",
+            json={
+                "name": "lookup_event_schedule",
+                "description": "Find the next scheduled event after a reference date.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "series": {"type": "string"},
+                        "reference_date": {"type": "string", "format": "date"},
+                    },
+                    "required": ["series", "reference_date"],
+                },
+                "output_schema": {
+                    "type": "object",
+                    "properties": {
+                        "event_name": {"type": "string"},
+                        "event_date": {"type": "string", "format": "date"},
+                        "source_url": {"type": "string"},
+                    },
+                    "required": ["event_name", "event_date", "source_url"],
+                },
+                "output_description": "Next scheduled event with source.",
+                "implementation_kind": "mock",
+                "implementation_key": "mock.lookup_event_schedule",
+                "status": "approved",
+            },
+        )
+        assert tool_response.status_code == 201
+    else:
+        tool_response = client.patch(
+            f"/api/projects/project_default/tools/{existing_tool['id']}",
+            json={"status": "approved"},
+        )
+        assert tool_response.status_code == 200
+
+    response = client.post(
+        "/api/projects/project_default/agent-designs/from-outcome",
+        json={"outcome": "What is the next F1 race after today?"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    agent = payload["agent"]
+    contract = payload["eval_contract"]
+
+    assert payload["draft_tools"] == []
+    assert agent["allowed_tool_names"] == ["lookup_event_schedule"]
+    assert contract["required_tools"] == ["lookup_event_schedule"]
+
+
+def test_agent_design_from_result_outcome_auto_creates_result_tool_and_rejects_refusal() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/projects/project_default/agent-designs/from-outcome",
+        json={"outcome": "Who won the last F1 race?"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    agent = payload["agent"]
+    contract = payload["eval_contract"]
+
+    assert agent["name"] == "Race Result Agent"
+    assert agent["allowed_tool_names"] == ["lookup_event_result"]
+    assert payload["draft_tools"] == []
+    assert contract["required_tools"] == ["lookup_event_result"]
+    assert {"winner", "race", "source"} <= set(contract["output_requirements"])
+    assert "real-time access" in contract["forbidden_behavior"]
+
+    run = api_main.RunRecord(
+        id="run_bad_f1_result",
+        project_id="project_default",
+        agent_design_id=agent["id"],
+        agent_version_id=payload["version"]["id"],
+        scenario_id=payload["scenario"]["id"],
+        eval_contract_id=contract["id"],
+        mode="mock",
+        provider="mock",
+        model=None,
+        input=payload["scenario"]["input"],
+        output=(
+            "I don't have real-time access to current sports results. "
+            "If you provide the date or race name, I'll give the winner. "
+            "Or I can guide you to check a current source."
+        ),
+        status="completed",
+        artifact_ids=[],
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
+    )
+    run_artifact_body = f"Response\n{run.output}\n\nTools\n"
+    checks = [
+        api_main.evaluate_contract_check(
+            check=check,
+            run=run,
+            evidence_artifact_ids=[],
+            run_artifact_body=run_artifact_body,
+        )
+        for check in contract["checks"]
+    ]
+
+    assert any(
+        check.check_type == "tool_called" and check.check_id == "requires_tool_lookup_event_result"
+        and not check.passed
+        for check in checks
+    )
+    assert any(
+        check.check_type == "output_not_contains" and check.expected == "real-time access"
+        and not check.passed
+        for check in checks
+    )
+
+
 def test_eval_contract_requires_matching_scenario_agent() -> None:
     client = TestClient(app)
     first_agent_response = client.post(

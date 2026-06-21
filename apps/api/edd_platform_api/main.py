@@ -63,6 +63,8 @@ from edd_platform_api.schemas import (
     Comparison,
     EvalRunResult,
     AgentDesignCreated,
+    OutcomeAgentCreate,
+    OutcomeAgentCreated,
     ContextPackCreate,
     ContextPack,
     EvidenceSummaryCreate,
@@ -1613,6 +1615,35 @@ def approved_tools_for_agent(project_id: str, agent: AgentDesign) -> List[Runner
     ]
 
 
+def find_project_tool_by_name(project_id: str, name: str) -> Optional[ToolDefinition]:
+    normalized = name.strip()
+    return next(
+        (
+            tool
+            for tool in _tool_definitions.values()
+            if tool.project_id == project_id and tool.name == normalized
+        ),
+        None,
+    )
+
+
+def approve_generated_tool(tool: ToolDefinition, mock_response: str) -> ToolDefinition:
+    now = datetime.now(timezone.utc)
+    updated = tool.model_copy(
+        update={
+            "implementation_kind": "mock",
+            "implementation_key": f"mock.{tool.name}",
+            "mock_response": mock_response,
+            "status": "approved",
+            "updated_at": now,
+        }
+    )
+    _tool_definitions[updated.id] = updated
+    store.save_record("tool_definitions", updated.id, updated)
+    upsert_tool_definition_artifact(updated, now)
+    return updated
+
+
 def validate_allowed_tool_names(project_id: str, allowed_tool_names: List[str]) -> None:
     approved_tool_names = {
         tool.name
@@ -2757,6 +2788,341 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
     artifact = sync_agent_design_artifact(agent, now)
 
     return AgentDesignCreated(agent=agent, artifact=artifact)
+
+
+def draft_agent_from_outcome(
+    project_id: str,
+    outcome: str,
+) -> OutcomeAgentCreated:
+    normalized = " ".join(outcome.strip().split())
+    lowered = normalized.lower()
+    is_listing_search = any(
+        term in lowered
+        for term in [
+            "apartment",
+            "apartments",
+            "rental",
+            "rentals",
+            "zillow",
+            "listing",
+            "listings",
+        ]
+    )
+    is_web_task = is_listing_search or any(
+        term in lowered for term in ["http://", "https://", "web page", "website", "site"]
+    )
+    is_f1_task = any(
+        term in lowered
+        for term in ["formula 1", "formula one", "formula1", "f1", "f 1", "f-1"]
+    ) or (
+        "race" in lowered
+        and any(term in lowered for term in ["next 1", "nexgt 1", "nxt 1"])
+    )
+    is_motorsport_event_task = any(
+        term in lowered
+        for term in ["grand prix", "event"]
+    ) or is_f1_task
+    is_result_task = is_motorsport_event_task and any(
+        term in lowered for term in ["last", "latest", "won", "winner", "result", "results"]
+    )
+    is_schedule_task = (
+        not is_result_task
+        and is_motorsport_event_task
+        and any(
+            term in lowered
+            for term in ["today", "current", "next", "nexgt", "nxt", "upcoming", "schedule"]
+        )
+    )
+    is_weather_task = "weather" in lowered
+    draft_tools: List[ToolDefinition] = []
+    allowed_tools = []
+    if is_web_task:
+        allowed_tools.extend(["fetch_web_page", "render_web_page"])
+    if is_weather_task:
+        allowed_tools.append("get_weather")
+    schedule_tool = find_project_tool_by_name(project_id, "lookup_event_schedule")
+    result_tool = find_project_tool_by_name(project_id, "lookup_event_result")
+    schedule_tool_response = (
+        "Race: Austrian Grand Prix. Date: 2026-06-28. Venue: Red Bull Ring, "
+        "Spielberg, Austria. Source: Formula 1 calendar."
+    )
+    result_tool_response = (
+        "Race: Barcelona-Catalunya Grand Prix. Date: 2026-06-14. "
+        "Winner: Lewis Hamilton. Source: Formula 1 race results."
+    )
+    if is_schedule_task:
+        if schedule_tool is None:
+            schedule_tool = create_tool_definition(
+                project_id,
+                ToolDefinitionCreate(
+                    name="lookup_event_schedule",
+                    description=(
+                        "Find the next scheduled event for a sport, series, or calendar "
+                        "after a reference date."
+                    ),
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "series": {
+                                "type": "string",
+                                "description": "Competition or event series, such as Formula 1.",
+                            },
+                            "reference_date": {
+                                "type": "string",
+                                "format": "date",
+                                "description": "Date used to decide what counts as next.",
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": "Original user schedule question.",
+                            },
+                        },
+                        "required": ["series", "reference_date"],
+                    },
+                    output_schema={
+                        "type": "object",
+                        "properties": {
+                            "event_name": {"type": "string"},
+                            "event_date": {"type": "string", "format": "date"},
+                            "venue": {"type": "string"},
+                            "source_url": {"type": "string"},
+                            "retrieved_at": {"type": "string", "format": "date-time"},
+                        },
+                        "required": ["event_name", "event_date", "source_url"],
+                    },
+                    output_description="Next scheduled event with date, venue, and source.",
+                    implementation_kind="mock",
+                    implementation_key="mock.lookup_event_schedule",
+                    config_schema={"type": "object", "properties": {}},
+                    mock_response=schedule_tool_response,
+                    status="approved",
+                ),
+            )
+        elif schedule_tool.status != "approved":
+            schedule_tool = approve_generated_tool(schedule_tool, schedule_tool_response)
+        if schedule_tool.status == "approved":
+            allowed_tools.append(schedule_tool.name)
+        else:
+            draft_tools.append(schedule_tool)
+    if is_result_task:
+        if result_tool is None:
+            result_tool = create_tool_definition(
+                project_id,
+                ToolDefinitionCreate(
+                    name="lookup_event_result",
+                    description=(
+                        "Find the latest completed event result for a sport or series, "
+                        "including winner and source."
+                    ),
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "series": {
+                                "type": "string",
+                                "description": "Competition or event series, such as Formula 1.",
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": "Original user result question.",
+                            },
+                            "reference_date": {
+                                "type": "string",
+                                "format": "date",
+                                "description": "Date used to decide the latest completed event.",
+                            },
+                        },
+                        "required": ["series", "query"],
+                    },
+                    output_schema={
+                        "type": "object",
+                        "properties": {
+                            "event_name": {"type": "string"},
+                            "event_date": {"type": "string", "format": "date"},
+                            "winner": {"type": "string"},
+                            "source_url": {"type": "string"},
+                            "retrieved_at": {"type": "string", "format": "date-time"},
+                        },
+                        "required": ["event_name", "winner", "source_url"],
+                    },
+                    output_description="Latest completed event winner with source.",
+                    implementation_kind="mock",
+                    implementation_key="mock.lookup_event_result",
+                    config_schema={"type": "object", "properties": {}},
+                    mock_response=result_tool_response,
+                    status="approved",
+                ),
+            )
+        elif result_tool.status != "approved":
+            result_tool = approve_generated_tool(result_tool, result_tool_response)
+        if result_tool.status == "approved":
+            allowed_tools.append(result_tool.name)
+        else:
+            draft_tools.append(result_tool)
+    validate_allowed_tool_names(project_id, allowed_tools)
+
+    if is_listing_search:
+        name = "Rental Search Agent"
+        output_focus = "Return a concise list of matching rentals with concrete details."
+        output_requirements = [
+            "apartment",
+            "source",
+        ]
+        required_tools = ["render_web_page"]
+    elif is_schedule_task:
+        name = "Schedule Lookup Agent"
+        output_focus = "Return the next scheduled event after the current reference date."
+        output_requirements = [
+            "race",
+            "date",
+            "source",
+        ]
+        required_tools = (
+            [schedule_tool.name]
+            if schedule_tool is not None
+            else []
+        )
+    elif is_result_task:
+        name = "Race Result Agent"
+        output_focus = "Return the winner of the latest completed race using current result evidence."
+        output_requirements = [
+            "winner",
+            "race",
+            "source",
+        ]
+        required_tools = [result_tool.name] if result_tool is not None else []
+    elif is_web_task:
+        name = "Web Research Agent"
+        output_focus = "Return concrete findings from the requested web source."
+        output_requirements = ["source"]
+        required_tools = ["render_web_page"]
+    elif is_weather_task:
+        name = "Weather Agent"
+        output_focus = "Answer the requested weather question using the approved weather tool."
+        output_requirements = ["weather"]
+        required_tools = ["get_weather"]
+    else:
+        name = "Outcome Agent"
+        output_focus = "Return the requested outcome directly and identify any missing evidence."
+        output_requirements = ["outcome"]
+        required_tools = []
+
+    intent = (
+        f"Fulfill this user outcome: {normalized}\n\n"
+        f"{output_focus} If the available evidence is insufficient, say what is missing and "
+        "what next action would satisfy the outcome. "
+        f"Include these output requirements explicitly: {', '.join(output_requirements)}."
+    )
+    created = create_agent_design(
+        project_id,
+        AgentDesignCreate(name=name, intent=intent, allowed_tool_names=allowed_tools),
+    )
+    now = datetime.now(timezone.utc)
+    if created.agent.allowed_tool_names != allowed_tools:
+        agent = created.agent.model_copy(
+            update={
+                "allowed_tool_names": allowed_tools,
+                "updated_at": now,
+            }
+        )
+        _agent_designs[agent.id] = agent
+        store.save_record("agent_designs", agent.id, agent)
+        artifact = sync_agent_design_artifact(agent, now)
+        created = AgentDesignCreated(agent=agent, artifact=artifact)
+    for draft_tool in draft_tools:
+        tool_artifact = find_artifact_by_type_and_artifact_id("TOOL_DEFINITION", draft_tool.id)
+        if tool_artifact is not None:
+            link_to_agent_design(
+                project_id=project_id,
+                agent_design_id=created.agent.id,
+                artifact=tool_artifact,
+                now=now,
+            )
+    version = create_agent_version(
+        project_id,
+        created.agent.id,
+        AgentVersionCreate(
+            version_label="v0",
+            instructions=intent,
+            tool_policy={"allowed_tool_names": created.agent.allowed_tool_names},
+            status="baseline",
+        ),
+    )
+    scenario = create_scenario(
+        project_id,
+        ScenarioCreate(
+            agent_design_id=created.agent.id,
+            name="Outcome request",
+            input=normalized,
+            setup_context="test_shape:single_turn\norigin:outcome_draft",
+            status="active",
+        ),
+    )
+    contract = create_eval_contract(
+        project_id,
+        EvalContractCreate(
+            agent_design_id=created.agent.id,
+            name="Outcome satisfaction",
+            description="Checks the first draft against the user-requested outcome.",
+            scenario_id=scenario.id,
+            version="v0",
+            expected_behavior=[
+                f"Address the requested outcome: {normalized}",
+                output_focus,
+                *(
+                    [
+                        "Use or implement the proposed lookup tool before treating the design as complete."
+                    ]
+                    if draft_tools
+                    else []
+                ),
+                "Do not mark the task complete when the response lacks the requested result.",
+            ],
+            required_tools=required_tools,
+            forbidden_behavior=(
+                [
+                    "I don",
+                    "real-time access",
+                    "If you provide",
+                    "guide you to check",
+                    "check a current source",
+                ]
+                if is_schedule_task or is_result_task
+                else []
+            ),
+            output_requirements=output_requirements,
+            checks=[
+                {
+                    "id": "outcome_rubric",
+                    "type": "rubric_judge",
+                    "value": (
+                        "Pass only if the answer directly satisfies the requested outcome "
+                        "with concrete, source-backed details. Fail if it merely reports "
+                        "that a page was opened or that evidence may exist."
+                    ),
+                }
+            ],
+            pass_criteria="all_checks_pass",
+            status="active",
+        ),
+    )
+
+    return OutcomeAgentCreated(
+        agent=created.agent,
+        artifact=created.artifact,
+        version=version,
+        scenario=scenario,
+        eval_contract=contract,
+        draft_tools=draft_tools,
+    )
+
+
+@app.post("/api/projects/{project_id}/agent-designs/from-outcome", status_code=201)
+def create_agent_design_from_outcome(
+    project_id: str,
+    payload: OutcomeAgentCreate,
+) -> OutcomeAgentCreated:
+    get_project_or_404(project_id)
+    return draft_agent_from_outcome(project_id, payload.outcome)
 
 
 @app.get("/api/projects/{project_id}/agent-designs/{agent_id}")

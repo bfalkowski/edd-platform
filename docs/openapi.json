@@ -2528,6 +2528,55 @@
         "title": "JudgePromptTemplateCreate",
         "type": "object"
       },
+      "OutcomeAgentCreate": {
+        "properties": {
+          "outcome": {
+            "minLength": 1,
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "OutcomeAgentCreate",
+        "type": "object"
+      },
+      "OutcomeAgentCreated": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentDesign"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/ArtifactRecord"
+          },
+          "draft_tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolDefinition"
+            },
+            "title": "Draft Tools",
+            "type": "array"
+          },
+          "eval_contract": {
+            "$ref": "#/components/schemas/EvalContract"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/Scenario"
+          },
+          "version": {
+            "$ref": "#/components/schemas/AgentVersion"
+          }
+        },
+        "required": [
+          "agent",
+          "artifact",
+          "version",
+          "scenario",
+          "eval_contract"
+        ],
+        "title": "OutcomeAgentCreated",
+        "type": "object"
+      },
       "Project": {
         "properties": {
           "created_at": {
@@ -3550,6 +3599,55 @@
           }
         },
         "summary": "Create Agent Design"
+      }
+    },
+    "/api/projects/{project_id}/agent-designs/from-outcome": {
+      "post": {
+        "operationId": "create_agent_design_from_outcome_api_projects__project_id__agent_designs_from_outcome_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutcomeAgentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeAgentCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Agent Design From Outcome"
       }
     },
     "/api/projects/{project_id}/agent-designs/{agent_id}": {

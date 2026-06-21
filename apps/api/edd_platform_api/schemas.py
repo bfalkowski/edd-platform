@@ -550,6 +550,19 @@ class AgentDesignCreated(BaseModel):
     artifact: ArtifactRecord
 
 
+class OutcomeAgentCreate(BaseModel):
+    outcome: str = Field(min_length=1)
+
+
+class OutcomeAgentCreated(BaseModel):
+    agent: AgentDesign
+    artifact: ArtifactRecord
+    version: AgentVersion
+    scenario: Scenario
+    eval_contract: EvalContract
+    draft_tools: List[ToolDefinition] = Field(default_factory=list)
+
+
 class ContextPackCreate(BaseModel):
     purpose: str = Field(min_length=1)
     agent_design_id: Optional[str] = None
