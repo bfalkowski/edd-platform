@@ -358,6 +358,16 @@ type EddFlowState = {
   comparison?: Comparison;
 };
 
+type GeneratedDesignSummary = {
+  agentId: string;
+  artifact: ArtifactRecord;
+  version: AgentVersion;
+  scenario: Scenario;
+  contract: EvalContract;
+  draftTools: ToolDefinition[];
+  enabledToolNames: string[];
+};
+
 const apiBase = "/api";
 const defaultScenarioInput = "What's the weather in Boston today?";
 const defaultConversationInput = `Customer: My deployment failed after the release.
@@ -1339,6 +1349,7 @@ function App() {
   >("proof");
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
   const [eddFlow, setEddFlow] = useState<EddFlowState>({ failurePackets: [] });
+  const [generatedDesign, setGeneratedDesign] = useState<GeneratedDesignSummary | null>(null);
   const [gates, setGates] = useState<GateDefinition[]>([]);
   const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
@@ -1415,6 +1426,8 @@ function App() {
     () => agents.find((agent) => agent.id === selectedId) ?? null,
     [agents, selectedId],
   );
+  const selectedGeneratedDesign =
+    generatedDesign && generatedDesign.agentId === selectedAgent?.id ? generatedDesign : null;
   useEffect(() => {
     setAgentEditName(selectedAgent?.name ?? "");
     setAgentEditIntent(selectedAgent?.intent ?? "");
@@ -1481,6 +1494,14 @@ function App() {
   const artifactsById = useMemo(() => {
     return new Map((contextPack?.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
   }, [contextPack]);
+  const artifactByRecordKey = useMemo(() => {
+    return new Map(
+      (contextPack?.artifacts ?? []).map((artifact) => [
+        `${artifact.artifact_type}:${artifact.artifact_id}`,
+        artifact,
+      ]),
+    );
+  }, [contextPack]);
   const visibleArtifacts = contextPack?.artifacts ?? [];
   const currentProofArtifactIds = proofArtifactIds(eddFlow);
   const currentProofRunIdSet = new Set(proofRunIds(eddFlow));
@@ -1505,6 +1526,15 @@ function App() {
   );
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
+  const generatedVersionArtifact = selectedGeneratedDesign
+    ? artifactByRecordKey.get(`AGENT_VERSION:${selectedGeneratedDesign.version.id}`)
+    : undefined;
+  const generatedScenarioArtifact = selectedGeneratedDesign
+    ? artifactByRecordKey.get(`SCENARIO:${selectedGeneratedDesign.scenario.id}`)
+    : undefined;
+  const generatedContractArtifact = selectedGeneratedDesign
+    ? artifactByRecordKey.get(`EVAL_CONTRACT:${selectedGeneratedDesign.contract.id}`)
+    : undefined;
   const failedBaselineChecks =
     eddFlow.baselineEval?.checks.filter((check) => !check.passed) ?? [];
   const baselineTraceArtifact = currentTraceArtifacts.find((artifact) =>
@@ -1654,6 +1684,7 @@ function App() {
       const agent = await createAgentDesign(project.id, name.trim(), intent.trim());
       setAgents((items) => [agent, ...items]);
       setSelectedId(agent.id);
+      setGeneratedDesign(null);
       setReviewArtifact(null);
       setReviewLinks([]);
       setToolsPanelOpen(false);
@@ -1719,6 +1750,15 @@ function App() {
         contract: drafted.eval_contract,
         failurePackets: [],
       });
+      setGeneratedDesign({
+        agentId: drafted.agent.id,
+        artifact: drafted.artifact,
+        version: drafted.version,
+        scenario: drafted.scenario,
+        contract: drafted.eval_contract,
+        draftTools: drafted.draft_tools,
+        enabledToolNames: drafted.agent.allowed_tool_names,
+      });
       setName("");
       setIntent("");
       setManualCreateOpen(false);
@@ -1746,6 +1786,7 @@ function App() {
       setAgents((items) => items.filter((agent) => agent.id !== deleteCandidate.id));
       if (selectedId === deleteCandidate.id) {
         setSelectedId(null);
+        setGeneratedDesign(null);
         setContextPack(null);
         setReviewArtifact(null);
         setReviewLinks([]);
@@ -2594,6 +2635,7 @@ function App() {
             type="button"
             onClick={() => {
               setSelectedId(null);
+              setGeneratedDesign(null);
               setReviewArtifact(null);
               setReviewLinks([]);
               setToolsPanelOpen(false);
@@ -2664,6 +2706,9 @@ function App() {
                   type="button"
                   onClick={() => {
                     setSelectedId(agent.id);
+                    setGeneratedDesign((current) =>
+                      current?.agentId === agent.id ? current : null,
+                    );
                     setOpenAgentMenuId(null);
                     setReviewArtifact(null);
                     setReviewLinks([]);
@@ -2696,6 +2741,9 @@ function App() {
                       role="menuitem"
                       onClick={() => {
                         setSelectedId(agent.id);
+                        setGeneratedDesign((current) =>
+                          current?.agentId === agent.id ? current : null,
+                        );
                         setScratchPanelOpen(true);
                         setReviewArtifact(null);
                         setReviewLinks([]);
@@ -2964,6 +3012,112 @@ function App() {
                     <h3>Test cases</h3>
                     <p>Select a saved test, run it, then improve from failed evidence.</p>
                   </div>
+                  {selectedGeneratedDesign ? (
+                    <div className="generated-design-review">
+                      <div className="generated-design-header">
+                        <div>
+                          <p className="artifact-type">Generated design</p>
+                          <h4>{selectedAgent.name}</h4>
+                          <p>
+                            The platform created the first version, scenario, success criteria, and
+                            tool policy from the requested outcome.
+                          </p>
+                        </div>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => {
+                            setReviewArtifact(selectedGeneratedDesign.artifact);
+                            setReviewLinks([]);
+                          }}
+                        >
+                          Inspect design
+                        </button>
+                      </div>
+                      <dl className="generated-design-grid">
+                        <div>
+                          <dt>Version</dt>
+                          <dd>{selectedGeneratedDesign.version.version_label}</dd>
+                          {generatedVersionArtifact ? (
+                            <button
+                              className="inline-evidence-button"
+                              type="button"
+                              onClick={() => {
+                                setReviewArtifact(generatedVersionArtifact);
+                                setReviewLinks([]);
+                              }}
+                            >
+                              Inspect
+                            </button>
+                          ) : null}
+                        </div>
+                        <div>
+                          <dt>Scenario</dt>
+                          <dd>{selectedGeneratedDesign.scenario.name}</dd>
+                          {generatedScenarioArtifact ? (
+                            <button
+                              className="inline-evidence-button"
+                              type="button"
+                              onClick={() => {
+                                setReviewArtifact(generatedScenarioArtifact);
+                                setReviewLinks([]);
+                              }}
+                            >
+                              Inspect
+                            </button>
+                          ) : null}
+                        </div>
+                        <div>
+                          <dt>Contract</dt>
+                          <dd>{selectedGeneratedDesign.contract.name}</dd>
+                          {generatedContractArtifact ? (
+                            <button
+                              className="inline-evidence-button"
+                              type="button"
+                              onClick={() => {
+                                setReviewArtifact(generatedContractArtifact);
+                                setReviewLinks([]);
+                              }}
+                            >
+                              Inspect
+                            </button>
+                          ) : null}
+                        </div>
+                        <div>
+                          <dt>Required tools</dt>
+                          <dd>
+                            {selectedGeneratedDesign.contract.required_tools.length > 0
+                              ? selectedGeneratedDesign.contract.required_tools.join(", ")
+                              : "None"}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="generated-tool-review">
+                        <div>
+                          <span>Auto-created / enabled tools</span>
+                          <strong>
+                            {selectedGeneratedDesign.enabledToolNames.length > 0
+                              ? selectedGeneratedDesign.enabledToolNames.join(", ")
+                              : "None"}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Draft tools</span>
+                          <strong>
+                            {selectedGeneratedDesign.draftTools.length > 0
+                              ? selectedGeneratedDesign.draftTools.map((tool) => tool.name).join(", ")
+                              : "None"}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Output requirements</span>
+                          <strong>
+                            {selectedGeneratedDesign.contract.output_requirements.join(", ")}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="proof-scenario-card">
                     {hasSavedScenarioTest ? (
                       <div className="scenario-test-summary">

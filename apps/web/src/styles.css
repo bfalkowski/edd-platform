@@ -1506,6 +1506,91 @@ dd {
   margin: 0;
 }
 
+.generated-design-review {
+  background: #ffffff;
+  border: 1px solid #e2e3ea;
+  border-radius: 14px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.generated-design-header {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.generated-design-header h4 {
+  color: #202123;
+  font-size: 20px;
+  line-height: 1.15;
+  margin: 0 0 6px;
+}
+
+.generated-design-header p:not(.artifact-type) {
+  color: #606373;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.generated-design-grid,
+.generated-tool-review {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.generated-design-grid div,
+.generated-tool-review div {
+  background: #f7f7f8;
+  border: 1px solid #ececf1;
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.generated-design-grid dt,
+.generated-tool-review span {
+  color: #737684;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.generated-design-grid dd,
+.generated-tool-review strong {
+  color: #202123;
+  font-weight: 850;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inline-evidence-button {
+  background: transparent;
+  border: 0;
+  color: #315f9c;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  justify-self: start;
+  padding: 0;
+}
+
+.inline-evidence-button:hover {
+  color: #1f4778;
+}
+
+.generated-tool-review {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .proof-scenario-card {
   background: #f7f7f8;
   border: 1px solid #e2e3ea;
@@ -2336,7 +2421,10 @@ dd {
   }
 
   .proof-setup-grid,
-  .scenario-test-summary {
+  .scenario-test-summary,
+  .generated-design-header,
+  .generated-design-grid,
+  .generated-tool-review {
     grid-template-columns: 1fr;
   }
 
