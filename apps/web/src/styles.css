@@ -2016,12 +2016,40 @@ dd {
   margin: 0;
 }
 
+.proof-mode-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.proof-mode-summary span {
+  background: #ffffff;
+  border: 1px solid #dfe1e8;
+  border-radius: 999px;
+  color: #40424d;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 4px 8px;
+}
+
 .failure-analysis-panel {
   border-top: 1px solid #e2e3ea;
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
   padding-top: 16px;
+}
+
+.judge-mode-note {
+  background: #fffaf0;
+  border: 1px solid #f1dba6;
+  border-radius: 12px;
+  color: #665019;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 10px 0 0;
+  padding: 10px 12px;
 }
 
 .failure-analysis-summary h4 {

@@ -2485,9 +2485,13 @@ function App() {
         : rubricText || "No rubric set";
   const currentJudgeMode: "deterministic" | "live" =
     evalMethod === "rubric" ? "live" : "deterministic";
+  const displayedRunMode = eddFlow.baselineRun?.mode ?? runMode;
+  const displayedJudgeMode = eddFlow.baselineEval?.mode ?? currentJudgeMode;
   const hasSavedScenarioTest = Boolean(eddFlow.scenario && eddFlow.contract);
   const savedTestShape = testShapeFromSetupContext(eddFlow.scenario?.setup_context);
   const savedEvalCheck = eddFlow.contract?.checks[0];
+  const savedContractUsesRubric =
+    eddFlow.contract?.checks.some((check) => check.type === "rubric_judge") ?? false;
   const savedEvalLabel = savedEvalCheck
     ? savedEvalCheck.type === "rubric_judge"
       ? "Rubric judge"
@@ -2501,6 +2505,16 @@ function App() {
       : savedEvalCheck?.tool
         ? savedEvalCheck.tool
         : savedEvalCheck?.value || "No criterion set";
+  const deterministicRubricOnlyFailure = Boolean(
+    eddFlow.baselineEval?.mode === "deterministic" &&
+      savedContractUsesRubric &&
+      failedBaselineChecks.length > 0 &&
+      failedBaselineChecks.every(
+        (check) =>
+          check.check_type === "rubric_judge" ||
+          check.check_id.toLowerCase().includes("rubric"),
+      ),
+  );
   const currentLoopAction = (() => {
     if (!eddFlow.contract) {
       return {
@@ -3245,6 +3259,13 @@ function App() {
                         <p className="artifact-type">{currentLoopAction.eyebrow}</p>
                         <h4>{currentLoopAction.title}</h4>
                         <p>{currentLoopAction.detail}</p>
+                        <div className="proof-mode-summary" aria-label="Run and judge modes">
+                          <span>Run: {displayedRunMode === "live" ? "Live OpenAI" : "Mock"}</span>
+                          <span>
+                            Judge:{" "}
+                            {displayedJudgeMode === "live" ? "Live rubric" : "Deterministic checks"}
+                          </span>
+                        </div>
                         {activity ? <p className="activity-text">{activity}</p> : null}
                         {error ? <p className="error-text">{error}</p> : null}
                       </div>
@@ -3264,6 +3285,12 @@ function App() {
                     <div className="failure-analysis-panel">
                       <div className="failure-analysis-summary">
                         <h4>Failed checks</h4>
+                        {deterministicRubricOnlyFailure ? (
+                          <p className="judge-mode-note">
+                            This result only failed rubric checks under deterministic judging. Run the
+                            live rubric judge to score the open-ended outcome.
+                          </p>
+                        ) : null}
                         <div className="failed-check-list">
                           {failedBaselineChecks.length === 0 ? (
                             <span>No failed checks were returned.</span>
