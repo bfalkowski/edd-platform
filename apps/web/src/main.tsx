@@ -366,6 +366,7 @@ type GeneratedDesignSummary = {
   contract: EvalContract;
   draftTools: ToolDefinition[];
   enabledToolNames: string[];
+  generatedToolNames: string[];
 };
 
 const apiBase = "/api";
@@ -1447,6 +1448,23 @@ function App() {
     }
     return approvedTools.filter((tool) => selectedAgent.allowed_tool_names.includes(tool.name));
   }, [approvedTools, selectedAgent]);
+  const generatedToolStates = useMemo(() => {
+    if (!selectedAgent || !selectedGeneratedDesign) {
+      return [];
+    }
+    return selectedGeneratedDesign.generatedToolNames.map((toolName) => {
+      const tool =
+        tools.find((item) => item.name === toolName) ??
+        selectedGeneratedDesign.draftTools.find((item) => item.name === toolName) ??
+        null;
+      return {
+        name: toolName,
+        status: tool?.status ?? "unknown",
+        implementationKind: tool?.implementation_kind ?? "unknown",
+        enabled: selectedAgent.allowed_tool_names.includes(toolName),
+      };
+    });
+  }, [selectedAgent, selectedGeneratedDesign, tools]);
   useEffect(() => {
     if (evalMethod !== "tool") {
       return;
@@ -1758,6 +1776,12 @@ function App() {
         contract: drafted.eval_contract,
         draftTools: drafted.draft_tools,
         enabledToolNames: drafted.agent.allowed_tool_names,
+        generatedToolNames: Array.from(
+          new Set([
+            ...drafted.agent.allowed_tool_names,
+            ...drafted.draft_tools.map((tool) => tool.name),
+          ]),
+        ),
       });
       setName("");
       setIntent("");
@@ -2500,20 +2524,24 @@ function App() {
     }
     if (!eddFlow.baselineRun) {
       return {
-        eyebrow: "Next action",
-        title: `Run ${baselineLabel}`,
-        detail: "Capture how the current instructions answer the scenario.",
-        label: "Run current",
+        eyebrow: selectedGeneratedDesign ? "Generated test ready" : "Next action",
+        title: selectedGeneratedDesign ? `Run generated ${baselineLabel}` : `Run ${baselineLabel}`,
+        detail: selectedGeneratedDesign
+          ? "Run the generated first version against the generated scenario and success criteria."
+          : "Capture how the current instructions answer the scenario.",
+        label: selectedGeneratedDesign ? `Run ${baselineLabel}` : "Run current",
         onClick: handleRunBaseline,
         disabled: isFlowBusy,
       };
     }
     if (!eddFlow.baselineEval) {
       return {
-        eyebrow: "Next action",
-        title: `Check ${baselineLabel}`,
-        detail: "Judge the response against the saved eval method and record what failed.",
-        label: "Check answer",
+        eyebrow: selectedGeneratedDesign ? "Run saved" : "Next action",
+        title: selectedGeneratedDesign ? `Evaluate generated ${baselineLabel}` : `Check ${baselineLabel}`,
+        detail: selectedGeneratedDesign
+          ? "Judge the generated response against the generated contract and save pass/fail evidence."
+          : "Judge the response against the saved eval method and record what failed.",
+        label: selectedGeneratedDesign ? "Evaluate" : "Check answer",
         onClick: handleEvaluateBaseline,
         disabled: isFlowBusy,
       };
@@ -2989,6 +3017,22 @@ function App() {
                         </span>
                       ) : null}
                     </div>
+                    {generatedToolStates.length > 0 ? (
+                      <div className="generated-tool-lifecycle">
+                        <p className="artifact-type">Generated tools</p>
+                        {generatedToolStates.map((tool) => (
+                          <div className="generated-tool-row" key={tool.name}>
+                            <strong>{tool.name}</strong>
+                            <span>{tool.implementationKind}</span>
+                            <span className="tool-state-chip">auto-created</span>
+                            <span className="tool-state-chip">{tool.status}</span>
+                            <span className={tool.enabled ? "tool-state-chip enabled" : "tool-state-chip"}>
+                              {tool.enabled ? "enabled" : "not enabled"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <button
                       className="secondary-button"
                       type="button"
@@ -3009,8 +3053,12 @@ function App() {
               {workspaceTab === "proof" ? (
                 <section className="edd-loop-panel proof-workspace-panel workspace-tab-panel">
                   <div className="edd-loop-copy">
-                    <h3>Test cases</h3>
-                    <p>Select a saved test, run it, then improve from failed evidence.</p>
+                    <h3>{selectedGeneratedDesign ? "Generated lifecycle" : "Test cases"}</h3>
+                    <p>
+                      {selectedGeneratedDesign
+                        ? "Review the generated design, run v0, then evaluate it against the generated contract."
+                        : "Select a saved test, run it, then improve from failed evidence."}
+                    </p>
                   </div>
                   {selectedGeneratedDesign ? (
                     <div className="generated-design-review">
@@ -3094,12 +3142,24 @@ function App() {
                       </dl>
                       <div className="generated-tool-review">
                         <div>
-                          <span>Auto-created / enabled tools</span>
-                          <strong>
-                            {selectedGeneratedDesign.enabledToolNames.length > 0
-                              ? selectedGeneratedDesign.enabledToolNames.join(", ")
-                              : "None"}
-                          </strong>
+                          <span>Generated tool lifecycle</span>
+                          {generatedToolStates.length > 0 ? (
+                            <div className="generated-tool-row-list">
+                              {generatedToolStates.map((tool) => (
+                                <div className="generated-tool-row" key={tool.name}>
+                                  <strong>{tool.name}</strong>
+                                  <span>{tool.implementationKind}</span>
+                                  <span className="tool-state-chip">auto-created</span>
+                                  <span className="tool-state-chip">{tool.status}</span>
+                                  <span className={tool.enabled ? "tool-state-chip enabled" : "tool-state-chip"}>
+                                    {tool.enabled ? "enabled" : "not enabled"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <strong>None</strong>
+                          )}
                         </div>
                         <div>
                           <span>Draft tools</span>
@@ -3122,7 +3182,9 @@ function App() {
                     {hasSavedScenarioTest ? (
                       <div className="scenario-test-summary">
                         <div>
-                          <p className="artifact-type">Selected test</p>
+                          <p className="artifact-type">
+                            {selectedGeneratedDesign ? "Generated test" : "Selected test"}
+                          </p>
                           <h4>{eddFlow.scenario?.name}</h4>
                           <span className="scenario-shape-pill">{testShapeLabels[savedTestShape]}</span>
                           {renderScenarioInput(eddFlow.scenario?.input)}
@@ -3156,12 +3218,14 @@ function App() {
                       </div>
                     )}
                     <div className="scenario-test-actions">
-                      <button className="secondary-button" type="button" onClick={openNewScenarioEditor}>
-                        New test
-                      </button>
+                      {!selectedGeneratedDesign ? (
+                        <button className="secondary-button" type="button" onClick={openNewScenarioEditor}>
+                          New test
+                        </button>
+                      ) : null}
                       {hasSavedScenarioTest ? (
                         <button className="secondary-button" type="button" onClick={openScenarioEditor}>
-                          Edit test
+                          {selectedGeneratedDesign ? "Edit generated test" : "Edit test"}
                         </button>
                       ) : null}
                       {hasSavedScenarioTest ? (
