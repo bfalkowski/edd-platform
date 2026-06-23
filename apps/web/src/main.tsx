@@ -1553,11 +1553,18 @@ function App() {
   const generatedContractArtifact = selectedGeneratedDesign
     ? artifactByRecordKey.get(`EVAL_CONTRACT:${selectedGeneratedDesign.contract.id}`)
     : undefined;
+  const baselineRunArtifact = eddFlow.baselineRun?.artifact_ids[0]
+    ? artifactsById.get(eddFlow.baselineRun.artifact_ids[0])
+    : undefined;
+  const baselineEvalArtifact = eddFlow.baselineEval?.artifact_ids[0]
+    ? artifactsById.get(eddFlow.baselineEval.artifact_ids[0])
+    : undefined;
   const failedBaselineChecks =
     eddFlow.baselineEval?.checks.filter((check) => !check.passed) ?? [];
   const baselineTraceArtifact = currentTraceArtifacts.find((artifact) =>
     eddFlow.baselineRun ? artifact.body.includes(eddFlow.baselineRun.id) : false,
   );
+  const baselineTraceUrl = baselineTraceArtifact ? traceUrlFromArtifact(baselineTraceArtifact) : null;
   const analysisTargetArtifactId =
     baselineTraceArtifact?.id ??
     eddFlow.baselineEval?.artifact_ids[0] ??
@@ -3279,6 +3286,80 @@ function App() {
                           {currentLoopAction.label}
                         </button>
                       ) : null}
+                    </div>
+                  ) : null}
+                  {selectedGeneratedDesign && baselinePassed ? (
+                    <div className="pass-evidence-panel">
+                      <div className="pass-evidence-header">
+                        <div>
+                          <p className="artifact-type">Passed with evidence</p>
+                          <h4>{baselineLabel} satisfied the generated contract</h4>
+                          <p>
+                            The run, judge result, tool policy, and trace evidence are saved for review.
+                          </p>
+                        </div>
+                        {baselineTraceUrl ? (
+                          <a
+                            className="secondary-button trace-link"
+                            href={baselineTraceUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Open trace
+                          </a>
+                        ) : null}
+                      </div>
+                      <div className="pass-evidence-grid">
+                        <div>
+                          <span>Version</span>
+                          <strong>{selectedGeneratedDesign.version.version_label}</strong>
+                        </div>
+                        <div>
+                          <span>Tools</span>
+                          <strong>
+                            {generatedToolStates.length > 0
+                              ? generatedToolStates
+                                  .filter((tool) => tool.enabled)
+                                  .map((tool) => tool.name)
+                                  .join(", ") || "None"
+                              : selectedGeneratedDesign.contract.required_tools.join(", ") || "None"}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Run evidence</span>
+                          {baselineRunArtifact ? (
+                            <button
+                              className="inline-evidence-button"
+                              type="button"
+                              onClick={() => {
+                                setReviewArtifact(baselineRunArtifact);
+                                setReviewLinks([]);
+                              }}
+                            >
+                              Inspect run
+                            </button>
+                          ) : (
+                            <strong>{eddFlow.baselineRun?.id ?? "Not saved"}</strong>
+                          )}
+                        </div>
+                        <div>
+                          <span>Judge evidence</span>
+                          {baselineEvalArtifact ? (
+                            <button
+                              className="inline-evidence-button"
+                              type="button"
+                              onClick={() => {
+                                setReviewArtifact(baselineEvalArtifact);
+                                setReviewLinks([]);
+                              }}
+                            >
+                              Inspect judge
+                            </button>
+                          ) : (
+                            <strong>{displayedJudgeMode === "live" ? "Live rubric" : "Deterministic"}</strong>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ) : null}
                   {showFailureAnalysis ? (

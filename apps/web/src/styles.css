@@ -2052,6 +2052,65 @@ dd {
   padding: 10px 12px;
 }
 
+.pass-evidence-panel {
+  background: #f7fbf8;
+  border: 1px solid #cfe5d5;
+  border-radius: 14px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.pass-evidence-header {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pass-evidence-header h4 {
+  color: #202123;
+  font-size: 20px;
+  line-height: 1.15;
+  margin: 0 0 6px;
+}
+
+.pass-evidence-header p:not(.artifact-type) {
+  color: #4e6658;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.pass-evidence-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pass-evidence-grid div {
+  background: #ffffff;
+  border: 1px solid #dce9e0;
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.pass-evidence-grid span {
+  color: #567061;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pass-evidence-grid strong {
+  color: #202123;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
 .failure-analysis-summary h4 {
   color: #202123;
   font-size: 18px;
@@ -2509,7 +2568,9 @@ dd {
   .scenario-test-summary,
   .generated-design-header,
   .generated-design-grid,
-  .generated-tool-review {
+  .generated-tool-review,
+  .pass-evidence-header,
+  .pass-evidence-grid {
     grid-template-columns: 1fr;
   }
 
