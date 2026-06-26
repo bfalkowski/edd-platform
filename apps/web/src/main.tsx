@@ -78,6 +78,15 @@ type ToolDefinitionCreate = {
 type EvalMethod = "phrase" | "tool" | "rubric";
 type TestShape = "single_turn" | "conversation" | "trace_replay";
 
+type ExternalArtifactRef = {
+  provider: string;
+  ref_type: string;
+  external_id: string;
+  url: string | null;
+  label: string;
+  metadata: Record<string, unknown>;
+};
+
 type ArtifactRecord = {
   id: string;
   project_id: string;
@@ -87,14 +96,7 @@ type ArtifactRecord = {
   body: string;
   source: string;
   agent_design_id: string | null;
-  external_refs: {
-    provider: string;
-    ref_type: string;
-    external_id: string;
-    url: string | null;
-    label: string;
-    metadata: Record<string, unknown>;
-  }[];
+  external_refs: ExternalArtifactRef[];
   created_at: string;
   updated_at: string;
 };
@@ -398,6 +400,16 @@ type ReviewSamplingPlan = {
   recoding_prompts: ReviewSamplingCandidate[];
   generated_suggestions: AgentSuggestion[];
   rationale: string;
+};
+
+type DiscoveryPromotionResult = {
+  annotation: ReviewAnnotation;
+  review_item: ReviewItem;
+  failure_mode: FailureMode | null;
+  scenario: Scenario | null;
+  eval_contract: EvalContract | null;
+  failure_packet: FailurePacket | null;
+  artifact_ids: string[];
 };
 
 type FixProposal = {
@@ -1173,6 +1185,24 @@ async function createReviewAnnotation(
   return response.json();
 }
 
+async function promoteReviewAnnotation(
+  projectId: string,
+  annotationId: string,
+): Promise<DiscoveryPromotionResult> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/review-annotations/${annotationId}/promote`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ create_failure_packet: true, create_eval_case: true }),
+    },
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to promote discovery finding.");
+  }
+  return response.json();
+}
+
 async function listAgentSuggestions(
   projectId: string,
   corpusId: string,
@@ -1470,6 +1500,37 @@ function traceUrlFromArtifact(artifact: ArtifactRecord): string | null {
   }
   const match = artifact.body.match(/URL\n(.+)/);
   return match?.[1]?.trim() ?? null;
+}
+
+function externalRefLabel(ref: ExternalArtifactRef): string {
+  if (ref.label) {
+    return ref.label;
+  }
+  if (ref.provider === "langfuse") {
+    const labels: Record<string, string> = {
+      comment: "Langfuse comment",
+      dataset: "Langfuse dataset",
+      dataset_item: "Langfuse dataset item",
+      prompt: "Langfuse prompt",
+      score: "Langfuse score",
+      trace: "Langfuse trace",
+    };
+    return labels[ref.ref_type] ?? "Langfuse reference";
+  }
+  return `${ref.provider} ${ref.ref_type}`.trim();
+}
+
+function externalRefDetail(ref: ExternalArtifactRef): string {
+  const metadataLabel =
+    ref.metadata["score_name"] ??
+    ref.metadata["prompt_name"] ??
+    ref.metadata["dataset_name"] ??
+    ref.metadata["prompt_role"] ??
+    ref.metadata["sync_mode"];
+  if (typeof metadataLabel === "string" && metadataLabel.trim()) {
+    return `${metadataLabel.trim()} · ${ref.external_id}`;
+  }
+  return ref.external_id;
 }
 
 function parseJsonObject(value: string, label: string): Record<string, unknown> {
@@ -1898,6 +1959,7 @@ function App() {
   const selectedReviewTraceUrl = selectedReviewItem?.langfuse_ref?.url ?? null;
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
+  const reviewExternalRefs = reviewArtifact?.external_refs ?? [];
   const generatedVersionArtifact = selectedGeneratedDesign
     ? artifactByRecordKey.get(`AGENT_VERSION:${selectedGeneratedDesign.version.id}`)
     : undefined;
@@ -2690,6 +2752,30 @@ function App() {
       setActivity("Open-code note saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save open-code note.");
+      setActivity(null);
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handlePromoteAnnotation(annotation: ReviewAnnotation) {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    setError(null);
+    setActivity("Promoting discovery finding.");
+    setIsDiscoveryBusy(true);
+    try {
+      const promotion = await promoteReviewAnnotation(project.id, annotation.id);
+      await refreshDiscoveryState();
+      await refreshContext();
+      setEddFlow(await hydrateEddFlow(project.id, selectedAgent));
+      setActivity("Discovery finding promoted into proof-loop evidence.");
+      if (promotion.artifact_ids[0]) {
+        await handleReviewArtifact(promotion.artifact_ids[0]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to promote discovery finding.");
       setActivity(null);
     } finally {
       setIsDiscoveryBusy(false);
@@ -4302,9 +4388,23 @@ function App() {
                                   <p>No notes saved yet.</p>
                                 ) : (
                                   selectedReviewAnnotations.map((annotation) => (
-                                    <p key={annotation.id}>
-                                      <strong>{annotation.author}:</strong> {annotation.body}
-                                    </p>
+                                    <div className="suggestion-row" key={annotation.id}>
+                                      <p>
+                                        <strong>{annotation.author}:</strong> {annotation.body}
+                                      </p>
+                                      {annotation.status === "accepted" ? (
+                                        <div className="analysis-run-actions">
+                                          <button
+                                            className="secondary-button compact-button"
+                                            type="button"
+                                            onClick={() => handlePromoteAnnotation(annotation)}
+                                            disabled={isDiscoveryBusy}
+                                          >
+                                            Promote
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   ))
                                 )}
                               </div>
@@ -5006,6 +5106,31 @@ function App() {
                 </a>
               ) : null}
             </section>
+            {reviewExternalRefs.length > 0 ? (
+              <section>
+                <h3>External evidence</h3>
+                <ul className="external-ref-list">
+                  {reviewExternalRefs.map((ref) => (
+                    <li key={`${ref.provider}:${ref.ref_type}:${ref.external_id}`}>
+                      <div>
+                        <strong>{externalRefLabel(ref)}</strong>
+                        <span>{externalRefDetail(ref)}</span>
+                      </div>
+                      {ref.url ? (
+                        <a
+                          className="secondary-button external-ref-link"
+                          href={ref.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {ref.ref_type === "trace" ? "Open trace" : "Open"}
+                        </a>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
             <section>
               <h3>Related evidence</h3>
               {connectedArtifacts.length === 0 ? (

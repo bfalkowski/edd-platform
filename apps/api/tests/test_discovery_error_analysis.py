@@ -357,3 +357,180 @@ def test_sampling_plan_explains_breadth_depth_and_recoding_candidates() -> None:
     )
     assert suggestions_response.status_code == 200
     assert len(suggestions_response.json()) == 2
+
+
+def test_review_corpus_analysis_uses_polars_for_failure_rates() -> None:
+    client = TestClient(app)
+    agent = create_agent(client)
+    corpus = client.post(
+        "/api/projects/project_default/review-corpora",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Polars analysis corpus",
+            "source": "langfuse",
+        },
+    ).json()
+
+    import_response = client.post(
+        f"/api/projects/project_default/review-corpora/{corpus['id']}/langfuse-items",
+        json={
+            "items": [
+                {
+                    "source_id": "trace_failed:generation",
+                    "title": "Failed generation",
+                    "content": "The agent skipped policy evidence.",
+                    "trace_id": "trace_failed",
+                    "observation_id": "generation_failed",
+                    "object_type": "OBSERVATION",
+                },
+                {
+                    "source_id": "trace_passed:generation",
+                    "title": "Passed generation",
+                    "content": "The agent checked policy evidence.",
+                    "trace_id": "trace_passed",
+                    "observation_id": "generation_passed",
+                    "object_type": "OBSERVATION",
+                },
+            ]
+        },
+    )
+    items = import_response.json()["review_items"]
+    failed_item = next(item for item in items if item["source_id"] == "trace_failed:generation")
+    passed_item = next(item for item in items if item["source_id"] == "trace_passed:generation")
+    mode = client.post(
+        "/api/projects/project_default/failure-modes",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "missing_policy_evidence",
+            "description": "The agent skipped policy evidence.",
+            "severity": "high",
+            "status": "confirmed",
+        },
+    ).json()
+
+    annotation_response = client.post(
+        f"/api/projects/project_default/review-corpora/{corpus['id']}/langfuse-annotations",
+        json={
+            "annotations": [
+                {
+                    "review_item_id": failed_item["id"],
+                    "open_coding": "Skipped policy evidence.",
+                    "pass_fail": "fail",
+                    "failure_mode_name": mode["name"],
+                },
+                {
+                    "review_item_id": passed_item["id"],
+                    "open_coding": "Checked policy evidence.",
+                    "pass_fail": "pass",
+                },
+            ]
+        },
+    )
+    assert annotation_response.status_code == 201
+
+    analysis_response = client.get(
+        f"/api/projects/project_default/review-corpora/{corpus['id']}/analysis"
+    )
+
+    assert analysis_response.status_code == 200
+    analysis = analysis_response.json()
+    assert analysis["backend"] == "polars"
+    assert analysis["coverage"]["total_items"] == 2
+    assert analysis["coverage"]["reviewed_items"] == 2
+    assert analysis["source_kind_counts"] == {"trace": 2}
+    assert analysis["annotation_status_counts"] == {"accepted": 2}
+    assert analysis["pass_fail_counts"] == {"fail": 1, "pass": 1}
+    assert analysis["failure_rates"] == [
+        {
+            "source_kind": "trace",
+            "total_items": 2,
+            "reviewed_items": 2,
+            "failed_items": 1,
+            "failure_rate": 0.5,
+        }
+    ]
+    assert analysis["failure_mode_counts"][0]["name"] == "missing_policy_evidence"
+
+
+def test_promote_annotation_creates_proof_loop_artifacts() -> None:
+    client = TestClient(app)
+    agent = create_agent(client)
+    corpus = client.post(
+        "/api/projects/project_default/review-corpora",
+        json={"agent_design_id": agent["id"], "name": "Promotion corpus"},
+    ).json()
+    item = client.post(
+        "/api/projects/project_default/review-items",
+        json={
+            "corpus_id": corpus["id"],
+            "source_kind": "trace",
+            "source_id": "trace_promote",
+            "title": "Promotable policy miss",
+            "content": "The agent answered without checking the refund policy.",
+            "langfuse_ref": {
+                "trace_id": "trace_promote",
+                "object_type": "TRACE",
+                "url": "https://cloud.langfuse.com/project/demo/traces/trace_promote",
+            },
+        },
+    ).json()
+    mode = client.post(
+        "/api/projects/project_default/failure-modes",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "missing_refund_policy",
+            "description": "The agent must check refund policy evidence before answering.",
+            "severity": "high",
+            "status": "confirmed",
+        },
+    ).json()
+    annotation = client.post(
+        "/api/projects/project_default/review-annotations",
+        json={
+            "review_item_id": item["id"],
+            "body": "Answered from memory instead of checking refund policy evidence.",
+            "author": "human",
+            "failure_mode_id": mode["id"],
+            "status": "accepted",
+        },
+    ).json()
+
+    response = client.post(
+        f"/api/projects/project_default/review-annotations/{annotation['id']}/promote",
+        json={"create_failure_packet": True, "create_eval_case": True},
+    )
+
+    assert response.status_code == 201
+    promotion = response.json()
+    scenario = promotion["scenario"]
+    contract = promotion["eval_contract"]
+    failure_packet = promotion["failure_packet"]
+    assert scenario["name"] == "Discovery case: Promotable policy miss"
+    assert scenario["fixture_refs"]
+    assert contract["scenario_id"] == scenario["id"]
+    assert contract["checks"][0]["type"] == "manual_review_required"
+    assert failure_packet["eval_contract_id"] == contract["id"]
+    assert failure_packet["severity"] == "high"
+    assert failure_packet["evidence_artifact_ids"]
+    assert len(promotion["artifact_ids"]) >= 5
+
+    scenarios_response = client.get(
+        "/api/projects/project_default/scenarios",
+        params={"agent_design_id": agent["id"]},
+    )
+    assert scenarios_response.status_code == 200
+    assert scenarios_response.json()[0]["id"] == scenario["id"]
+
+    packets_response = client.get(
+        "/api/projects/project_default/failure-packets",
+        params={"agent_design_id": agent["id"]},
+    )
+    assert packets_response.status_code == 200
+    assert packets_response.json()[0]["id"] == failure_packet["id"]
+
+    finding_artifact_id = promotion["artifact_ids"][0]
+    links_response = client.get(
+        f"/api/projects/project_default/artifacts/{finding_artifact_id}/links"
+    )
+    assert links_response.status_code == 200
+    assert links_response.json()

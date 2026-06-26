@@ -644,6 +644,41 @@ class ReviewSamplingPlan(BaseModel):
     rationale: str
 
 
+class ReviewFailureModeCount(BaseModel):
+    failure_mode_id: str
+    name: str
+    severity: str
+    accepted_annotations: int
+
+
+class ReviewFailureRate(BaseModel):
+    source_kind: str
+    total_items: int
+    reviewed_items: int
+    failed_items: int
+    failure_rate: float
+
+
+class ReviewCorpusAnalysis(BaseModel):
+    corpus_id: str
+    project_id: str
+    agent_design_id: str
+    backend: Literal["polars"]
+    coverage: ReviewCoverageSummary
+    source_kind_counts: Dict[str, int]
+    annotation_status_counts: Dict[str, int]
+    pass_fail_counts: Dict[str, int]
+    failure_mode_counts: List[ReviewFailureModeCount]
+    failure_rates: List[ReviewFailureRate]
+    rationale: str
+
+
+class DiscoveryPromotionCreate(BaseModel):
+    create_failure_packet: bool = True
+    create_eval_case: bool = True
+    failure_packet_status: str = "open"
+
+
 class AgentRunResult(BaseModel):
     id: str
     project_id: str
@@ -752,6 +787,16 @@ class FailurePacket(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class DiscoveryPromotionResult(BaseModel):
+    annotation: ReviewAnnotation
+    review_item: ReviewItem
+    failure_mode: Optional[FailureMode] = None
+    scenario: Optional[Scenario] = None
+    eval_contract: Optional[EvalContract] = None
+    failure_packet: Optional[FailurePacket] = None
+    artifact_ids: List[str]
 
 
 class FixProposalCreate(BaseModel):

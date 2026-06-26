@@ -826,6 +826,15 @@ textarea {
   justify-self: start;
 }
 
+.suggestion-row {
+  display: grid;
+  gap: 8px;
+}
+
+.suggestion-row .analysis-run-actions {
+  justify-content: flex-start;
+}
+
 .coding-workspace {
   display: grid;
   gap: 14px;
@@ -2505,6 +2514,46 @@ dd {
 
 .trace-link {
   margin-top: 16px;
+}
+
+.external-ref-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.external-ref-list li {
+  align-items: center;
+  border: 1px solid #ececf1;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.external-ref-list div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.external-ref-list strong {
+  color: #202123;
+  font-size: 0.88rem;
+}
+
+.external-ref-list span {
+  color: #606373;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.external-ref-link {
+  flex: 0 0 auto;
+  padding: 8px 10px;
 }
 
 .related-list {

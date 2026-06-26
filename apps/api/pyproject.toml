@@ -12,6 +12,7 @@ dependencies = [
   "langchain-openai>=1.2.2",
   "langfuse>=4.7.1",
   "playwright>=1.56.0",
+  "polars>=1.0.0",
 ]
 
 [project.optional-dependencies]

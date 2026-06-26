@@ -16,6 +16,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Response
 
 from edd_platform_api.service_status import ServiceStatusResponse, service_status_response
+from edd_platform_api.polars_analysis import review_corpus_analysis
 from edd_platform_api.schemas import (
     AgentDesignCreate,
     AgentDesignUpdate,
@@ -69,6 +70,9 @@ from edd_platform_api.schemas import (
     ReviewCoverageSummary,
     ReviewSamplingCandidate,
     ReviewSamplingPlan,
+    ReviewCorpusAnalysis,
+    DiscoveryPromotionCreate,
+    DiscoveryPromotionResult,
     AgentRunResult,
     EvalCheck,
     EvalCheckResult,
@@ -691,6 +695,215 @@ def review_sampling_plan_for_corpus(
         generated_suggestions=generated_suggestions,
         rationale=rationale,
     )
+
+
+def review_corpus_analysis_for_corpus(
+    *,
+    project_id: str,
+    corpus: ReviewCorpus,
+) -> ReviewCorpusAnalysis:
+    items = [
+        item
+        for item in _review_items.values()
+        if item.project_id == project_id and item.corpus_id == corpus.id
+    ]
+    annotations = [
+        annotation
+        for annotation in _review_annotations.values()
+        if annotation.project_id == project_id and annotation.corpus_id == corpus.id
+    ]
+    failure_modes = [
+        failure_mode
+        for failure_mode in _failure_modes.values()
+        if failure_mode.project_id == project_id
+        and failure_mode.agent_design_id == corpus.agent_design_id
+    ]
+    pending_suggestions = len(
+        [
+            suggestion
+            for suggestion in _agent_suggestions.values()
+            if suggestion.project_id == project_id
+            and suggestion.corpus_id == corpus.id
+            and suggestion.status == "pending"
+        ]
+    )
+    return review_corpus_analysis(
+        project_id=project_id,
+        corpus_id=corpus.id,
+        agent_design_id=corpus.agent_design_id,
+        items=items,
+        annotations=annotations,
+        failure_modes=failure_modes,
+        pending_suggestions=pending_suggestions,
+    )
+
+
+def discovery_evidence_artifacts(
+    *,
+    project_id: str,
+    item: ReviewItem,
+    failure_mode: Optional[FailureMode],
+) -> List[str]:
+    artifact_ids: List[str] = []
+    if item.source_kind == "artifact":
+        source_artifact = _artifacts.get(item.source_id)
+        if source_artifact and source_artifact.project_id == project_id:
+            artifact_ids.append(source_artifact.id)
+    if failure_mode is not None:
+        failure_mode_artifact = find_artifact_by_type_and_artifact_id(
+            "FAILURE_MODE",
+            failure_mode.id,
+        )
+        if failure_mode_artifact is not None:
+            artifact_ids.append(failure_mode_artifact.id)
+    return list(dict.fromkeys(artifact_ids))
+
+
+def create_discovery_finding_artifact(
+    *,
+    project_id: str,
+    annotation: ReviewAnnotation,
+    item: ReviewItem,
+    failure_mode: Optional[FailureMode],
+    now: datetime,
+) -> ArtifactRecord:
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="DISCOVERY_FINDING",
+        artifact_id=annotation.id,
+        title=f"Discovery finding: {item.title}",
+        body=(
+            f"Review item\n{item.title}\n\n"
+            f"Finding\n{annotation.body}\n\n"
+            f"Failure mode\n{failure_mode.name if failure_mode else 'None'}\n\n"
+            f"Source\n{item.source_kind}: {item.source_id}"
+        ),
+        source="discovery-promotion",
+        agent_design_id=item.agent_design_id,
+        now=now,
+    )
+    for evidence_artifact_id in discovery_evidence_artifacts(
+        project_id=project_id,
+        item=item,
+        failure_mode=failure_mode,
+    ):
+        link_artifacts(
+            project_id=project_id,
+            source_artifact_id=artifact.id,
+            target_artifact_id=evidence_artifact_id,
+            relationship_type="SUPPORTED_BY",
+            now=now,
+        )
+    return artifact
+
+
+def create_discovery_run_and_eval(
+    *,
+    project_id: str,
+    annotation: ReviewAnnotation,
+    item: ReviewItem,
+    scenario: Scenario,
+    contract: EvalContract,
+    finding_artifact: ArtifactRecord,
+    now: datetime,
+) -> tuple[RunRecord, EvalResult]:
+    run = RunRecord(
+        id=f"run_discovery_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=item.agent_design_id,
+        agent_version_id=None,
+        scenario_id=scenario.id,
+        eval_contract_id=contract.id,
+        mode="discovery",
+        provider=None,
+        model=None,
+        input=scenario.input,
+        output=item.content or annotation.body,
+        status="completed",
+        artifact_ids=[],
+        started_at=now,
+        completed_at=now,
+    )
+    run_artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="RUN_RESULT",
+        artifact_id=run.id,
+        title=f"Discovery replay seed: {item.title}",
+        body=(
+            f"Input\n{run.input}\n\n"
+            f"Observed output\n{run.output}\n\n"
+            f"Discovery finding\n{annotation.body}"
+        ),
+        source="discovery-promotion",
+        agent_design_id=item.agent_design_id,
+        now=now,
+    )
+    link_artifacts(
+        project_id=project_id,
+        source_artifact_id=run_artifact.id,
+        target_artifact_id=finding_artifact.id,
+        relationship_type="GENERATED_FROM",
+        now=now,
+    )
+    run = run.model_copy(update={"artifact_ids": [run_artifact.id]})
+    _runs[run.id] = run
+    store.save_record("runs", run.id, run)
+
+    check = EvalCheckResult(
+        check_id=f"discovery_{annotation.id}",
+        check_type="manual_review_required",
+        passed=False,
+        observed=annotation.body,
+        expected=contract.expected_behavior[0] if contract.expected_behavior else "",
+        evidence_artifact_ids=[finding_artifact.id, run_artifact.id],
+        comment="Promoted from accepted discovery analysis.",
+    )
+    eval_result = EvalResult(
+        id=f"eval_discovery_{uuid4().hex[:12]}",
+        project_id=project_id,
+        run_id=run.id,
+        eval_contract_id=contract.id,
+        judge_prompt_template_id=None,
+        mode="discovery",
+        score=0,
+        passed=False,
+        checks=[check],
+        judge_output_ids=[],
+        artifact_ids=[],
+        created_at=now,
+    )
+    eval_artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="EVAL_RESULT",
+        artifact_id=eval_result.id,
+        title=f"Discovery eval: {item.title}",
+        body=(
+            "Result\nFailed by accepted discovery finding.\n\n"
+            f"Finding\n{annotation.body}\n\n"
+            f"Contract\n{contract.name}"
+        ),
+        source="discovery-promotion",
+        agent_design_id=item.agent_design_id,
+        now=now,
+    )
+    link_artifacts(
+        project_id=project_id,
+        source_artifact_id=eval_artifact.id,
+        target_artifact_id=run_artifact.id,
+        relationship_type="GENERATED_FROM",
+        now=now,
+    )
+    link_artifacts(
+        project_id=project_id,
+        source_artifact_id=eval_artifact.id,
+        target_artifact_id=finding_artifact.id,
+        relationship_type="SUPPORTED_BY",
+        now=now,
+    )
+    eval_result = eval_result.model_copy(update={"artifact_ids": [eval_artifact.id]})
+    _eval_results[eval_result.id] = eval_result
+    store.save_record("eval_results", eval_result.id, eval_result)
+    return run, eval_result
 
 
 def get_failure_packet_or_404(project_id: str, failure_packet_id: str) -> FailurePacket:
@@ -4340,6 +4553,16 @@ def get_review_sampling_plan(
     )
 
 
+@app.get("/api/projects/{project_id}/review-corpora/{corpus_id}/analysis")
+def get_review_corpus_analysis(
+    project_id: str,
+    corpus_id: str,
+) -> ReviewCorpusAnalysis:
+    get_project_or_404(project_id)
+    corpus = get_review_corpus_or_404(project_id, corpus_id)
+    return review_corpus_analysis_for_corpus(project_id=project_id, corpus=corpus)
+
+
 @app.get("/api/projects/{project_id}/review-items")
 def list_review_items(
     project_id: str,
@@ -4798,6 +5021,167 @@ def create_review_annotation(
 def get_review_annotation(project_id: str, annotation_id: str) -> ReviewAnnotation:
     get_project_or_404(project_id)
     return get_review_annotation_or_404(project_id, annotation_id)
+
+
+@app.post(
+    "/api/projects/{project_id}/review-annotations/{annotation_id}/promote",
+    status_code=201,
+)
+def promote_review_annotation(
+    project_id: str,
+    annotation_id: str,
+    payload: DiscoveryPromotionCreate,
+) -> DiscoveryPromotionResult:
+    get_project_or_404(project_id)
+    annotation = get_review_annotation_or_404(project_id, annotation_id)
+    if annotation.status != "accepted":
+        raise HTTPException(
+            status_code=400,
+            detail="Only accepted review annotations can be promoted.",
+        )
+    item = get_review_item_or_404(project_id, annotation.review_item_id)
+    failure_mode = (
+        get_failure_mode_or_404(project_id, annotation.failure_mode_id)
+        if annotation.failure_mode_id
+        else None
+    )
+    now = datetime.now(timezone.utc)
+    finding_artifact = create_discovery_finding_artifact(
+        project_id=project_id,
+        annotation=annotation,
+        item=item,
+        failure_mode=failure_mode,
+        now=now,
+    )
+
+    scenario: Optional[Scenario] = None
+    contract: Optional[EvalContract] = None
+    failure_packet: Optional[FailurePacket] = None
+    artifact_ids = [finding_artifact.id]
+    if payload.create_eval_case or payload.create_failure_packet:
+        scenario = create_scenario(
+            project_id,
+            ScenarioCreate(
+                agent_design_id=item.agent_design_id,
+                name=f"Discovery case: {item.title}",
+                input=item.content or annotation.body,
+                setup_context=(
+                    f"Promoted from review item {item.id} in corpus {item.corpus_id}.\n\n"
+                    f"Original source: {item.source_kind} {item.source_id}."
+                ),
+                fixture_refs=[finding_artifact.id],
+                status="active",
+            ),
+        )
+        scenario_artifact = find_artifact_by_type_and_artifact_id("SCENARIO", scenario.id)
+        if scenario_artifact is not None:
+            artifact_ids.append(scenario_artifact.id)
+            link_artifacts(
+                project_id=project_id,
+                source_artifact_id=scenario_artifact.id,
+                target_artifact_id=finding_artifact.id,
+                relationship_type="GENERATED_FROM",
+                now=now,
+            )
+        expected_behavior = (
+            failure_mode.description
+            if failure_mode is not None
+            else "Avoid the behavior described by the accepted discovery finding."
+        )
+        contract = create_eval_contract(
+            project_id,
+            EvalContractCreate(
+                agent_design_id=item.agent_design_id,
+                name=(
+                    f"Discovery contract: {failure_mode.name}"
+                    if failure_mode is not None
+                    else f"Discovery contract: {item.title}"
+                ),
+                description=annotation.body,
+                scenario_id=scenario.id,
+                expected_behavior=[expected_behavior],
+                required_evidence=["Accepted discovery finding"],
+                forbidden_behavior=[annotation.body],
+                checks=[
+                    {
+                        "id": f"avoid_{failure_mode.name if failure_mode else 'discovery_failure'}",
+                        "type": "manual_review_required",
+                        "value": annotation.body,
+                    }
+                ],
+                status="active",
+            ),
+        )
+        contract_artifact = find_artifact_by_type_and_artifact_id(
+            "EVAL_CONTRACT",
+            contract.id,
+        )
+        if contract_artifact is not None:
+            artifact_ids.append(contract_artifact.id)
+            link_artifacts(
+                project_id=project_id,
+                source_artifact_id=contract_artifact.id,
+                target_artifact_id=finding_artifact.id,
+                relationship_type="GENERATED_FROM",
+                now=now,
+            )
+        if payload.create_failure_packet:
+            run, eval_result = create_discovery_run_and_eval(
+                project_id=project_id,
+                annotation=annotation,
+                item=item,
+                scenario=scenario,
+                contract=contract,
+                finding_artifact=finding_artifact,
+                now=now,
+            )
+            artifact_ids.extend(run.artifact_ids)
+            artifact_ids.extend(eval_result.artifact_ids)
+            failure_packet = create_failure_packet_record(
+                project_id=project_id,
+                agent_design_id=item.agent_design_id,
+                agent_version_id=None,
+                run_id=run.id,
+                eval_result_id=eval_result.id,
+                eval_contract_id=contract.id,
+                failed_check_ids=[f"discovery_{annotation.id}"],
+                title=(
+                    f"Discovery failure: {failure_mode.name}"
+                    if failure_mode is not None
+                    else f"Discovery failure: {item.title}"
+                ),
+                diagnosis=annotation.body,
+                severity=failure_mode.severity if failure_mode is not None else "medium",
+                evidence_artifact_ids=[finding_artifact.id, *eval_result.artifact_ids],
+                recommended_fix=(
+                    "Create a bounded fix and validate it against the promoted discovery contract."
+                ),
+                status=payload.failure_packet_status.strip(),
+                now=now,
+            )
+            failure_artifact = find_artifact_by_type_and_artifact_id(
+                "FAILURE_PACKET",
+                failure_packet.id,
+            )
+            if failure_artifact is not None:
+                artifact_ids.append(failure_artifact.id)
+                link_artifacts(
+                    project_id=project_id,
+                    source_artifact_id=failure_artifact.id,
+                    target_artifact_id=finding_artifact.id,
+                    relationship_type="GENERATED_FROM",
+                    now=now,
+                )
+
+    return DiscoveryPromotionResult(
+        annotation=annotation,
+        review_item=item,
+        failure_mode=failure_mode,
+        scenario=scenario,
+        eval_contract=contract,
+        failure_packet=failure_packet,
+        artifact_ids=list(dict.fromkeys(artifact_ids)),
+    )
 
 
 @app.patch("/api/projects/{project_id}/review-annotations/{annotation_id}")
@@ -5791,6 +6175,7 @@ CONTEXT_PACK_ARTIFACT_TYPES: Dict[str, set[str]] = {
         "FAILURE_PACKET",
         "FIX_PROPOSAL",
         "RUN_RESULT",
+        "SCENARIO",
         "TRACE_REF",
     },
     "FIX_PROPOSAL_GENERATION": {
@@ -5800,6 +6185,7 @@ CONTEXT_PACK_ARTIFACT_TYPES: Dict[str, set[str]] = {
         "FIX_PROPOSAL",
         "EVAL_CONTRACT",
         "RUN_RESULT",
+        "SCENARIO",
         "TRACE_REF",
     },
     "GATE_DECISION_REVIEW": {
@@ -5809,6 +6195,7 @@ CONTEXT_PACK_ARTIFACT_TYPES: Dict[str, set[str]] = {
         "EVAL_RESULT",
         "JUDGE_OUTPUT",
         "FAILURE_PACKET",
+        "SCENARIO",
         "TRACE_REF",
     },
 }
@@ -5867,6 +6254,7 @@ def build_evidence_summary_prompt(
         (
             f"Artifact {index}: {artifact.artifact_type} / {artifact.title}\n"
             f"Source: {artifact.source}\n"
+            f"External refs: {artifact_external_ref_summary(artifact)}\n"
             f"Body:\n{artifact.body[:1200]}"
         )
         for index, artifact in enumerate(artifacts[:12], start=1)
@@ -5895,10 +6283,41 @@ def build_deterministic_evidence_summary(
         for artifact_type, count in sorted(type_counts.items())
     )
     titles = "; ".join(artifact.title for artifact in artifacts[:3])
+    langfuse_refs = [
+        external_ref_display(ref)
+        for artifact in artifacts
+        for ref in artifact.external_refs
+        if ref.provider == "langfuse"
+    ]
+    langfuse_summary = ""
+    if langfuse_refs:
+        langfuse_summary = (
+            " Langfuse refs: "
+            + "; ".join(dict.fromkeys(langfuse_refs[:6]))
+            + "."
+        )
     return (
         f"{purpose} context includes {len(artifacts)} evidence artifacts "
-        f"({counts}). Key artifacts: {titles}."
+        f"({counts}). Key artifacts: {titles}.{langfuse_summary}"
     )
+
+
+def external_ref_display(ref: ExternalArtifactRef) -> str:
+    label = ref.label or f"{ref.provider} {ref.ref_type}"
+    metadata_label = (
+        ref.metadata.get("score_name")
+        or ref.metadata.get("prompt_name")
+        or ref.metadata.get("dataset_name")
+        or ref.metadata.get("sync_mode")
+    )
+    detail = f" ({metadata_label})" if isinstance(metadata_label, str) and metadata_label else ""
+    return f"{label}{detail}: {ref.external_id}"
+
+
+def artifact_external_ref_summary(artifact: ArtifactRecord) -> str:
+    if not artifact.external_refs:
+        return "None"
+    return "; ".join(external_ref_display(ref) for ref in artifact.external_refs)
 
 
 @app.post("/api/projects/{project_id}/context-packs")

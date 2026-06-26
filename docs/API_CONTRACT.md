@@ -374,6 +374,7 @@ GET   /api/projects/{project_id}/review-annotations
 POST  /api/projects/{project_id}/review-annotations
 GET   /api/projects/{project_id}/review-annotations/{annotation_id}
 PATCH /api/projects/{project_id}/review-annotations/{annotation_id}
+POST  /api/projects/{project_id}/review-annotations/{annotation_id}/promote
 
 GET   /api/projects/{project_id}/failure-modes
 POST  /api/projects/{project_id}/failure-modes
@@ -410,12 +411,20 @@ workflows:
   and recoding prompts. With `create_suggestions=true`, deterministic candidate
   matches become pending `AgentSuggestion` records that still require human
   accept/dismiss.
+- `analysis` returns a Polars-backed read-side summary for the corpus: coverage,
+  source mix, annotation status/pass-fail counts, failure-mode counts, and
+  failure-rate tables. EDD records remain the source of truth; Polars is only
+  the columnar analysis plane for trace/corpus sampling.
 - `langfuse-items` imports selected queue items or trace/generation observation
   rows into EDD review items and skips duplicates by source, trace, or
   observation id.
 - `langfuse-annotations` imports open-coding/pass-fail/category score rows into
   accepted EDD review annotations and creates candidate `FailureMode` records
   for new category labels.
+- `review-annotations/{annotation_id}/promote` converts an accepted discovery
+  finding into proof-loop objects: a replayable `Scenario`, an `EvalContract`,
+  deterministic discovery run/eval anchors, and optionally a `FailurePacket`
+  linked back to the discovery finding evidence.
 
 ### Review Notes
 

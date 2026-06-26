@@ -106,15 +106,13 @@ telemetry for live judge calls, and readiness views backed by gate decisions.
 
 ### Langfuse Adapter
 
-Mostly complete.
+Complete for the current product slice.
 
 Includes trace reference artifacts, adapter package implementation, trace links
 inside evidence context, live agent trace capture, raw OpenAI Responses
 generation observations, scenario dataset sync, eval score refs, prompt links,
-review-note comment mirroring, and a live E2E script.
-
-The remaining Langfuse work is improving how Langfuse-backed evidence appears
-in UI and context packs.
+review-note comment mirroring, surfaced Langfuse refs in context packs and the
+review panel, and a live E2E script.
 
 ### Context Intelligence
 
@@ -123,6 +121,16 @@ Complete for the current product slice.
 Includes richer context pack purposes, deterministic context assembly
 strategies, optional LLM evidence summaries, summary caching, and summary
 token/cost telemetry.
+
+### Discovery Loop Workbench
+
+Complete for the current product slice.
+
+Includes first-class review corpora, trace/artifact review items, open-coded
+annotations, FailureMode records, agent suggestions, Langfuse queue/score import
+landing zones, breadth/depth/recoding sampling, promotion of accepted findings
+into proof-loop evidence, and a Polars read-side analysis plane for corpus
+coverage and failure-rate summaries.
 
 ## Beads Queue At Last Reconciliation
 
@@ -155,8 +163,9 @@ The UI supports the proof-loop vertical slice:
    candidate version, rerun, reevaluate, and compare.
 10. Inspect evidence artifacts, related evidence, and Langfuse trace links from
     the right review panel.
-11. Use the Error analysis tab as the placeholder for trace review, open-coded
-    notes, failure taxonomy, and recoding workflow.
+11. Use the Error analysis tab for trace review, open-coded notes, failure
+    taxonomy, sampling suggestions, promotion into proof-loop evidence, and
+    corpus analytics.
 12. Use the Readiness tab to create gates and gate decisions.
 
 ## Next Product Hardening
@@ -166,8 +175,6 @@ Keep the next work aligned with the active Beads queue:
 - finish the schema-first tool registry adapters;
 - refactor the API main module into focused route, model, service, storage, and
   app-wiring modules;
-- surface Langfuse dataset, prompt, trace, and score evidence with meaningful
-  UI labels;
 - improve evidence-summary display and broader run/replay views;
 - populate the public docs repo with product concepts, guides, API references,
   architecture notes, and local demo walkthroughs.

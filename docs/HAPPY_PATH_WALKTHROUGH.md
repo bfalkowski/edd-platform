@@ -331,6 +331,21 @@ Expected result:
 - The platform stores run and eval evidence.
 - The run has a trace reference when local Langfuse is available.
 
+The deterministic Error Analysis smoke script exercises trace import,
+open-coding annotations, failure-mode discovery, sampling suggestions, Polars
+corpus analytics, and promotion into proof-loop evidence:
+
+```bash
+python scripts/error_analysis_e2e.py
+```
+
+Expected result:
+
+- The script creates a temporary Error Analysis agent and review corpus.
+- Langfuse-shaped trace and score rows become platform-owned review records.
+- An accepted finding promotes into a scenario, eval contract, and failure
+  packet.
+
 ## Pass Criteria
 
 The happy path is healthy when a user can:

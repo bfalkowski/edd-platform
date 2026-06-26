@@ -51,6 +51,7 @@ REQUIRED_PATHS = {
     "/api/projects/{project_id}/review-notes/{review_note_id}",
     "/api/projects/{project_id}/review-corpora",
     "/api/projects/{project_id}/review-corpora/{corpus_id}",
+    "/api/projects/{project_id}/review-corpora/{corpus_id}/analysis",
     "/api/projects/{project_id}/review-corpora/{corpus_id}/sampling-plan",
     "/api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-items",
     "/api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-annotations",
@@ -58,6 +59,7 @@ REQUIRED_PATHS = {
     "/api/projects/{project_id}/review-items/{review_item_id}",
     "/api/projects/{project_id}/review-annotations",
     "/api/projects/{project_id}/review-annotations/{annotation_id}",
+    "/api/projects/{project_id}/review-annotations/{annotation_id}/promote",
     "/api/projects/{project_id}/scenarios",
     "/api/projects/{project_id}/scenarios/{scenario_id}",
 }

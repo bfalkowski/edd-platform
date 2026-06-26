@@ -1272,6 +1272,91 @@
         "title": "ContextPackCreate",
         "type": "object"
       },
+      "DiscoveryPromotionCreate": {
+        "properties": {
+          "create_eval_case": {
+            "default": true,
+            "title": "Create Eval Case",
+            "type": "boolean"
+          },
+          "create_failure_packet": {
+            "default": true,
+            "title": "Create Failure Packet",
+            "type": "boolean"
+          },
+          "failure_packet_status": {
+            "default": "open",
+            "title": "Failure Packet Status",
+            "type": "string"
+          }
+        },
+        "title": "DiscoveryPromotionCreate",
+        "type": "object"
+      },
+      "DiscoveryPromotionResult": {
+        "properties": {
+          "annotation": {
+            "$ref": "#/components/schemas/ReviewAnnotation"
+          },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "eval_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure_packet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailurePacket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_item": {
+            "$ref": "#/components/schemas/ReviewItem"
+          },
+          "scenario": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Scenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "annotation",
+          "review_item",
+          "artifact_ids"
+        ],
+        "title": "DiscoveryPromotionResult",
+        "type": "object"
+      },
       "EvalCheck": {
         "properties": {
           "comment": {
@@ -3930,6 +4015,84 @@
         "title": "ReviewCorpus",
         "type": "object"
       },
+      "ReviewCorpusAnalysis": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "annotation_status_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Annotation Status Counts",
+            "type": "object"
+          },
+          "backend": {
+            "const": "polars",
+            "title": "Backend",
+            "type": "string"
+          },
+          "corpus_id": {
+            "title": "Corpus Id",
+            "type": "string"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ReviewCoverageSummary"
+          },
+          "failure_mode_counts": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewFailureModeCount"
+            },
+            "title": "Failure Mode Counts",
+            "type": "array"
+          },
+          "failure_rates": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewFailureRate"
+            },
+            "title": "Failure Rates",
+            "type": "array"
+          },
+          "pass_fail_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Pass Fail Counts",
+            "type": "object"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "source_kind_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Source Kind Counts",
+            "type": "object"
+          }
+        },
+        "required": [
+          "corpus_id",
+          "project_id",
+          "agent_design_id",
+          "backend",
+          "coverage",
+          "source_kind_counts",
+          "annotation_status_counts",
+          "pass_fail_counts",
+          "failure_mode_counts",
+          "failure_rates",
+          "rationale"
+        ],
+        "title": "ReviewCorpusAnalysis",
+        "type": "object"
+      },
       "ReviewCorpusCreate": {
         "properties": {
           "agent_design_id": {
@@ -4088,6 +4251,67 @@
           "pending_suggestions"
         ],
         "title": "ReviewCoverageSummary",
+        "type": "object"
+      },
+      "ReviewFailureModeCount": {
+        "properties": {
+          "accepted_annotations": {
+            "title": "Accepted Annotations",
+            "type": "integer"
+          },
+          "failure_mode_id": {
+            "title": "Failure Mode Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "failure_mode_id",
+          "name",
+          "severity",
+          "accepted_annotations"
+        ],
+        "title": "ReviewFailureModeCount",
+        "type": "object"
+      },
+      "ReviewFailureRate": {
+        "properties": {
+          "failed_items": {
+            "title": "Failed Items",
+            "type": "integer"
+          },
+          "failure_rate": {
+            "title": "Failure Rate",
+            "type": "number"
+          },
+          "reviewed_items": {
+            "title": "Reviewed Items",
+            "type": "integer"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "total_items": {
+            "title": "Total Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_kind",
+          "total_items",
+          "reviewed_items",
+          "failed_items",
+          "failure_rate"
+        ],
+        "title": "ReviewFailureRate",
         "type": "object"
       },
       "ReviewItem": {
@@ -8305,6 +8529,64 @@
         "summary": "Update Review Annotation"
       }
     },
+    "/api/projects/{project_id}/review-annotations/{annotation_id}/promote": {
+      "post": {
+        "operationId": "promote_review_annotation_api_projects__project_id__review_annotations__annotation_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "annotation_id",
+            "required": true,
+            "schema": {
+              "title": "Annotation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoveryPromotionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryPromotionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Review Annotation"
+      }
+    },
     "/api/projects/{project_id}/review-corpora": {
       "get": {
         "operationId": "list_review_corpora_api_projects__project_id__review_corpora_get",
@@ -8513,6 +8795,54 @@
           }
         },
         "summary": "Update Review Corpus"
+      }
+    },
+    "/api/projects/{project_id}/review-corpora/{corpus_id}/analysis": {
+      "get": {
+        "operationId": "get_review_corpus_analysis_api_projects__project_id__review_corpora__corpus_id__analysis_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "corpus_id",
+            "required": true,
+            "schema": {
+              "title": "Corpus Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCorpusAnalysis"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Corpus Analysis"
       }
     },
     "/api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-annotations": {

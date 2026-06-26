@@ -363,6 +363,39 @@ def test_evidence_summary_is_cached_for_unchanged_context() -> None:
     assert second_summary["supporting_artifact_ids"] == first_summary["supporting_artifact_ids"]
 
 
+def test_evidence_summary_includes_langfuse_dataset_refs() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Dataset Ref Agent", "intent": "Replay scenario evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Dataset-backed scenario",
+            "input": "A customer asks for a safe next action.",
+        },
+    ).json()
+
+    response = client.post(
+        "/api/projects/project_default/evidence-summaries",
+        json={"purpose": "FIX_PROPOSAL_GENERATION", "agent_design_id": agent["id"]},
+    )
+
+    assert response.status_code == 201
+    summary = response.json()
+    scenario_artifact = client.get(
+        "/api/projects/project_default/artifacts",
+        params={"agent_design_id": agent["id"], "artifact_type": "SCENARIO"},
+    ).json()[0]
+    assert scenario_artifact["artifact_id"] == scenario["id"]
+    assert scenario_artifact["id"] in summary["supporting_artifact_ids"]
+    assert "Langfuse refs:" in summary["summary"]
+    assert "Langfuse dataset (planned)" in summary["summary"]
+    assert f"dataset_item:{scenario['id']}" in summary["summary"]
+
+
 def test_live_evidence_summary_records_token_usage(monkeypatch) -> None:
     client = TestClient(app)
     seen_prompt = {}
@@ -3659,6 +3692,16 @@ def test_live_project_run_eval_writes_langfuse_score_refs(monkeypatch) -> None:
                 },
             }
         ]
+
+    summary_response = client.post(
+        "/api/projects/project_default/evidence-summaries",
+        json={"purpose": "FIX_PROPOSAL_GENERATION", "agent_design_id": agent["id"]},
+    )
+    assert summary_response.status_code == 201
+    summary_text = summary_response.json()["summary"]
+    assert "Langfuse refs:" in summary_text
+    assert "Langfuse score (edd_eval_pass_rate)" in summary_text
+    assert f"score_{eval_result['id']}" in summary_text
 
 
 def test_live_run_requires_openai_api_key(monkeypatch) -> None:
