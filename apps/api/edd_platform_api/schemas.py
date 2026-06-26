@@ -613,6 +613,37 @@ class AgentSuggestion(BaseModel):
     updated_at: datetime
 
 
+class ReviewSamplingCandidate(BaseModel):
+    review_item_id: str
+    title: str
+    reason: str
+    source_kind: str
+    status: str
+    failure_mode_id: Optional[str] = None
+    score: int
+
+
+class ReviewCoverageSummary(BaseModel):
+    total_items: int
+    reviewed_items: int
+    unreviewed_items: int
+    accepted_annotations: int
+    failure_modes: int
+    pending_suggestions: int
+
+
+class ReviewSamplingPlan(BaseModel):
+    corpus_id: str
+    project_id: str
+    agent_design_id: str
+    coverage: ReviewCoverageSummary
+    breadth_candidates: List[ReviewSamplingCandidate]
+    depth_candidates: List[ReviewSamplingCandidate]
+    recoding_prompts: List[ReviewSamplingCandidate]
+    generated_suggestions: List[AgentSuggestion] = Field(default_factory=list)
+    rationale: str
+
+
 class AgentRunResult(BaseModel):
     id: str
     project_id: str

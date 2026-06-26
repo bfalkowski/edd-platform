@@ -361,6 +361,7 @@ GET   /api/projects/{project_id}/review-corpora
 POST  /api/projects/{project_id}/review-corpora
 GET   /api/projects/{project_id}/review-corpora/{corpus_id}
 PATCH /api/projects/{project_id}/review-corpora/{corpus_id}
+GET   /api/projects/{project_id}/review-corpora/{corpus_id}/sampling-plan
 POST  /api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-items
 POST  /api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-annotations
 
@@ -405,6 +406,10 @@ Langfuse queue and score mutations stay explicit and opt-in.
 The Langfuse import endpoints are deterministic landing zones for live sync
 workflows:
 
+- `sampling-plan` returns coverage counts, breadth candidates, depth candidates,
+  and recoding prompts. With `create_suggestions=true`, deterministic candidate
+  matches become pending `AgentSuggestion` records that still require human
+  accept/dismiss.
 - `langfuse-items` imports selected queue items or trace/generation observation
   rows into EDD review items and skips duplicates by source, trace, or
   observation id.

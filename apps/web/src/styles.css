@@ -917,6 +917,63 @@ textarea {
   font-weight: 850;
 }
 
+.sampling-plan-panel {
+  background: #f7f7f8;
+  border: 1px solid #ececf1;
+  border-radius: 16px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.sampling-plan-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sampling-column {
+  background: #ffffff;
+  border: 1px solid #ececf1;
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.sampling-column > span {
+  color: #737684;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sampling-candidate {
+  background: #fbfbfc;
+  border: 1px solid #ececf1;
+  border-radius: 10px;
+  color: #202123;
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  text-align: left;
+}
+
+.sampling-candidate:hover {
+  border-color: #c7c9d3;
+}
+
+.sampling-candidate strong {
+  line-height: 1.2;
+}
+
+.sampling-candidate small {
+  color: #606373;
+  line-height: 1.35;
+}
+
 .eyebrow {
   color: #737684;
   font-size: 14px;
@@ -2592,6 +2649,7 @@ dd {
   .error-analysis-intro,
   .analysis-flow-lanes,
   .analysis-run-strip,
+  .sampling-plan-grid,
   .trace-review-layout,
   .trace-packet-grid,
   .coding-workspace {

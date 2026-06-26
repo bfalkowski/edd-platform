@@ -371,6 +371,35 @@ type AgentSuggestion = {
   updated_at: string;
 };
 
+type ReviewSamplingCandidate = {
+  review_item_id: string;
+  title: string;
+  reason: string;
+  source_kind: string;
+  status: string;
+  failure_mode_id: string | null;
+  score: number;
+};
+
+type ReviewSamplingPlan = {
+  corpus_id: string;
+  project_id: string;
+  agent_design_id: string;
+  coverage: {
+    total_items: number;
+    reviewed_items: number;
+    unreviewed_items: number;
+    accepted_annotations: number;
+    failure_modes: number;
+    pending_suggestions: number;
+  };
+  breadth_candidates: ReviewSamplingCandidate[];
+  depth_candidates: ReviewSamplingCandidate[];
+  recoding_prompts: ReviewSamplingCandidate[];
+  generated_suggestions: AgentSuggestion[];
+  rationale: string;
+};
+
 type FixProposal = {
   id: string;
   project_id: string;
@@ -1157,6 +1186,20 @@ async function listAgentSuggestions(
   return response.json();
 }
 
+async function getReviewSamplingPlan(
+  projectId: string,
+  corpusId: string,
+  createSuggestions = false,
+): Promise<ReviewSamplingPlan> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/review-corpora/${corpusId}/sampling-plan?create_suggestions=${createSuggestions}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load sampling plan.");
+  }
+  return response.json();
+}
+
 async function createAgentSuggestion(
   projectId: string,
   payload: {
@@ -1647,6 +1690,7 @@ function App() {
   const [reviewAnnotations, setReviewAnnotations] = useState<ReviewAnnotation[]>([]);
   const [failureModes, setFailureModes] = useState<FailureMode[]>([]);
   const [agentSuggestions, setAgentSuggestions] = useState<AgentSuggestion[]>([]);
+  const [samplingPlan, setSamplingPlan] = useState<ReviewSamplingPlan | null>(null);
   const [selectedReviewItemId, setSelectedReviewItemId] = useState<string | null>(null);
   const [openCodeText, setOpenCodeText] = useState("");
   const [newFailureModeName, setNewFailureModeName] = useState("");
@@ -1955,9 +1999,10 @@ function App() {
     annotations: ReviewAnnotation[];
     modes: FailureMode[];
     suggestions: AgentSuggestion[];
+    plan: ReviewSamplingPlan | null;
   }> {
     if (!agent) {
-      return { corpora: [], items: [], annotations: [], modes: [], suggestions: [] };
+      return { corpora: [], items: [], annotations: [], modes: [], suggestions: [], plan: null };
     }
     const [corpora, modes] = await Promise.all([
       listReviewCorpora(projectId, agent.id),
@@ -1965,14 +2010,15 @@ function App() {
     ]);
     const corpus = corpora[0];
     if (!corpus) {
-      return { corpora, items: [], annotations: [], modes, suggestions: [] };
+      return { corpora, items: [], annotations: [], modes, suggestions: [], plan: null };
     }
-    const [items, annotations, suggestions] = await Promise.all([
+    const [items, annotations, suggestions, plan] = await Promise.all([
       listReviewItems(projectId, corpus.id),
       listReviewAnnotations(projectId, corpus.id),
       listAgentSuggestions(projectId, corpus.id),
+      getReviewSamplingPlan(projectId, corpus.id),
     ]);
-    return { corpora, items, annotations, modes, suggestions };
+    return { corpora, items, annotations, modes, suggestions, plan };
   }
 
   function applyDiscoveryState(state: {
@@ -1981,12 +2027,14 @@ function App() {
     annotations: ReviewAnnotation[];
     modes: FailureMode[];
     suggestions: AgentSuggestion[];
+    plan: ReviewSamplingPlan | null;
   }) {
     setReviewCorpora(state.corpora);
     setReviewItems(state.items);
     setReviewAnnotations(state.annotations);
     setFailureModes(state.modes);
     setAgentSuggestions(state.suggestions);
+    setSamplingPlan(state.plan);
     setSelectedReviewItemId((currentId) =>
       currentId && state.items.some((item) => item.id === currentId)
         ? currentId
@@ -1996,7 +2044,14 @@ function App() {
 
   async function refreshDiscoveryState() {
     if (!project) {
-      applyDiscoveryState({ corpora: [], items: [], annotations: [], modes: [], suggestions: [] });
+      applyDiscoveryState({
+        corpora: [],
+        items: [],
+        annotations: [],
+        modes: [],
+        suggestions: [],
+        plan: null,
+      });
       return;
     }
     const state = await loadDiscoveryState(project.id, selectedAgent);
@@ -2663,6 +2718,25 @@ function App() {
       setActivity("Suggestion created.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create suggestion.");
+      setActivity(null);
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleGenerateSamplingSuggestions() {
+    if (!project || !activeReviewCorpus) {
+      return;
+    }
+    setError(null);
+    setActivity("Generating review suggestions.");
+    setIsDiscoveryBusy(true);
+    try {
+      await getReviewSamplingPlan(project.id, activeReviewCorpus.id, true);
+      await refreshDiscoveryState();
+      setActivity("Review suggestions generated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to generate review suggestions.");
       setActivity(null);
     } finally {
       setIsDiscoveryBusy(false);
@@ -4114,6 +4188,57 @@ function App() {
                       modes
                     </span>
                   </div>
+
+                  {samplingPlan ? (
+                    <section className="sampling-plan-panel">
+                      <div className="section-title-row">
+                        <div>
+                          <p className="artifact-type">Sampling plan</p>
+                          <h4>What to review next</h4>
+                        </div>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={handleGenerateSamplingSuggestions}
+                          disabled={
+                            isDiscoveryBusy ||
+                            !activeReviewCorpus ||
+                            (samplingPlan.depth_candidates.length === 0 &&
+                              samplingPlan.recoding_prompts.length === 0)
+                          }
+                        >
+                          Generate suggestions
+                        </button>
+                      </div>
+                      <p className="mode-table-note">{samplingPlan.rationale}</p>
+                      <div className="sampling-plan-grid">
+                        {[
+                          ["Breadth", samplingPlan.breadth_candidates],
+                          ["Depth", samplingPlan.depth_candidates],
+                          ["Recoding", samplingPlan.recoding_prompts],
+                        ].map(([label, candidates]) => (
+                          <div className="sampling-column" key={label as string}>
+                            <span>{label as string}</span>
+                            {(candidates as ReviewSamplingCandidate[]).length === 0 ? (
+                              <p className="muted-copy">No candidates.</p>
+                            ) : (
+                              (candidates as ReviewSamplingCandidate[]).map((candidate) => (
+                                <button
+                                  className="sampling-candidate"
+                                  key={`${label}-${candidate.review_item_id}-${candidate.failure_mode_id ?? "none"}`}
+                                  type="button"
+                                  onClick={() => setSelectedReviewItemId(candidate.review_item_id)}
+                                >
+                                  <strong>{candidate.title}</strong>
+                                  <small>{candidate.reason}</small>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
 
                   <div className="trace-review-layout">
                     <div className="trace-packet-list" aria-label="Trace review queue">

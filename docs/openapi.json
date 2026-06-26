@@ -4052,6 +4052,44 @@
         "title": "ReviewCorpusUpdate",
         "type": "object"
       },
+      "ReviewCoverageSummary": {
+        "properties": {
+          "accepted_annotations": {
+            "title": "Accepted Annotations",
+            "type": "integer"
+          },
+          "failure_modes": {
+            "title": "Failure Modes",
+            "type": "integer"
+          },
+          "pending_suggestions": {
+            "title": "Pending Suggestions",
+            "type": "integer"
+          },
+          "reviewed_items": {
+            "title": "Reviewed Items",
+            "type": "integer"
+          },
+          "total_items": {
+            "title": "Total Items",
+            "type": "integer"
+          },
+          "unreviewed_items": {
+            "title": "Unreviewed Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_items",
+          "reviewed_items",
+          "unreviewed_items",
+          "accepted_annotations",
+          "failure_modes",
+          "pending_suggestions"
+        ],
+        "title": "ReviewCoverageSummary",
+        "type": "object"
+      },
       "ReviewItem": {
         "properties": {
           "agent_design_id": {
@@ -4327,6 +4365,118 @@
           "body"
         ],
         "title": "ReviewNoteCreate",
+        "type": "object"
+      },
+      "ReviewSamplingCandidate": {
+        "properties": {
+          "failure_mode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode Id"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "review_item_id": {
+            "title": "Review Item Id",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_item_id",
+          "title",
+          "reason",
+          "source_kind",
+          "status",
+          "score"
+        ],
+        "title": "ReviewSamplingCandidate",
+        "type": "object"
+      },
+      "ReviewSamplingPlan": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "breadth_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewSamplingCandidate"
+            },
+            "title": "Breadth Candidates",
+            "type": "array"
+          },
+          "corpus_id": {
+            "title": "Corpus Id",
+            "type": "string"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ReviewCoverageSummary"
+          },
+          "depth_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewSamplingCandidate"
+            },
+            "title": "Depth Candidates",
+            "type": "array"
+          },
+          "generated_suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSuggestion"
+            },
+            "title": "Generated Suggestions",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "recoding_prompts": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewSamplingCandidate"
+            },
+            "title": "Recoding Prompts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "corpus_id",
+          "project_id",
+          "agent_design_id",
+          "coverage",
+          "breadth_candidates",
+          "depth_candidates",
+          "recoding_prompts",
+          "rationale"
+        ],
+        "title": "ReviewSamplingPlan",
         "type": "object"
       },
       "RunCreate": {
@@ -8479,6 +8629,64 @@
           }
         },
         "summary": "Import Langfuse Review Items"
+      }
+    },
+    "/api/projects/{project_id}/review-corpora/{corpus_id}/sampling-plan": {
+      "get": {
+        "operationId": "get_review_sampling_plan_api_projects__project_id__review_corpora__corpus_id__sampling_plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "corpus_id",
+            "required": true,
+            "schema": {
+              "title": "Corpus Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "create_suggestions",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Create Suggestions",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewSamplingPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Sampling Plan"
       }
     },
     "/api/projects/{project_id}/review-items": {

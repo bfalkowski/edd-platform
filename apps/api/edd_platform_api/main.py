@@ -66,6 +66,9 @@ from edd_platform_api.schemas import (
     AgentSuggestionCreate,
     AgentSuggestionUpdate,
     AgentSuggestion,
+    ReviewCoverageSummary,
+    ReviewSamplingCandidate,
+    ReviewSamplingPlan,
     AgentRunResult,
     EvalCheck,
     EvalCheckResult,
@@ -471,6 +474,223 @@ def find_failure_mode_by_name(
         ):
             return failure_mode
     return None
+
+
+def review_item_search_text(item: ReviewItem) -> str:
+    return " ".join(
+        [
+            item.title,
+            item.content,
+            json.dumps(item.metadata, sort_keys=True),
+            json.dumps(item.langfuse_ref.model_dump(mode="json"), sort_keys=True)
+            if item.langfuse_ref
+            else "",
+        ]
+    ).lower()
+
+
+def failure_mode_terms(failure_mode: FailureMode) -> List[str]:
+    raw_terms = " ".join(
+        [
+            failure_mode.name.replace("_", " "),
+            failure_mode.description,
+            failure_mode.root_cause,
+            failure_mode.langfuse_score_name or "",
+        ]
+    )
+    terms = []
+    for term in raw_terms.lower().replace("-", " ").split():
+        normalized = term.strip(".,:;()[]{}")
+        if len(normalized) >= 5 and normalized not in terms:
+            terms.append(normalized)
+    return terms[:8]
+
+
+def review_sampling_plan_for_corpus(
+    *,
+    project_id: str,
+    corpus: ReviewCorpus,
+    create_suggestions: bool,
+) -> ReviewSamplingPlan:
+    items = sorted(
+        [
+            item
+            for item in _review_items.values()
+            if item.project_id == project_id and item.corpus_id == corpus.id
+        ],
+        key=lambda item: item.updated_at,
+        reverse=True,
+    )
+    annotations = [
+        annotation
+        for annotation in _review_annotations.values()
+        if annotation.project_id == project_id and annotation.corpus_id == corpus.id
+    ]
+    failure_modes = [
+        failure_mode
+        for failure_mode in _failure_modes.values()
+        if failure_mode.project_id == project_id
+        and failure_mode.agent_design_id == corpus.agent_design_id
+    ]
+    pending_suggestions = [
+        suggestion
+        for suggestion in _agent_suggestions.values()
+        if suggestion.project_id == project_id
+        and suggestion.corpus_id == corpus.id
+        and suggestion.status == "pending"
+    ]
+    accepted_annotations = [
+        annotation for annotation in annotations if annotation.status == "accepted"
+    ]
+    annotations_by_item: Dict[str, List[ReviewAnnotation]] = {}
+    for annotation in annotations:
+        annotations_by_item.setdefault(annotation.review_item_id, []).append(annotation)
+
+    breadth_candidates: List[ReviewSamplingCandidate] = []
+    for item in items:
+        item_annotations = annotations_by_item.get(item.id, [])
+        if item.status == "reviewed" and any(
+            annotation.status == "accepted" for annotation in item_annotations
+        ):
+            continue
+        reason = "Unreviewed item expands corpus breadth."
+        score = 80
+        if item.source_kind == "trace":
+            reason = "Unreviewed trace keeps sampling from overfitting to saved EDD artifacts."
+            score += 10
+        if item.langfuse_ref and item.langfuse_ref.object_type == "OBSERVATION":
+            reason = "Generation observation has direct model input/output for open coding."
+            score += 10
+        breadth_candidates.append(
+            ReviewSamplingCandidate(
+                review_item_id=item.id,
+                title=item.title,
+                reason=reason,
+                source_kind=item.source_kind,
+                status=item.status,
+                score=score,
+            )
+        )
+    breadth_candidates = sorted(
+        breadth_candidates,
+        key=lambda candidate: (-candidate.score, candidate.title.lower()),
+    )[:5]
+
+    depth_candidates: List[ReviewSamplingCandidate] = []
+    recoding_prompts: List[ReviewSamplingCandidate] = []
+    for failure_mode in failure_modes:
+        terms = failure_mode_terms(failure_mode)
+        if not terms:
+            continue
+        for item in items:
+            item_annotations = annotations_by_item.get(item.id, [])
+            has_mode = any(
+                annotation.failure_mode_id == failure_mode.id
+                for annotation in item_annotations
+            )
+            if has_mode:
+                continue
+            text = review_item_search_text(item)
+            matched_terms = [term for term in terms if term in text]
+            if matched_terms:
+                depth_candidates.append(
+                    ReviewSamplingCandidate(
+                        review_item_id=item.id,
+                        title=item.title,
+                        reason=(
+                            "Matches known failure-mode terms: "
+                            + ", ".join(matched_terms[:3])
+                        ),
+                        source_kind=item.source_kind,
+                        status=item.status,
+                        failure_mode_id=failure_mode.id,
+                        score=70 + min(len(matched_terms), 5) * 5,
+                    )
+                )
+            if item_annotations and all(
+                annotation.created_at < failure_mode.created_at
+                for annotation in item_annotations
+            ):
+                recoding_prompts.append(
+                    ReviewSamplingCandidate(
+                        review_item_id=item.id,
+                        title=item.title,
+                        reason=f"Reviewed before failure mode {failure_mode.name} existed.",
+                        source_kind=item.source_kind,
+                        status=item.status,
+                        failure_mode_id=failure_mode.id,
+                        score=65,
+                    )
+                )
+    depth_candidates = sorted(
+        depth_candidates,
+        key=lambda candidate: (-candidate.score, candidate.title.lower()),
+    )[:5]
+    recoding_prompts = sorted(
+        recoding_prompts,
+        key=lambda candidate: (-candidate.score, candidate.title.lower()),
+    )[:5]
+
+    generated_suggestions: List[AgentSuggestion] = []
+    if create_suggestions:
+        now = datetime.now(timezone.utc)
+        suggestion_candidates = [*depth_candidates, *recoding_prompts]
+        for candidate in suggestion_candidates[:5]:
+            duplicate = any(
+                suggestion.review_item_id == candidate.review_item_id
+                and suggestion.failure_mode_id == candidate.failure_mode_id
+                and suggestion.status == "pending"
+                for suggestion in _agent_suggestions.values()
+            )
+            if duplicate:
+                continue
+            suggestion = AgentSuggestion(
+                id=f"agent_suggestion_{uuid4().hex[:12]}",
+                project_id=project_id,
+                agent_design_id=corpus.agent_design_id,
+                corpus_id=corpus.id,
+                review_item_id=candidate.review_item_id,
+                failure_mode_id=candidate.failure_mode_id,
+                body=candidate.reason,
+                quote="",
+                span_start=None,
+                span_end=None,
+                rationale="Generated by deterministic breadth/depth review planning.",
+                confidence=min(candidate.score / 100, 0.95),
+                source="sampling-plan",
+                status="pending",
+                metadata={"candidate_type": "depth_or_recoding"},
+                created_at=now,
+                updated_at=now,
+            )
+            _agent_suggestions[suggestion.id] = suggestion
+            store.save_record("agent_suggestions", suggestion.id, suggestion)
+            generated_suggestions.append(suggestion)
+
+    coverage = ReviewCoverageSummary(
+        total_items=len(items),
+        reviewed_items=len([item for item in items if item.status == "reviewed"]),
+        unreviewed_items=len([item for item in items if item.status != "reviewed"]),
+        accepted_annotations=len(accepted_annotations),
+        failure_modes=len(failure_modes),
+        pending_suggestions=len(pending_suggestions) + len(generated_suggestions),
+    )
+    rationale = (
+        "Review breadth first when uncoded items remain; scan depth when known "
+        "failure modes have likely matches; recode earlier notes when the taxonomy "
+        "changed after they were reviewed."
+    )
+    return ReviewSamplingPlan(
+        corpus_id=corpus.id,
+        project_id=project_id,
+        agent_design_id=corpus.agent_design_id,
+        coverage=coverage,
+        breadth_candidates=breadth_candidates,
+        depth_candidates=depth_candidates,
+        recoding_prompts=recoding_prompts,
+        generated_suggestions=generated_suggestions,
+        rationale=rationale,
+    )
 
 
 def get_failure_packet_or_404(project_id: str, failure_packet_id: str) -> FailurePacket:
@@ -4103,6 +4323,21 @@ def update_review_corpus(
     _review_corpora[updated.id] = updated
     store.save_record("review_corpora", updated.id, updated)
     return updated
+
+
+@app.get("/api/projects/{project_id}/review-corpora/{corpus_id}/sampling-plan")
+def get_review_sampling_plan(
+    project_id: str,
+    corpus_id: str,
+    create_suggestions: bool = False,
+) -> ReviewSamplingPlan:
+    get_project_or_404(project_id)
+    corpus = get_review_corpus_or_404(project_id, corpus_id)
+    return review_sampling_plan_for_corpus(
+        project_id=project_id,
+        corpus=corpus,
+        create_suggestions=create_suggestions,
+    )
 
 
 @app.get("/api/projects/{project_id}/review-items")
