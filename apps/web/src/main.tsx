@@ -279,6 +279,98 @@ type ReviewNote = {
   created_at: string;
 };
 
+type LangfuseObjectRef = {
+  trace_id: string | null;
+  observation_id: string | null;
+  object_type: "TRACE" | "OBSERVATION";
+  url: string | null;
+  queue_id: string | null;
+  score_ids: string[];
+  metadata: Record<string, unknown>;
+};
+
+type ReviewCorpus = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  name: string;
+  description: string;
+  source: string;
+  langfuse_queue_id: string | null;
+  langfuse_score_config_ids: string[];
+  status: string;
+  artifact_ids: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+type ReviewItem = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  corpus_id: string;
+  source_kind: string;
+  source_id: string;
+  title: string;
+  content: string;
+  langfuse_ref: LangfuseObjectRef | null;
+  metadata: Record<string, unknown>;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type FailureMode = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  name: string;
+  description: string;
+  root_cause: string;
+  severity: string;
+  status: string;
+  langfuse_score_name: string | null;
+  example_annotation_ids: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+type ReviewAnnotation = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  corpus_id: string;
+  review_item_id: string;
+  body: string;
+  quote: string;
+  author: string;
+  failure_mode_id: string | null;
+  suggestion_id: string | null;
+  langfuse_score_id: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+type AgentSuggestion = {
+  id: string;
+  project_id: string;
+  agent_design_id: string;
+  corpus_id: string;
+  review_item_id: string;
+  failure_mode_id: string | null;
+  body: string;
+  quote: string;
+  rationale: string;
+  confidence: number | null;
+  source: string;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 type FixProposal = {
   id: string;
   project_id: string;
@@ -913,6 +1005,197 @@ async function createReviewNote(
   return response.json();
 }
 
+async function listReviewCorpora(
+  projectId: string,
+  agentDesignId: string,
+): Promise<ReviewCorpus[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/review-corpora?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load review corpora.");
+  }
+  return response.json();
+}
+
+async function createReviewCorpus(
+  projectId: string,
+  agentDesignId: string,
+  name: string,
+): Promise<ReviewCorpus> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/review-corpora`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_design_id: agentDesignId,
+      name,
+      description: "Open-coded evidence selected from EDD and Langfuse traces.",
+      source: "mixed",
+      status: "active",
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create review corpus.");
+  }
+  return response.json();
+}
+
+async function listReviewItems(
+  projectId: string,
+  corpusId: string,
+): Promise<ReviewItem[]> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/review-items?corpus_id=${corpusId}`);
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load review items.");
+  }
+  return response.json();
+}
+
+async function createReviewItem(
+  projectId: string,
+  payload: {
+    corpus_id: string;
+    source_kind: "artifact" | "run" | "eval_result" | "trace";
+    source_id: string;
+    title: string;
+    content: string;
+    langfuse_ref?: LangfuseObjectRef | null;
+    metadata?: Record<string, unknown>;
+    status?: string;
+  },
+): Promise<ReviewItem> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/review-items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to add review item.");
+  }
+  return response.json();
+}
+
+async function listFailureModes(
+  projectId: string,
+  agentDesignId: string,
+): Promise<FailureMode[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/failure-modes?agent_design_id=${agentDesignId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load failure modes.");
+  }
+  return response.json();
+}
+
+async function createFailureMode(
+  projectId: string,
+  agentDesignId: string,
+  payload: { name: string; description: string; severity: string; status?: string },
+): Promise<FailureMode> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/failure-modes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_design_id: agentDesignId,
+      ...payload,
+      status: payload.status ?? "candidate",
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create failure mode.");
+  }
+  return response.json();
+}
+
+async function listReviewAnnotations(
+  projectId: string,
+  corpusId: string,
+): Promise<ReviewAnnotation[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/review-annotations?corpus_id=${corpusId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load review annotations.");
+  }
+  return response.json();
+}
+
+async function createReviewAnnotation(
+  projectId: string,
+  payload: {
+    review_item_id: string;
+    body: string;
+    quote?: string;
+    author?: "human" | "agent" | "platform";
+    failure_mode_id?: string | null;
+    status?: "accepted" | "suggested" | "dismissed";
+    metadata?: Record<string, unknown>;
+  },
+): Promise<ReviewAnnotation> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/review-annotations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to save review annotation.");
+  }
+  return response.json();
+}
+
+async function listAgentSuggestions(
+  projectId: string,
+  corpusId: string,
+): Promise<AgentSuggestion[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/agent-suggestions?corpus_id=${corpusId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load agent suggestions.");
+  }
+  return response.json();
+}
+
+async function createAgentSuggestion(
+  projectId: string,
+  payload: {
+    review_item_id: string;
+    failure_mode_id?: string | null;
+    body: string;
+    quote?: string;
+    rationale?: string;
+    confidence?: number;
+    status?: "pending" | "accepted" | "dismissed";
+  },
+): Promise<AgentSuggestion> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-suggestions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to create agent suggestion.");
+  }
+  return response.json();
+}
+
+async function updateAgentSuggestionStatus(
+  projectId: string,
+  suggestionId: string,
+  status: "accepted" | "dismissed",
+): Promise<AgentSuggestion> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/agent-suggestions/${suggestionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update agent suggestion.");
+  }
+  return response.json();
+}
+
 async function createFixProposal(
   projectId: string,
   agentDesignId: string,
@@ -1359,7 +1642,18 @@ function App() {
   const [analysisNoteText, setAnalysisNoteText] = useState("");
   const [analysisFailureMode, setAnalysisFailureMode] = useState("");
   const [analysisSeverity, setAnalysisSeverity] = useState("medium");
+  const [reviewCorpora, setReviewCorpora] = useState<ReviewCorpus[]>([]);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [reviewAnnotations, setReviewAnnotations] = useState<ReviewAnnotation[]>([]);
+  const [failureModes, setFailureModes] = useState<FailureMode[]>([]);
+  const [agentSuggestions, setAgentSuggestions] = useState<AgentSuggestion[]>([]);
+  const [selectedReviewItemId, setSelectedReviewItemId] = useState<string | null>(null);
+  const [openCodeText, setOpenCodeText] = useState("");
+  const [newFailureModeName, setNewFailureModeName] = useState("");
+  const [newFailureModeDescription, setNewFailureModeDescription] = useState("");
+  const [selectedFailureModeId, setSelectedFailureModeId] = useState("");
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
+  const [isDiscoveryBusy, setIsDiscoveryBusy] = useState(false);
   const [fixEditText, setFixEditText] = useState("");
   const [isSavingFix, setIsSavingFix] = useState(false);
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
@@ -1542,6 +1836,22 @@ function App() {
     (artifact, index, artifacts) =>
       artifacts.findIndex((candidate) => candidate.id === artifact.id) === index,
   );
+  const activeReviewCorpus = reviewCorpora[0] ?? null;
+  const selectedReviewItem =
+    reviewItems.find((item) => item.id === selectedReviewItemId) ?? reviewItems[0] ?? null;
+  const selectedReviewAnnotations = selectedReviewItem
+    ? reviewAnnotations.filter((annotation) => annotation.review_item_id === selectedReviewItem.id)
+    : [];
+  const pendingSuggestions = selectedReviewItem
+    ? agentSuggestions.filter(
+        (suggestion) => suggestion.review_item_id === selectedReviewItem.id && suggestion.status === "pending",
+      )
+    : [];
+  const reviewedItemCount = reviewItems.filter((item) => item.status === "reviewed").length;
+  const acceptedAnnotationCount = reviewAnnotations.filter(
+    (annotation) => annotation.status === "accepted",
+  ).length;
+  const selectedReviewTraceUrl = selectedReviewItem?.langfuse_ref?.url ?? null;
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
   const generatedVersionArtifact = selectedGeneratedDesign
@@ -1636,6 +1946,63 @@ function App() {
           savedScenarioInput !== scenarioInput.trim())),
   );
 
+  async function loadDiscoveryState(
+    projectId: string,
+    agent: AgentDesign | null,
+  ): Promise<{
+    corpora: ReviewCorpus[];
+    items: ReviewItem[];
+    annotations: ReviewAnnotation[];
+    modes: FailureMode[];
+    suggestions: AgentSuggestion[];
+  }> {
+    if (!agent) {
+      return { corpora: [], items: [], annotations: [], modes: [], suggestions: [] };
+    }
+    const [corpora, modes] = await Promise.all([
+      listReviewCorpora(projectId, agent.id),
+      listFailureModes(projectId, agent.id),
+    ]);
+    const corpus = corpora[0];
+    if (!corpus) {
+      return { corpora, items: [], annotations: [], modes, suggestions: [] };
+    }
+    const [items, annotations, suggestions] = await Promise.all([
+      listReviewItems(projectId, corpus.id),
+      listReviewAnnotations(projectId, corpus.id),
+      listAgentSuggestions(projectId, corpus.id),
+    ]);
+    return { corpora, items, annotations, modes, suggestions };
+  }
+
+  function applyDiscoveryState(state: {
+    corpora: ReviewCorpus[];
+    items: ReviewItem[];
+    annotations: ReviewAnnotation[];
+    modes: FailureMode[];
+    suggestions: AgentSuggestion[];
+  }) {
+    setReviewCorpora(state.corpora);
+    setReviewItems(state.items);
+    setReviewAnnotations(state.annotations);
+    setFailureModes(state.modes);
+    setAgentSuggestions(state.suggestions);
+    setSelectedReviewItemId((currentId) =>
+      currentId && state.items.some((item) => item.id === currentId)
+        ? currentId
+        : state.items[0]?.id ?? null,
+    );
+  }
+
+  async function refreshDiscoveryState() {
+    if (!project) {
+      applyDiscoveryState({ corpora: [], items: [], annotations: [], modes: [], suggestions: [] });
+      return;
+    }
+    const state = await loadDiscoveryState(project.id, selectedAgent);
+    applyDiscoveryState(state);
+  }
+
   useEffect(() => {
     if (!project) {
       setContextPack(null);
@@ -1649,6 +2016,10 @@ function App() {
     setAnalysisNoteText("");
     setAnalysisFailureMode("");
     setAnalysisSeverity("medium");
+    setOpenCodeText("");
+    setNewFailureModeName("");
+    setNewFailureModeDescription("");
+    setSelectedFailureModeId("");
     setIsLoadingContext(true);
     Promise.all([
       buildContextPack(project.id, selectedId ?? undefined),
@@ -1657,8 +2028,9 @@ function App() {
         : Promise.resolve({ failurePackets: [] } as EddFlowState),
       selectedAgent ? listGateDefinitions(project.id, selectedAgent.id) : Promise.resolve([]),
       selectedAgent ? listGateDecisions(project.id, selectedAgent.id) : Promise.resolve([]),
+      loadDiscoveryState(project.id, selectedAgent),
     ])
-      .then(([pack, flow, loadedGates, loadedGateDecisions]) => {
+      .then(([pack, flow, loadedGates, loadedGateDecisions, discoveryState]) => {
         if (!isCurrent) {
           return;
         }
@@ -1666,6 +2038,7 @@ function App() {
         setEddFlow(flow);
         setGates(loadedGates);
         setGateDecisions(loadedGateDecisions);
+        applyDiscoveryState(discoveryState);
         setScenarioInput(flow.scenario?.input ?? defaultScenarioInput);
         setTestShape(testShapeFromSetupContext(flow.scenario?.setup_context));
         const rubric = flow.contract?.checks.find((check) => check.type === "rubric_judge")?.value;
@@ -2130,6 +2503,199 @@ function App() {
     ]);
     setGates(loadedGates);
     setGateDecisions(loadedDecisions);
+  }
+
+  async function ensureReviewCorpus(): Promise<ReviewCorpus> {
+    if (!project || !selectedAgent) {
+      throw new Error("Select an agent before creating a review corpus.");
+    }
+    if (activeReviewCorpus) {
+      return activeReviewCorpus;
+    }
+    return createReviewCorpus(project.id, selectedAgent.id, `${selectedAgent.name} review corpus`);
+  }
+
+  async function handleCreateReviewCorpus() {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    setError(null);
+    setActivity("Creating review corpus.");
+    setIsDiscoveryBusy(true);
+    try {
+      await createReviewCorpus(project.id, selectedAgent.id, `${selectedAgent.name} review corpus`);
+      await refreshDiscoveryState();
+      await refreshContext();
+      setActivity("Review corpus created.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create review corpus.");
+      setActivity(null);
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleAddCurrentEvidenceToCorpus() {
+    if (!project || !selectedAgent) {
+      return;
+    }
+    const reviewableArtifacts = evidenceArtifacts.filter(
+      (artifact) => artifact.agent_design_id === selectedAgent.id,
+    );
+    if (reviewableArtifacts.length === 0) {
+      setError("Run or evaluate the agent before adding evidence to the review corpus.");
+      return;
+    }
+    setError(null);
+    setActivity("Adding evidence to the review corpus.");
+    setIsDiscoveryBusy(true);
+    try {
+      const corpus = await ensureReviewCorpus();
+      const existingSourceIds = new Set(reviewItems.map((item) => item.source_id));
+      const nextArtifacts = reviewableArtifacts
+        .filter((artifact) => !existingSourceIds.has(artifact.id))
+        .slice(0, 8);
+      await Promise.all(
+        nextArtifacts.map((artifact) =>
+          createReviewItem(project.id, {
+            corpus_id: corpus.id,
+            source_kind: "artifact",
+            source_id: artifact.id,
+            title: artifact.title,
+            content: artifact.body,
+            langfuse_ref: traceUrlFromArtifact(artifact)
+              ? {
+                  trace_id: artifact.external_refs.find((ref) => ref.ref_type === "trace")?.external_id ?? null,
+                  observation_id: null,
+                  object_type: "TRACE",
+                  url: traceUrlFromArtifact(artifact),
+                  queue_id: null,
+                  score_ids: [],
+                  metadata: { artifact_type: artifact.artifact_type },
+                }
+              : null,
+            metadata: { artifact_type: artifact.artifact_type },
+          }),
+        ),
+      );
+      await refreshDiscoveryState();
+      setActivity(
+        nextArtifacts.length > 0
+          ? `Added ${nextArtifacts.length} evidence item${nextArtifacts.length === 1 ? "" : "s"}.`
+          : "Current evidence is already in the review corpus.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to add evidence to corpus.");
+      setActivity(null);
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleSaveOpenCodeAnnotation() {
+    if (!project || !selectedReviewItem) {
+      return;
+    }
+    if (!openCodeText.trim()) {
+      setError("Write an open-code note before saving.");
+      return;
+    }
+    setError(null);
+    setActivity("Saving open-code note.");
+    setIsDiscoveryBusy(true);
+    try {
+      let failureModeId = selectedFailureModeId || null;
+      if (!failureModeId && newFailureModeName.trim()) {
+        if (!selectedAgent) {
+          throw new Error("Select an agent before creating a failure mode.");
+        }
+        const mode = await createFailureMode(project.id, selectedAgent.id, {
+          name: newFailureModeName.trim(),
+          description:
+            newFailureModeDescription.trim() ||
+            `Open-coded from review item: ${selectedReviewItem.title}`,
+          severity: "medium",
+        });
+        failureModeId = mode.id;
+      }
+      await createReviewAnnotation(project.id, {
+        review_item_id: selectedReviewItem.id,
+        body: openCodeText.trim(),
+        author: "human",
+        failure_mode_id: failureModeId,
+        status: "accepted",
+        metadata: { source: "error_analysis_tab" },
+      });
+      setOpenCodeText("");
+      setNewFailureModeName("");
+      setNewFailureModeDescription("");
+      setSelectedFailureModeId("");
+      await refreshDiscoveryState();
+      await refreshContext();
+      setActivity("Open-code note saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save open-code note.");
+      setActivity(null);
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleCreateSuggestion() {
+    if (!project || !selectedReviewItem) {
+      return;
+    }
+    setError(null);
+    setActivity("Creating suggestion.");
+    setIsDiscoveryBusy(true);
+    try {
+      const mode = failureModes[0] ?? null;
+      await createAgentSuggestion(project.id, {
+        review_item_id: selectedReviewItem.id,
+        failure_mode_id: mode?.id ?? null,
+        body: mode
+          ? `This item may fit ${mode.name}.`
+          : "This item may contain a recurring failure pattern.",
+        rationale: selectedReviewItem.content.slice(0, 180) || "Suggested from the selected review item.",
+        confidence: mode ? 0.7 : 0.45,
+      });
+      await refreshDiscoveryState();
+      setActivity("Suggestion created.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create suggestion.");
+      setActivity(null);
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleResolveSuggestion(suggestion: AgentSuggestion, status: "accepted" | "dismissed") {
+    if (!project) {
+      return;
+    }
+    setError(null);
+    setIsDiscoveryBusy(true);
+    try {
+      await updateAgentSuggestionStatus(project.id, suggestion.id, status);
+      if (status === "accepted") {
+        await createReviewAnnotation(project.id, {
+          review_item_id: suggestion.review_item_id,
+          body: suggestion.body,
+          quote: suggestion.quote,
+          author: "agent",
+          failure_mode_id: suggestion.failure_mode_id,
+          status: "suggested",
+          metadata: { suggestion_id: suggestion.id, accepted_by: "human" },
+        });
+      }
+      await refreshDiscoveryState();
+      setActivity(status === "accepted" ? "Suggestion accepted." : "Suggestion dismissed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update suggestion.");
+      setActivity(null);
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
   }
 
   async function reviewFirstArtifact(artifactIds: string[]) {
@@ -3458,16 +4024,21 @@ function App() {
                   <div className="error-analysis-intro">
                     <div>
                       <p className="artifact-type">Error analysis</p>
-                      <h3>Corpus to eval dataset</h3>
+                      <h3>{activeReviewCorpus?.name ?? "Discovery review"}</h3>
                       <p>
-                        Pull traces into a review corpus, code the compact packets, then promote
-                        useful examples into a rerunnable eval dataset for version comparison.
+                        Review traces, runs, and evidence as a corpus. Save free-text notes,
+                        organize confirmed failure modes, and keep agent suggestions separate
+                        until they are accepted.
                       </p>
                     </div>
                     <div className="analysis-scope-card">
                       <span>Active analysis</span>
-                      <strong>Sentiment observer escalation set</strong>
-                      <small>Sentiment Observer · live traces linked</small>
+                      <strong>{selectedAgent?.name ?? "No agent selected"}</strong>
+                      <small>
+                        {activeReviewCorpus
+                          ? `${activeReviewCorpus.source} corpus · ${activeReviewCorpus.status}`
+                          : "Create a corpus to begin"}
+                      </small>
                     </div>
                   </div>
 
@@ -3475,163 +4046,183 @@ function App() {
                     <section className="analysis-lane-card">
                       <div>
                         <span>Review corpus</span>
-                        <strong>24 traces</strong>
-                        <small>Imported from Langfuse · 18 reviewed · 6 uncoded</small>
+                        <strong>{reviewItems.length} items</strong>
+                        <small>
+                          {reviewedItemCount} reviewed · {reviewItems.length - reviewedItemCount} open
+                        </small>
                       </div>
                       <div className="analysis-run-actions">
-                        <button className="secondary-button" type="button">
-                          Import traces
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={handleCreateReviewCorpus}
+                          disabled={isDiscoveryBusy || !selectedAgent || Boolean(activeReviewCorpus)}
+                        >
+                          Create corpus
                         </button>
-                        <button className="secondary-button" type="button">
-                          Remove selected
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={handleAddCurrentEvidenceToCorpus}
+                          disabled={isDiscoveryBusy || !selectedAgent}
+                        >
+                          Add evidence
                         </button>
                       </div>
                     </section>
                     <section className="analysis-lane-card">
                       <div>
-                        <span>Eval dataset</span>
-                        <strong>9 runnable cases</strong>
-                        <small>Promoted from reviewed packets · same cases rerun per version</small>
+                        <span>Failure modes</span>
+                        <strong>{failureModes.length} modes</strong>
+                        <small>
+                          {acceptedAnnotationCount} accepted notes ·{" "}
+                          {agentSuggestions.filter((suggestion) => suggestion.status === "pending").length} pending suggestions
+                        </small>
                       </div>
                       <div className="analysis-run-actions">
-                        <button className="secondary-button" type="button">
-                          Promote packet
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={handleCreateSuggestion}
+                          disabled={isDiscoveryBusy || !selectedReviewItem}
+                        >
+                          Suggest
                         </button>
-                        <button className="primary-button" type="button">
-                          Rerun dataset
+                        <button
+                          className="primary-button"
+                          type="button"
+                          onClick={handleSaveOpenCodeAnnotation}
+                          disabled={isDiscoveryBusy || !selectedReviewItem || !openCodeText.trim()}
+                        >
+                          Save note
                         </button>
                       </div>
                     </section>
                   </div>
 
-                  <div className="analysis-run-strip">
-                    <div className="analysis-run-summary">
-                      <span>Current scored version</span>
-                      <strong>Sentiment Observer v0</strong>
-                      <small>9 cases · 6 failure modes · baseline</small>
-                    </div>
-                    <div className="analysis-run-summary muted">
-                      <span>Candidate scored version</span>
-                      <strong>Sentiment Observer v1</strong>
-                      <small>Same 9 cases · ready to compare</small>
-                    </div>
-                    <div className="analysis-run-actions">
-                      <button className="primary-button" type="button">
-                        Compare versions
-                      </button>
-                    </div>
-                  </div>
-
                   <div className="analysis-stats">
-                      <span>
-                        <strong>24</strong>
-                        packets
-                      </span>
-                      <span>
-                        <strong>18</strong>
-                        coded
-                      </span>
-                      <span>
-                        <strong>6</strong>
-                        modes
-                      </span>
+                    <span>
+                      <strong>{reviewItems.length}</strong>
+                      items
+                    </span>
+                    <span>
+                      <strong>{acceptedAnnotationCount}</strong>
+                      notes
+                    </span>
+                    <span>
+                      <strong>{failureModes.length}</strong>
+                      modes
+                    </span>
                   </div>
 
                   <div className="trace-review-layout">
                     <div className="trace-packet-list" aria-label="Trace review queue">
-                      <button className="trace-packet-item active" type="button">
-                        <span>Needs recode</span>
-                        <strong>Image pull backoff escalation</strong>
-                        <small>run_eccd7a5497d2 · live judge passed</small>
-                      </button>
-                      <button className="trace-packet-item" type="button">
-                        <span>Open coded</span>
-                        <strong>Customer asks for timeline twice</strong>
-                        <small>run_f41c0b2aa019 · high severity</small>
-                      </button>
-                      <button className="trace-packet-item" type="button">
-                        <span>Unreviewed</span>
-                        <strong>Observer misses ownership handoff</strong>
-                        <small>run_b7a91df8009c · judge failed</small>
-                      </button>
+                      {reviewItems.length === 0 ? (
+                        <p className="muted-copy">No review items yet.</p>
+                      ) : null}
+                      {reviewItems.map((item) => (
+                        <button
+                          className={
+                            selectedReviewItem?.id === item.id
+                              ? "trace-packet-item active"
+                              : "trace-packet-item"
+                          }
+                          key={item.id}
+                          type="button"
+                          onClick={() => setSelectedReviewItemId(item.id)}
+                        >
+                          <span>{item.status}</span>
+                          <strong>{item.title}</strong>
+                          <small>
+                            {item.source_kind} ·{" "}
+                            {reviewAnnotations.filter((annotation) => annotation.review_item_id === item.id).length} notes
+                          </small>
+                        </button>
+                      ))}
                     </div>
 
                     <article className="trace-review-packet">
-                      <div className="trace-packet-header">
-                        <div>
-                          <p className="artifact-type">Trace review packet</p>
-                          <h4>Image pull backoff escalation</h4>
-                        </div>
-                        <a
-                          href="http://localhost:3001/project/local-demo/traces/5ac99811dfaf98731d01a44b7c59d7f1"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open trace
-                        </a>
-                      </div>
+                      {selectedReviewItem ? (
+                        <>
+                          <div className="trace-packet-header">
+                            <div>
+                              <p className="artifact-type">Review item</p>
+                              <h4>{selectedReviewItem.title}</h4>
+                            </div>
+                            {selectedReviewTraceUrl ? (
+                              <a href={selectedReviewTraceUrl} target="_blank" rel="noreferrer">
+                                Open trace
+                              </a>
+                            ) : null}
+                          </div>
 
-                      <div className="trace-packet-grid">
-                        <section>
-                          <h5>Conversation window</h5>
-                          <div className="scenario-turns">
-                            <p className="scenario-turn">
-                              <strong>Customer:</strong> My deployment failed after the release.
-                            </p>
-                            <p className="scenario-turn">
-                              <strong>Agent:</strong> What error are you seeing?
-                            </p>
-                            <p className="scenario-turn">
-                              <strong>Customer:</strong> Cant you see this yourself??
-                            </p>
+                          <div className="trace-packet-grid">
+                            <section>
+                              <h5>Evidence</h5>
+                              <p>{selectedReviewItem.content || "No content saved for this item."}</p>
+                            </section>
+                            <section>
+                              <h5>Source</h5>
+                              <p>
+                                {selectedReviewItem.source_kind} · {selectedReviewItem.source_id}
+                              </p>
+                              {selectedReviewItem.langfuse_ref?.observation_id ? (
+                                <p>Observation · {selectedReviewItem.langfuse_ref.observation_id}</p>
+                              ) : null}
+                            </section>
+                            <section>
+                              <h5>Accepted notes</h5>
+                              <div className="trace-comment-list">
+                                {selectedReviewAnnotations.length === 0 ? (
+                                  <p>No notes saved yet.</p>
+                                ) : (
+                                  selectedReviewAnnotations.map((annotation) => (
+                                    <p key={annotation.id}>
+                                      <strong>{annotation.author}:</strong> {annotation.body}
+                                    </p>
+                                  ))
+                                )}
+                              </div>
+                            </section>
+                            <section>
+                              <h5>Suggestions</h5>
+                              <div className="trace-comment-list">
+                                {pendingSuggestions.length === 0 ? (
+                                  <p>No pending suggestions.</p>
+                                ) : (
+                                  pendingSuggestions.map((suggestion) => (
+                                    <div className="suggestion-row" key={suggestion.id}>
+                                      <p>
+                                        <strong>EDD:</strong> {suggestion.body}
+                                      </p>
+                                      <div className="analysis-run-actions">
+                                        <button
+                                          className="secondary-button compact-button"
+                                          type="button"
+                                          onClick={() => handleResolveSuggestion(suggestion, "dismissed")}
+                                          disabled={isDiscoveryBusy}
+                                        >
+                                          Dismiss
+                                        </button>
+                                        <button
+                                          className="secondary-button compact-button"
+                                          type="button"
+                                          onClick={() => handleResolveSuggestion(suggestion, "accepted")}
+                                          disabled={isDiscoveryBusy}
+                                        >
+                                          Accept
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </section>
                           </div>
-                        </section>
-                        <section>
-                          <h5>Compact trace summary</h5>
-                          <ul className="trace-summary-list">
-                            <li>Used sentiment, escalation risk, and signal summary tools.</li>
-                            <li>Detected worsening sentiment and high escalation risk.</li>
-                            <li>Live rubric judge returned PASS with cited evidence.</li>
-                          </ul>
-                        </section>
-                        <section>
-                          <h5>Observed output</h5>
-                          <p>
-                            Observer notes identify frustration, mention unresolved deployment impact,
-                            and recommend ownership plus transparent follow-up.
-                          </p>
-                        </section>
-                        <section>
-                          <h5>Judge signal</h5>
-                          <p>
-                            PASS: reviews the latest customer turn in context, avoids claiming resolution,
-                            and cites worsening sentiment plus escalation risk.
-                          </p>
-                        </section>
-                        <section>
-                          <h5>EDD notes</h5>
-                          <div className="trace-comment-list">
-                            <p>
-                              <strong>Bryan:</strong> Good escalation read, but the blocker should be
-                              named earlier.
-                            </p>
-                            <p>
-                              <strong>EDD:</strong> Mirrored to Langfuse comment.
-                            </p>
-                          </div>
-                        </section>
-                        <section>
-                          <h5>Langfuse comments</h5>
-                          <div className="trace-comment-list">
-                            <p>
-                              <strong>Imported:</strong> Customer frustration starts on the final turn.
-                            </p>
-                            <button className="secondary-button" type="button">
-                              Import as open code
-                            </button>
-                          </div>
-                        </section>
-                      </div>
+                        </>
+                      ) : (
+                        <p className="muted-copy">Select or add a review item to begin open coding.</p>
+                      )}
                     </article>
                   </div>
 
@@ -3642,64 +4233,93 @@ function App() {
                           <p className="artifact-type">Open coding</p>
                           <h4>Reviewer notes</h4>
                         </div>
-                        <button className="secondary-button" type="button">
-                          Add note
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={handleSaveOpenCodeAnnotation}
+                          disabled={isDiscoveryBusy || !selectedReviewItem || !openCodeText.trim()}
+                        >
+                          Save note
                         </button>
                       </div>
-                      <div className="open-code-list">
-                        <div className="open-code-item">
-                          <strong>latest-turn frustration detected</strong>
-                          <p>
-                            The customer moves from reporting a failed deployment to accusing the
-                            agent of lacking visibility.
-                          </p>
-                          <span>High · output + judge</span>
-                        </div>
-                        <div className="open-code-item">
-                          <strong>safe handoff recommended</strong>
-                          <p>
-                            The observer suggests ownership and transparent follow-up without taking
-                            over the customer conversation.
-                          </p>
-                          <span>Medium · tool summary</span>
-                        </div>
-                        <div className="open-code-item">
-                          <strong>blocker label could be sharper</strong>
-                          <p>
-                            The output mentions deployment impact, but should name image pull backoff
-                            as the blocker in the first observer note.
-                          </p>
-                          <span>Medium · candidate failure</span>
-                        </div>
+                      <label className="compact-label">
+                        <span>Note</span>
+                        <textarea
+                          value={openCodeText}
+                          onChange={(event) => setOpenCodeText(event.target.value)}
+                          placeholder="Describe the behavior you observe in this item."
+                        />
+                      </label>
+                      <div className="analysis-field-row">
+                        <label className="compact-label">
+                          <span>Existing mode</span>
+                          <select
+                            value={selectedFailureModeId}
+                            onChange={(event) => setSelectedFailureModeId(event.target.value)}
+                          >
+                            <option value="">No mode</option>
+                            {failureModes.map((mode) => (
+                              <option key={mode.id} value={mode.id}>
+                                {mode.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="compact-label">
+                          <span>New mode</span>
+                          <input
+                            value={newFailureModeName}
+                            onChange={(event) => setNewFailureModeName(event.target.value)}
+                            placeholder="missing policy lookup"
+                          />
+                        </label>
                       </div>
+                      <label className="compact-label">
+                        <span>Mode definition</span>
+                        <input
+                          value={newFailureModeDescription}
+                          onChange={(event) => setNewFailureModeDescription(event.target.value)}
+                          placeholder="The agent answered without checking required evidence."
+                        />
+                      </label>
                     </section>
 
                     <section className="axial-code-panel">
                       <div className="section-title-row">
                         <div>
-                          <p className="artifact-type">Axial codes</p>
-                          <h4>Failure modes by version</h4>
+                          <p className="artifact-type">Failure modes</p>
+                          <h4>Confirmed taxonomy</h4>
                         </div>
-                        <button className="secondary-button" type="button">
-                          Create eval
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={handleCreateSuggestion}
+                          disabled={isDiscoveryBusy || !selectedReviewItem}
+                        >
+                          Suggest
                         </button>
                       </div>
                       <p className="mode-table-note">
-                        Counts compare the same dataset scored against each version.
+                        Modes are first-class EDD records. Suggestions stay pending until accepted.
                       </p>
                       <div className="failure-mode-table">
-                        {[
-                          ["misses emotional escalation", "12", "4", "-8", "High"],
-                          ["blocker not named early", "8", "2", "-6", "Medium"],
-                          ["unsupported resolution claim", "5", "1", "-4", "High"],
-                          ["over-escalates neutral tone", "0", "3", "+3 new", "Medium"],
-                        ].map(([mode, v0, v1, delta, severity]) => (
-                          <div className="failure-mode-row" key={mode}>
-                            <strong>{mode}</strong>
-                            <span>{v0}</span>
-                            <span>{v1}</span>
-                            <em>{delta}</em>
-                            <small>{severity}</small>
+                        {failureModes.length === 0 ? (
+                          <p className="muted-copy">No failure modes yet.</p>
+                        ) : null}
+                        {failureModes.map((mode) => (
+                          <div className="failure-mode-row" key={mode.id}>
+                            <strong>{mode.name}</strong>
+                            <span>{mode.status}</span>
+                            <span>{mode.severity}</span>
+                            <em>
+                              {
+                                reviewAnnotations.filter(
+                                  (annotation) => annotation.failure_mode_id === mode.id,
+                                ).length
+                              }{" "}
+                              notes
+                            </em>
+                            <small>{mode.langfuse_score_name ?? "EDD"}</small>
                           </div>
                         ))}
                       </div>

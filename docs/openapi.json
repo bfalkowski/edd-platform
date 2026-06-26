@@ -394,6 +394,335 @@
         "title": "AgentRunResult",
         "type": "object"
       },
+      "AgentSuggestion": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "corpus_id": {
+            "title": "Corpus Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failure_mode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "review_item_id": {
+            "title": "Review Item Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "span_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span End"
+          },
+          "span_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Start"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "corpus_id",
+          "review_item_id",
+          "body",
+          "quote",
+          "rationale",
+          "source",
+          "status",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AgentSuggestion",
+        "type": "object"
+      },
+      "AgentSuggestionCreate": {
+        "properties": {
+          "body": {
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "failure_mode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "quote": {
+            "default": "",
+            "title": "Quote",
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "title": "Rationale",
+            "type": "string"
+          },
+          "review_item_id": {
+            "minLength": 1,
+            "title": "Review Item Id",
+            "type": "string"
+          },
+          "source": {
+            "default": "agent",
+            "title": "Source",
+            "type": "string"
+          },
+          "span_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span End"
+          },
+          "span_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Start"
+          },
+          "status": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_item_id",
+          "body"
+        ],
+        "title": "AgentSuggestionCreate",
+        "type": "object"
+      },
+      "AgentSuggestionUpdate": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "failure_mode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "span_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span End"
+          },
+          "span_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Start"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "accepted",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "AgentSuggestionUpdate",
+        "type": "object"
+      },
       "AgentVersion": {
         "properties": {
           "agent_design_id": {
@@ -1602,6 +1931,230 @@
         "title": "ExternalArtifactRef",
         "type": "object"
       },
+      "FailureMode": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "example_annotation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Example Annotation Ids",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "langfuse_score_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Score Name"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "root_cause": {
+            "title": "Root Cause",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "name",
+          "description",
+          "root_cause",
+          "severity",
+          "status",
+          "example_annotation_ids",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FailureMode",
+        "type": "object"
+      },
+      "FailureModeCreate": {
+        "properties": {
+          "agent_design_id": {
+            "minLength": 1,
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "example_annotation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Example Annotation Ids",
+            "type": "array"
+          },
+          "langfuse_score_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Score Name"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "root_cause": {
+            "default": "",
+            "title": "Root Cause",
+            "type": "string"
+          },
+          "severity": {
+            "default": "medium",
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "default": "candidate",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "name",
+          "description"
+        ],
+        "title": "FailureModeCreate",
+        "type": "object"
+      },
+      "FailureModeUpdate": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "example_annotation_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Example Annotation Ids"
+          },
+          "langfuse_score_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Score Name"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "root_cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Cause"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "FailureModeUpdate",
+        "type": "object"
+      },
       "FailurePacket": {
         "properties": {
           "agent_design_id": {
@@ -2528,6 +3081,359 @@
         "title": "JudgePromptTemplateCreate",
         "type": "object"
       },
+      "LangfuseAnnotationImport": {
+        "properties": {
+          "failure_mode_description": {
+            "default": "",
+            "title": "Failure Mode Description",
+            "type": "string"
+          },
+          "failure_mode_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode Name"
+          },
+          "langfuse_score_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Score Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "observation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Id"
+          },
+          "open_coding": {
+            "minLength": 1,
+            "title": "Open Coding",
+            "type": "string"
+          },
+          "pass_fail": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pass",
+                  "fail",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Fail"
+          },
+          "review_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Item Id"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "open_coding"
+        ],
+        "title": "LangfuseAnnotationImport",
+        "type": "object"
+      },
+      "LangfuseAnnotationsImportCreate": {
+        "properties": {
+          "annotations": {
+            "items": {
+              "$ref": "#/components/schemas/LangfuseAnnotationImport"
+            },
+            "title": "Annotations",
+            "type": "array"
+          }
+        },
+        "title": "LangfuseAnnotationsImportCreate",
+        "type": "object"
+      },
+      "LangfuseAnnotationsImportResult": {
+        "properties": {
+          "annotations": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewAnnotation"
+            },
+            "title": "Annotations",
+            "type": "array"
+          },
+          "failure_modes": {
+            "items": {
+              "$ref": "#/components/schemas/FailureMode"
+            },
+            "title": "Failure Modes",
+            "type": "array"
+          },
+          "imported_count": {
+            "title": "Imported Count",
+            "type": "integer"
+          },
+          "skipped_count": {
+            "title": "Skipped Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "annotations",
+          "failure_modes",
+          "imported_count",
+          "skipped_count"
+        ],
+        "title": "LangfuseAnnotationsImportResult",
+        "type": "object"
+      },
+      "LangfuseObjectRef": {
+        "properties": {
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "object_type": {
+            "default": "TRACE",
+            "enum": [
+              "TRACE",
+              "OBSERVATION"
+            ],
+            "title": "Object Type",
+            "type": "string"
+          },
+          "observation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Id"
+          },
+          "queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Id"
+          },
+          "score_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Score Ids",
+            "type": "array"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "LangfuseObjectRef",
+        "type": "object"
+      },
+      "LangfuseReviewItemImport": {
+        "properties": {
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "object_type": {
+            "default": "TRACE",
+            "enum": [
+              "TRACE",
+              "OBSERVATION"
+            ],
+            "title": "Object Type",
+            "type": "string"
+          },
+          "observation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Id"
+          },
+          "queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Id"
+          },
+          "score_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Score Ids",
+            "type": "array"
+          },
+          "source_id": {
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "source_id",
+          "title"
+        ],
+        "title": "LangfuseReviewItemImport",
+        "type": "object"
+      },
+      "LangfuseReviewItemsImportCreate": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LangfuseReviewItemImport"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "LangfuseReviewItemsImportCreate",
+        "type": "object"
+      },
+      "LangfuseReviewItemsImportResult": {
+        "properties": {
+          "imported_count": {
+            "title": "Imported Count",
+            "type": "integer"
+          },
+          "review_items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItem"
+            },
+            "title": "Review Items",
+            "type": "array"
+          },
+          "skipped_count": {
+            "title": "Skipped Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "review_items",
+          "imported_count",
+          "skipped_count"
+        ],
+        "title": "LangfuseReviewItemsImportResult",
+        "type": "object"
+      },
       "OutcomeAgentCreate": {
         "properties": {
           "outcome": {
@@ -2610,6 +3516,734 @@
           "updated_at"
         ],
         "title": "Project",
+        "type": "object"
+      },
+      "ReviewAnnotation": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "corpus_id": {
+            "title": "Corpus Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failure_mode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "langfuse_score_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Score Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "review_item_id": {
+            "title": "Review Item Id",
+            "type": "string"
+          },
+          "span_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span End"
+          },
+          "span_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Start"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "corpus_id",
+          "review_item_id",
+          "body",
+          "quote",
+          "author",
+          "status",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReviewAnnotation",
+        "type": "object"
+      },
+      "ReviewAnnotationCreate": {
+        "properties": {
+          "author": {
+            "default": "human",
+            "enum": [
+              "human",
+              "agent",
+              "platform"
+            ],
+            "title": "Author",
+            "type": "string"
+          },
+          "body": {
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "failure_mode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode Id"
+          },
+          "langfuse_score_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Score Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "quote": {
+            "default": "",
+            "title": "Quote",
+            "type": "string"
+          },
+          "review_item_id": {
+            "minLength": 1,
+            "title": "Review Item Id",
+            "type": "string"
+          },
+          "span_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span End"
+          },
+          "span_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Start"
+          },
+          "status": {
+            "default": "accepted",
+            "enum": [
+              "accepted",
+              "suggested",
+              "dismissed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion Id"
+          }
+        },
+        "required": [
+          "review_item_id",
+          "body"
+        ],
+        "title": "ReviewAnnotationCreate",
+        "type": "object"
+      },
+      "ReviewAnnotationUpdate": {
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "failure_mode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Mode Id"
+          },
+          "langfuse_score_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Score Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "span_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span End"
+          },
+          "span_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Start"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "accepted",
+                  "suggested",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "ReviewAnnotationUpdate",
+        "type": "object"
+      },
+      "ReviewCorpus": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "langfuse_queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Queue Id"
+          },
+          "langfuse_score_config_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Langfuse Score Config Ids",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "name",
+          "description",
+          "source",
+          "langfuse_score_config_ids",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReviewCorpus",
+        "type": "object"
+      },
+      "ReviewCorpusCreate": {
+        "properties": {
+          "agent_design_id": {
+            "minLength": 1,
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "langfuse_queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Queue Id"
+          },
+          "langfuse_score_config_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Langfuse Score Config Ids",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "default": "edd",
+            "enum": [
+              "edd",
+              "langfuse",
+              "mixed"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "default": "draft",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "name"
+        ],
+        "title": "ReviewCorpusCreate",
+        "type": "object"
+      },
+      "ReviewCorpusUpdate": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "langfuse_queue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Queue Id"
+          },
+          "langfuse_score_config_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Score Config Ids"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "ReviewCorpusUpdate",
+        "type": "object"
+      },
+      "ReviewItem": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "corpus_id": {
+            "title": "Corpus Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "langfuse_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseObjectRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_kind": {
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "agent_design_id",
+          "corpus_id",
+          "source_kind",
+          "source_id",
+          "title",
+          "content",
+          "metadata",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReviewItem",
+        "type": "object"
+      },
+      "ReviewItemCreate": {
+        "properties": {
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "corpus_id": {
+            "minLength": 1,
+            "title": "Corpus Id",
+            "type": "string"
+          },
+          "langfuse_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseObjectRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "source_id": {
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_kind": {
+            "default": "artifact",
+            "enum": [
+              "artifact",
+              "run",
+              "eval_result",
+              "trace"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "status": {
+            "default": "unreviewed",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "corpus_id",
+          "source_id",
+          "title"
+        ],
+        "title": "ReviewItemCreate",
+        "type": "object"
+      },
+      "ReviewItemUpdate": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ReviewItemUpdate",
         "type": "object"
       },
       "ReviewNote": {
@@ -4016,6 +5650,264 @@
         "summary": "Get Agent Version"
       }
     },
+    "/api/projects/{project_id}/agent-suggestions": {
+      "get": {
+        "operationId": "list_agent_suggestions_api_projects__project_id__agent_suggestions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "corpus_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Corpus Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review_item_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Item Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "failure_mode_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Failure Mode Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentSuggestion"
+                  },
+                  "title": "Response List Agent Suggestions Api Projects  Project Id  Agent Suggestions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Suggestions"
+      },
+      "post": {
+        "operationId": "create_agent_suggestion_api_projects__project_id__agent_suggestions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSuggestionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSuggestion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Agent Suggestion"
+      }
+    },
+    "/api/projects/{project_id}/agent-suggestions/{suggestion_id}": {
+      "get": {
+        "operationId": "get_agent_suggestion_api_projects__project_id__agent_suggestions__suggestion_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "suggestion_id",
+            "required": true,
+            "schema": {
+              "title": "Suggestion Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSuggestion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Suggestion"
+      },
+      "patch": {
+        "operationId": "update_agent_suggestion_api_projects__project_id__agent_suggestions__suggestion_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "suggestion_id",
+            "required": true,
+            "schema": {
+              "title": "Suggestion Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSuggestionUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSuggestion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Agent Suggestion"
+      }
+    },
     "/api/projects/{project_id}/artifact-links": {
       "post": {
         "operationId": "create_artifact_link_api_projects__project_id__artifact_links_post",
@@ -4884,6 +6776,232 @@
           }
         },
         "summary": "Create Evidence Summary"
+      }
+    },
+    "/api/projects/{project_id}/failure-modes": {
+      "get": {
+        "operationId": "list_failure_modes_api_projects__project_id__failure_modes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FailureMode"
+                  },
+                  "title": "Response List Failure Modes Api Projects  Project Id  Failure Modes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Failure Modes"
+      },
+      "post": {
+        "operationId": "create_failure_mode_api_projects__project_id__failure_modes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailureModeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureMode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Failure Mode"
+      }
+    },
+    "/api/projects/{project_id}/failure-modes/{failure_mode_id}": {
+      "get": {
+        "operationId": "get_failure_mode_api_projects__project_id__failure_modes__failure_mode_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "failure_mode_id",
+            "required": true,
+            "schema": {
+              "title": "Failure Mode Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureMode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Failure Mode"
+      },
+      "patch": {
+        "operationId": "update_failure_mode_api_projects__project_id__failure_modes__failure_mode_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "failure_mode_id",
+            "required": true,
+            "schema": {
+              "title": "Failure Mode Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailureModeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureMode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Failure Mode"
       }
     },
     "/api/projects/{project_id}/failure-packets": {
@@ -5777,6 +7895,832 @@
           }
         },
         "summary": "Get Judge Prompt Template"
+      }
+    },
+    "/api/projects/{project_id}/review-annotations": {
+      "get": {
+        "operationId": "list_review_annotations_api_projects__project_id__review_annotations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "corpus_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Corpus Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review_item_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Item Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "failure_mode_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Failure Mode Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewAnnotation"
+                  },
+                  "title": "Response List Review Annotations Api Projects  Project Id  Review Annotations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Review Annotations"
+      },
+      "post": {
+        "operationId": "create_review_annotation_api_projects__project_id__review_annotations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewAnnotationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewAnnotation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Review Annotation"
+      }
+    },
+    "/api/projects/{project_id}/review-annotations/{annotation_id}": {
+      "get": {
+        "operationId": "get_review_annotation_api_projects__project_id__review_annotations__annotation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "annotation_id",
+            "required": true,
+            "schema": {
+              "title": "Annotation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewAnnotation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Annotation"
+      },
+      "patch": {
+        "operationId": "update_review_annotation_api_projects__project_id__review_annotations__annotation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "annotation_id",
+            "required": true,
+            "schema": {
+              "title": "Annotation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewAnnotationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewAnnotation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Review Annotation"
+      }
+    },
+    "/api/projects/{project_id}/review-corpora": {
+      "get": {
+        "operationId": "list_review_corpora_api_projects__project_id__review_corpora_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewCorpus"
+                  },
+                  "title": "Response List Review Corpora Api Projects  Project Id  Review Corpora Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Review Corpora"
+      },
+      "post": {
+        "operationId": "create_review_corpus_api_projects__project_id__review_corpora_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCorpusCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCorpus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Review Corpus"
+      }
+    },
+    "/api/projects/{project_id}/review-corpora/{corpus_id}": {
+      "get": {
+        "operationId": "get_review_corpus_api_projects__project_id__review_corpora__corpus_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "corpus_id",
+            "required": true,
+            "schema": {
+              "title": "Corpus Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCorpus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Corpus"
+      },
+      "patch": {
+        "operationId": "update_review_corpus_api_projects__project_id__review_corpora__corpus_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "corpus_id",
+            "required": true,
+            "schema": {
+              "title": "Corpus Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCorpusUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewCorpus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Review Corpus"
+      }
+    },
+    "/api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-annotations": {
+      "post": {
+        "operationId": "import_langfuse_review_annotations_api_projects__project_id__review_corpora__corpus_id__langfuse_annotations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "corpus_id",
+            "required": true,
+            "schema": {
+              "title": "Corpus Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LangfuseAnnotationsImportCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LangfuseAnnotationsImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Langfuse Review Annotations"
+      }
+    },
+    "/api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-items": {
+      "post": {
+        "operationId": "import_langfuse_review_items_api_projects__project_id__review_corpora__corpus_id__langfuse_items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "corpus_id",
+            "required": true,
+            "schema": {
+              "title": "Corpus Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LangfuseReviewItemsImportCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LangfuseReviewItemsImportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Langfuse Review Items"
+      }
+    },
+    "/api/projects/{project_id}/review-items": {
+      "get": {
+        "operationId": "list_review_items_api_projects__project_id__review_items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "corpus_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Corpus Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_design_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Design Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewItem"
+                  },
+                  "title": "Response List Review Items Api Projects  Project Id  Review Items Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Review Items"
+      },
+      "post": {
+        "operationId": "create_review_item_api_projects__project_id__review_items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewItemCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Review Item"
+      }
+    },
+    "/api/projects/{project_id}/review-items/{review_item_id}": {
+      "get": {
+        "operationId": "get_review_item_api_projects__project_id__review_items__review_item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "review_item_id",
+            "required": true,
+            "schema": {
+              "title": "Review Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Item"
+      },
+      "patch": {
+        "operationId": "update_review_item_api_projects__project_id__review_items__review_item_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "review_item_id",
+            "required": true,
+            "schema": {
+              "title": "Review Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewItemUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Review Item"
       }
     },
     "/api/projects/{project_id}/review-notes": {

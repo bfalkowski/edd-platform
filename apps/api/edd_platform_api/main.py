@@ -47,6 +47,25 @@ from edd_platform_api.schemas import (
     TraceRef,
     ReviewNoteCreate,
     ReviewNote,
+    ReviewCorpusCreate,
+    ReviewCorpusUpdate,
+    ReviewCorpus,
+    ReviewItemCreate,
+    ReviewItemUpdate,
+    ReviewItem,
+    LangfuseReviewItemsImportCreate,
+    LangfuseReviewItemsImportResult,
+    ReviewAnnotationCreate,
+    ReviewAnnotationUpdate,
+    ReviewAnnotation,
+    LangfuseAnnotationsImportCreate,
+    LangfuseAnnotationsImportResult,
+    FailureModeCreate,
+    FailureModeUpdate,
+    FailureMode,
+    AgentSuggestionCreate,
+    AgentSuggestionUpdate,
+    AgentSuggestion,
     AgentRunResult,
     EvalCheck,
     EvalCheckResult,
@@ -119,6 +138,17 @@ _agent_versions: Dict[str, AgentVersion] = store.load_collection("agent_versions
 _runs: Dict[str, RunRecord] = store.load_collection("runs", RunRecord)
 _trace_refs: Dict[str, TraceRef] = store.load_collection("trace_refs", TraceRef)
 _review_notes: Dict[str, ReviewNote] = store.load_collection("review_notes", ReviewNote)
+_review_corpora: Dict[str, ReviewCorpus] = store.load_collection("review_corpora", ReviewCorpus)
+_review_items: Dict[str, ReviewItem] = store.load_collection("review_items", ReviewItem)
+_review_annotations: Dict[str, ReviewAnnotation] = store.load_collection(
+    "review_annotations",
+    ReviewAnnotation,
+)
+_failure_modes: Dict[str, FailureMode] = store.load_collection("failure_modes", FailureMode)
+_agent_suggestions: Dict[str, AgentSuggestion] = store.load_collection(
+    "agent_suggestions",
+    AgentSuggestion,
+)
 _eval_results: Dict[str, EvalResult] = store.load_collection("eval_results", EvalResult)
 _judge_outputs: Dict[str, JudgeOutput] = store.load_collection("judge_outputs", JudgeOutput)
 _failure_packets: Dict[str, FailurePacket] = store.load_collection("failure_packets", FailurePacket)
@@ -355,6 +385,92 @@ def get_review_note_or_404(project_id: str, review_note_id: str) -> ReviewNote:
     if review_note is None or review_note.project_id != project_id:
         raise HTTPException(status_code=404, detail="Review note not found.")
     return review_note
+
+
+def get_review_corpus_or_404(project_id: str, corpus_id: str) -> ReviewCorpus:
+    corpus = _review_corpora.get(corpus_id)
+    if corpus is None or corpus.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Review corpus not found.")
+    return corpus
+
+
+def get_review_item_or_404(project_id: str, review_item_id: str) -> ReviewItem:
+    item = _review_items.get(review_item_id)
+    if item is None or item.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Review item not found.")
+    return item
+
+
+def get_review_annotation_or_404(
+    project_id: str,
+    annotation_id: str,
+) -> ReviewAnnotation:
+    annotation = _review_annotations.get(annotation_id)
+    if annotation is None or annotation.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Review annotation not found.")
+    return annotation
+
+
+def get_failure_mode_or_404(project_id: str, failure_mode_id: str) -> FailureMode:
+    failure_mode = _failure_modes.get(failure_mode_id)
+    if failure_mode is None or failure_mode.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Failure mode not found.")
+    return failure_mode
+
+
+def get_agent_suggestion_or_404(
+    project_id: str,
+    suggestion_id: str,
+) -> AgentSuggestion:
+    suggestion = _agent_suggestions.get(suggestion_id)
+    if suggestion is None or suggestion.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Agent suggestion not found.")
+    return suggestion
+
+
+def find_review_item_for_langfuse_import(
+    *,
+    project_id: str,
+    corpus_id: str,
+    review_item_id: Optional[str],
+    source_id: Optional[str],
+    trace_id: Optional[str],
+    observation_id: Optional[str],
+) -> Optional[ReviewItem]:
+    if review_item_id:
+        item = _review_items.get(review_item_id)
+        if item and item.project_id == project_id and item.corpus_id == corpus_id:
+            return item
+        return None
+    for item in _review_items.values():
+        if item.project_id != project_id or item.corpus_id != corpus_id:
+            continue
+        if source_id and item.source_id == source_id:
+            return item
+        if item.langfuse_ref is None:
+            continue
+        if trace_id and item.langfuse_ref.trace_id == trace_id:
+            return item
+        if observation_id and item.langfuse_ref.observation_id == observation_id:
+            return item
+    return None
+
+
+def find_failure_mode_by_name(
+    *,
+    project_id: str,
+    agent_design_id: str,
+    name: str,
+) -> Optional[FailureMode]:
+    normalized_name = name.strip().lower()
+    for failure_mode in _failure_modes.values():
+        if (
+            failure_mode.project_id == project_id
+            and failure_mode.agent_design_id == agent_design_id
+            and failure_mode.name.lower() == normalized_name
+        ):
+            return failure_mode
+    return None
 
 
 def get_failure_packet_or_404(project_id: str, failure_packet_id: str) -> FailurePacket:
@@ -3887,6 +4003,715 @@ def create_review_note(
 def get_review_note(project_id: str, review_note_id: str) -> ReviewNote:
     get_project_or_404(project_id)
     return get_review_note_or_404(project_id, review_note_id)
+
+
+@app.get("/api/projects/{project_id}/review-corpora")
+def list_review_corpora(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+) -> List[ReviewCorpus]:
+    get_project_or_404(project_id)
+    corpora = [
+        corpus
+        for corpus in _review_corpora.values()
+        if corpus.project_id == project_id
+        and (agent_design_id is None or corpus.agent_design_id == agent_design_id)
+    ]
+    return sorted(corpora, key=lambda corpus: corpus.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/review-corpora", status_code=201)
+def create_review_corpus(
+    project_id: str,
+    payload: ReviewCorpusCreate,
+) -> ReviewCorpus:
+    get_project_or_404(project_id)
+    get_agent_design_or_404(project_id, payload.agent_design_id)
+    now = datetime.now(timezone.utc)
+    corpus = ReviewCorpus(
+        id=f"review_corpus_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        name=payload.name.strip(),
+        description=payload.description.strip(),
+        source=payload.source,
+        langfuse_queue_id=payload.langfuse_queue_id,
+        langfuse_score_config_ids=payload.langfuse_score_config_ids,
+        status=payload.status.strip(),
+        artifact_ids=[],
+        created_at=now,
+        updated_at=now,
+    )
+    artifact = create_artifact(
+        project_id=project_id,
+        artifact_type="REVIEW_CORPUS",
+        artifact_id=corpus.id,
+        title=corpus.name,
+        body=(
+            f"Description\n{corpus.description or 'No description'}\n\n"
+            f"Source\n{corpus.source}\n\n"
+            f"Langfuse queue\n{corpus.langfuse_queue_id or 'None'}\n\n"
+            f"Langfuse score configs\n"
+            + "\n".join(f"- {score_id}" for score_id in corpus.langfuse_score_config_ids)
+        ),
+        source="review-corpus",
+        agent_design_id=corpus.agent_design_id,
+        now=now,
+    )
+    corpus = corpus.model_copy(update={"artifact_ids": [artifact.id]})
+    _review_corpora[corpus.id] = corpus
+    store.save_record("review_corpora", corpus.id, corpus)
+    return corpus
+
+
+@app.get("/api/projects/{project_id}/review-corpora/{corpus_id}")
+def get_review_corpus(project_id: str, corpus_id: str) -> ReviewCorpus:
+    get_project_or_404(project_id)
+    return get_review_corpus_or_404(project_id, corpus_id)
+
+
+@app.patch("/api/projects/{project_id}/review-corpora/{corpus_id}")
+def update_review_corpus(
+    project_id: str,
+    corpus_id: str,
+    payload: ReviewCorpusUpdate,
+) -> ReviewCorpus:
+    get_project_or_404(project_id)
+    existing = get_review_corpus_or_404(project_id, corpus_id)
+    updated = existing.model_copy(
+        update={
+            "name": payload.name.strip() if payload.name is not None else existing.name,
+            "description": (
+                payload.description.strip()
+                if payload.description is not None
+                else existing.description
+            ),
+            "langfuse_queue_id": (
+                payload.langfuse_queue_id
+                if payload.langfuse_queue_id is not None
+                else existing.langfuse_queue_id
+            ),
+            "langfuse_score_config_ids": (
+                payload.langfuse_score_config_ids
+                if payload.langfuse_score_config_ids is not None
+                else existing.langfuse_score_config_ids
+            ),
+            "status": payload.status.strip() if payload.status is not None else existing.status,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    _review_corpora[updated.id] = updated
+    store.save_record("review_corpora", updated.id, updated)
+    return updated
+
+
+@app.get("/api/projects/{project_id}/review-items")
+def list_review_items(
+    project_id: str,
+    corpus_id: Optional[str] = None,
+    agent_design_id: Optional[str] = None,
+    status: Optional[str] = None,
+) -> List[ReviewItem]:
+    get_project_or_404(project_id)
+    items = [
+        item
+        for item in _review_items.values()
+        if item.project_id == project_id
+        and (corpus_id is None or item.corpus_id == corpus_id)
+        and (agent_design_id is None or item.agent_design_id == agent_design_id)
+        and (status is None or item.status == status)
+    ]
+    return sorted(items, key=lambda item: item.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/review-items", status_code=201)
+def create_review_item(project_id: str, payload: ReviewItemCreate) -> ReviewItem:
+    get_project_or_404(project_id)
+    corpus = get_review_corpus_or_404(project_id, payload.corpus_id)
+    if payload.source_kind == "artifact":
+        get_artifact_or_404(project_id, payload.source_id)
+    elif payload.source_kind == "run":
+        get_run_or_404(project_id, payload.source_id)
+    elif payload.source_kind == "eval_result":
+        get_eval_result_or_404(project_id, payload.source_id)
+    elif payload.source_kind == "trace":
+        if payload.langfuse_ref is None or not (
+            payload.langfuse_ref.trace_id or payload.langfuse_ref.observation_id
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Trace review items require a Langfuse trace or observation reference.",
+            )
+    now = datetime.now(timezone.utc)
+    item = ReviewItem(
+        id=f"review_item_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=corpus.agent_design_id,
+        corpus_id=corpus.id,
+        source_kind=payload.source_kind,
+        source_id=payload.source_id,
+        title=payload.title.strip(),
+        content=payload.content,
+        langfuse_ref=payload.langfuse_ref,
+        metadata=payload.metadata,
+        status=payload.status.strip(),
+        created_at=now,
+        updated_at=now,
+    )
+    _review_items[item.id] = item
+    store.save_record("review_items", item.id, item)
+    return item
+
+
+@app.get("/api/projects/{project_id}/review-items/{review_item_id}")
+def get_review_item(project_id: str, review_item_id: str) -> ReviewItem:
+    get_project_or_404(project_id)
+    return get_review_item_or_404(project_id, review_item_id)
+
+
+@app.patch("/api/projects/{project_id}/review-items/{review_item_id}")
+def update_review_item(
+    project_id: str,
+    review_item_id: str,
+    payload: ReviewItemUpdate,
+) -> ReviewItem:
+    get_project_or_404(project_id)
+    existing = get_review_item_or_404(project_id, review_item_id)
+    updated = existing.model_copy(
+        update={
+            "title": payload.title.strip() if payload.title is not None else existing.title,
+            "content": payload.content if payload.content is not None else existing.content,
+            "metadata": payload.metadata if payload.metadata is not None else existing.metadata,
+            "status": payload.status.strip() if payload.status is not None else existing.status,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    _review_items[updated.id] = updated
+    store.save_record("review_items", updated.id, updated)
+    return updated
+
+
+@app.post(
+    "/api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-items",
+    status_code=201,
+)
+def import_langfuse_review_items(
+    project_id: str,
+    corpus_id: str,
+    payload: LangfuseReviewItemsImportCreate,
+) -> LangfuseReviewItemsImportResult:
+    get_project_or_404(project_id)
+    corpus = get_review_corpus_or_404(project_id, corpus_id)
+    imported: List[ReviewItem] = []
+    skipped_count = 0
+    now = datetime.now(timezone.utc)
+    for item_payload in payload.items:
+        if not (item_payload.trace_id or item_payload.observation_id):
+            skipped_count += 1
+            continue
+        existing = find_review_item_for_langfuse_import(
+            project_id=project_id,
+            corpus_id=corpus.id,
+            review_item_id=None,
+            source_id=item_payload.source_id,
+            trace_id=item_payload.trace_id,
+            observation_id=item_payload.observation_id,
+        )
+        if existing is not None:
+            skipped_count += 1
+            continue
+        item = ReviewItem(
+            id=f"review_item_{uuid4().hex[:12]}",
+            project_id=project_id,
+            agent_design_id=corpus.agent_design_id,
+            corpus_id=corpus.id,
+            source_kind="trace",
+            source_id=item_payload.source_id,
+            title=item_payload.title.strip(),
+            content=item_payload.content,
+            langfuse_ref={
+                "trace_id": item_payload.trace_id,
+                "observation_id": item_payload.observation_id,
+                "object_type": item_payload.object_type,
+                "url": item_payload.url,
+                "queue_id": item_payload.queue_id or corpus.langfuse_queue_id,
+                "score_ids": item_payload.score_ids,
+                "metadata": item_payload.metadata,
+            },
+            metadata={
+                **item_payload.metadata,
+                "import_source": "langfuse",
+                "langfuse_queue_id": item_payload.queue_id or corpus.langfuse_queue_id,
+            },
+            status="unreviewed",
+            created_at=now,
+            updated_at=now,
+        )
+        _review_items[item.id] = item
+        store.save_record("review_items", item.id, item)
+        imported.append(item)
+    return LangfuseReviewItemsImportResult(
+        review_items=imported,
+        imported_count=len(imported),
+        skipped_count=skipped_count,
+    )
+
+
+@app.post(
+    "/api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-annotations",
+    status_code=201,
+)
+def import_langfuse_review_annotations(
+    project_id: str,
+    corpus_id: str,
+    payload: LangfuseAnnotationsImportCreate,
+) -> LangfuseAnnotationsImportResult:
+    get_project_or_404(project_id)
+    corpus = get_review_corpus_or_404(project_id, corpus_id)
+    imported_annotations: List[ReviewAnnotation] = []
+    imported_failure_modes: Dict[str, FailureMode] = {}
+    skipped_count = 0
+    now = datetime.now(timezone.utc)
+    for annotation_payload in payload.annotations:
+        item = find_review_item_for_langfuse_import(
+            project_id=project_id,
+            corpus_id=corpus.id,
+            review_item_id=annotation_payload.review_item_id,
+            source_id=annotation_payload.source_id,
+            trace_id=annotation_payload.trace_id,
+            observation_id=annotation_payload.observation_id,
+        )
+        if item is None:
+            skipped_count += 1
+            continue
+
+        failure_mode_id: Optional[str] = None
+        failure_mode_name = (annotation_payload.failure_mode_name or "").strip()
+        if failure_mode_name:
+            failure_mode = find_failure_mode_by_name(
+                project_id=project_id,
+                agent_design_id=corpus.agent_design_id,
+                name=failure_mode_name,
+            )
+            if failure_mode is None:
+                failure_mode = FailureMode(
+                    id=f"failure_mode_{uuid4().hex[:12]}",
+                    project_id=project_id,
+                    agent_design_id=corpus.agent_design_id,
+                    name=failure_mode_name,
+                    description=(
+                        annotation_payload.failure_mode_description.strip()
+                        or f"Imported from Langfuse open-coding label {failure_mode_name}."
+                    ),
+                    root_cause="",
+                    severity="medium",
+                    status="candidate",
+                    langfuse_score_name=failure_mode_name,
+                    example_annotation_ids=[],
+                    created_at=now,
+                    updated_at=now,
+                )
+                _failure_modes[failure_mode.id] = failure_mode
+                store.save_record("failure_modes", failure_mode.id, failure_mode)
+                create_artifact(
+                    project_id=project_id,
+                    artifact_type="FAILURE_MODE",
+                    artifact_id=failure_mode.id,
+                    title=failure_mode.name,
+                    body=(
+                        f"Definition\n{failure_mode.description}\n\n"
+                        "Root cause\nNeeds analysis\n\n"
+                        f"Langfuse score\n{failure_mode.langfuse_score_name or 'None'}"
+                    ),
+                    source="langfuse-error-analysis",
+                    agent_design_id=failure_mode.agent_design_id,
+                    now=now,
+                )
+                imported_failure_modes[failure_mode.id] = failure_mode
+            failure_mode_id = failure_mode.id
+
+        annotation = ReviewAnnotation(
+            id=f"review_annotation_{uuid4().hex[:12]}",
+            project_id=project_id,
+            agent_design_id=corpus.agent_design_id,
+            corpus_id=corpus.id,
+            review_item_id=item.id,
+            body=annotation_payload.open_coding.strip(),
+            quote="",
+            span_start=None,
+            span_end=None,
+            author="human",
+            failure_mode_id=failure_mode_id,
+            suggestion_id=None,
+            langfuse_score_id=annotation_payload.langfuse_score_id,
+            status="accepted",
+            metadata={
+                **annotation_payload.metadata,
+                "import_source": "langfuse",
+                "pass_fail": annotation_payload.pass_fail,
+            },
+            created_at=now,
+            updated_at=now,
+        )
+        _review_annotations[annotation.id] = annotation
+        store.save_record("review_annotations", annotation.id, annotation)
+        imported_annotations.append(annotation)
+
+        item_status = "reviewed" if annotation_payload.pass_fail != "unknown" else item.status
+        updated_item = item.model_copy(update={"status": item_status, "updated_at": now})
+        _review_items[updated_item.id] = updated_item
+        store.save_record("review_items", updated_item.id, updated_item)
+
+    return LangfuseAnnotationsImportResult(
+        annotations=imported_annotations,
+        failure_modes=list(imported_failure_modes.values()),
+        imported_count=len(imported_annotations),
+        skipped_count=skipped_count,
+    )
+
+
+@app.get("/api/projects/{project_id}/failure-modes")
+def list_failure_modes(
+    project_id: str,
+    agent_design_id: Optional[str] = None,
+    status: Optional[str] = None,
+) -> List[FailureMode]:
+    get_project_or_404(project_id)
+    failure_modes = [
+        failure_mode
+        for failure_mode in _failure_modes.values()
+        if failure_mode.project_id == project_id
+        and (agent_design_id is None or failure_mode.agent_design_id == agent_design_id)
+        and (status is None or failure_mode.status == status)
+    ]
+    return sorted(failure_modes, key=lambda failure_mode: failure_mode.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/failure-modes", status_code=201)
+def create_failure_mode(
+    project_id: str,
+    payload: FailureModeCreate,
+) -> FailureMode:
+    get_project_or_404(project_id)
+    get_agent_design_or_404(project_id, payload.agent_design_id)
+    for annotation_id in payload.example_annotation_ids:
+        annotation = get_review_annotation_or_404(project_id, annotation_id)
+        if annotation.agent_design_id != payload.agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Failure mode examples must belong to the same agent design.",
+            )
+    now = datetime.now(timezone.utc)
+    failure_mode = FailureMode(
+        id=f"failure_mode_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=payload.agent_design_id,
+        name=payload.name.strip(),
+        description=payload.description.strip(),
+        root_cause=payload.root_cause.strip(),
+        severity=payload.severity.strip(),
+        status=payload.status.strip(),
+        langfuse_score_name=payload.langfuse_score_name,
+        example_annotation_ids=payload.example_annotation_ids,
+        created_at=now,
+        updated_at=now,
+    )
+    create_artifact(
+        project_id=project_id,
+        artifact_type="FAILURE_MODE",
+        artifact_id=failure_mode.id,
+        title=failure_mode.name,
+        body=(
+            f"Definition\n{failure_mode.description}\n\n"
+            f"Root cause\n{failure_mode.root_cause or 'Needs analysis'}\n\n"
+            f"Langfuse score\n{failure_mode.langfuse_score_name or 'None'}"
+        ),
+        source="failure-mode",
+        agent_design_id=failure_mode.agent_design_id,
+        now=now,
+    )
+    _failure_modes[failure_mode.id] = failure_mode
+    store.save_record("failure_modes", failure_mode.id, failure_mode)
+    return failure_mode
+
+
+@app.get("/api/projects/{project_id}/failure-modes/{failure_mode_id}")
+def get_failure_mode(project_id: str, failure_mode_id: str) -> FailureMode:
+    get_project_or_404(project_id)
+    return get_failure_mode_or_404(project_id, failure_mode_id)
+
+
+@app.patch("/api/projects/{project_id}/failure-modes/{failure_mode_id}")
+def update_failure_mode(
+    project_id: str,
+    failure_mode_id: str,
+    payload: FailureModeUpdate,
+) -> FailureMode:
+    get_project_or_404(project_id)
+    existing = get_failure_mode_or_404(project_id, failure_mode_id)
+    example_annotation_ids = (
+        payload.example_annotation_ids
+        if payload.example_annotation_ids is not None
+        else existing.example_annotation_ids
+    )
+    for annotation_id in example_annotation_ids:
+        annotation = get_review_annotation_or_404(project_id, annotation_id)
+        if annotation.agent_design_id != existing.agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Failure mode examples must belong to the same agent design.",
+            )
+    updated = existing.model_copy(
+        update={
+            "name": payload.name.strip() if payload.name is not None else existing.name,
+            "description": (
+                payload.description.strip()
+                if payload.description is not None
+                else existing.description
+            ),
+            "root_cause": (
+                payload.root_cause.strip()
+                if payload.root_cause is not None
+                else existing.root_cause
+            ),
+            "severity": (
+                payload.severity.strip() if payload.severity is not None else existing.severity
+            ),
+            "status": payload.status.strip() if payload.status is not None else existing.status,
+            "langfuse_score_name": (
+                payload.langfuse_score_name
+                if payload.langfuse_score_name is not None
+                else existing.langfuse_score_name
+            ),
+            "example_annotation_ids": example_annotation_ids,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    _failure_modes[updated.id] = updated
+    store.save_record("failure_modes", updated.id, updated)
+    return updated
+
+
+@app.get("/api/projects/{project_id}/review-annotations")
+def list_review_annotations(
+    project_id: str,
+    corpus_id: Optional[str] = None,
+    review_item_id: Optional[str] = None,
+    failure_mode_id: Optional[str] = None,
+    status: Optional[str] = None,
+) -> List[ReviewAnnotation]:
+    get_project_or_404(project_id)
+    annotations = [
+        annotation
+        for annotation in _review_annotations.values()
+        if annotation.project_id == project_id
+        and (corpus_id is None or annotation.corpus_id == corpus_id)
+        and (review_item_id is None or annotation.review_item_id == review_item_id)
+        and (failure_mode_id is None or annotation.failure_mode_id == failure_mode_id)
+        and (status is None or annotation.status == status)
+    ]
+    return sorted(annotations, key=lambda annotation: annotation.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/review-annotations", status_code=201)
+def create_review_annotation(
+    project_id: str,
+    payload: ReviewAnnotationCreate,
+) -> ReviewAnnotation:
+    get_project_or_404(project_id)
+    item = get_review_item_or_404(project_id, payload.review_item_id)
+    if payload.failure_mode_id is not None:
+        failure_mode = get_failure_mode_or_404(project_id, payload.failure_mode_id)
+        if failure_mode.agent_design_id != item.agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Failure mode must belong to the same agent design as the review item.",
+            )
+    if payload.suggestion_id is not None:
+        suggestion = get_agent_suggestion_or_404(project_id, payload.suggestion_id)
+        if suggestion.review_item_id != item.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Suggestion must belong to the same review item as the annotation.",
+            )
+    now = datetime.now(timezone.utc)
+    annotation = ReviewAnnotation(
+        id=f"review_annotation_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=item.agent_design_id,
+        corpus_id=item.corpus_id,
+        review_item_id=item.id,
+        body=payload.body.strip(),
+        quote=payload.quote,
+        span_start=payload.span_start,
+        span_end=payload.span_end,
+        author=payload.author,
+        failure_mode_id=payload.failure_mode_id,
+        suggestion_id=payload.suggestion_id,
+        langfuse_score_id=payload.langfuse_score_id,
+        status=payload.status,
+        metadata=payload.metadata,
+        created_at=now,
+        updated_at=now,
+    )
+    _review_annotations[annotation.id] = annotation
+    store.save_record("review_annotations", annotation.id, annotation)
+    return annotation
+
+
+@app.get("/api/projects/{project_id}/review-annotations/{annotation_id}")
+def get_review_annotation(project_id: str, annotation_id: str) -> ReviewAnnotation:
+    get_project_or_404(project_id)
+    return get_review_annotation_or_404(project_id, annotation_id)
+
+
+@app.patch("/api/projects/{project_id}/review-annotations/{annotation_id}")
+def update_review_annotation(
+    project_id: str,
+    annotation_id: str,
+    payload: ReviewAnnotationUpdate,
+) -> ReviewAnnotation:
+    get_project_or_404(project_id)
+    existing = get_review_annotation_or_404(project_id, annotation_id)
+    if payload.failure_mode_id is not None:
+        failure_mode = get_failure_mode_or_404(project_id, payload.failure_mode_id)
+        if failure_mode.agent_design_id != existing.agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Failure mode must belong to the same agent design as the annotation.",
+            )
+    updated = existing.model_copy(
+        update={
+            "body": payload.body.strip() if payload.body is not None else existing.body,
+            "quote": payload.quote if payload.quote is not None else existing.quote,
+            "span_start": payload.span_start if payload.span_start is not None else existing.span_start,
+            "span_end": payload.span_end if payload.span_end is not None else existing.span_end,
+            "failure_mode_id": (
+                payload.failure_mode_id
+                if payload.failure_mode_id is not None
+                else existing.failure_mode_id
+            ),
+            "langfuse_score_id": (
+                payload.langfuse_score_id
+                if payload.langfuse_score_id is not None
+                else existing.langfuse_score_id
+            ),
+            "status": payload.status if payload.status is not None else existing.status,
+            "metadata": payload.metadata if payload.metadata is not None else existing.metadata,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    _review_annotations[updated.id] = updated
+    store.save_record("review_annotations", updated.id, updated)
+    return updated
+
+
+@app.get("/api/projects/{project_id}/agent-suggestions")
+def list_agent_suggestions(
+    project_id: str,
+    corpus_id: Optional[str] = None,
+    review_item_id: Optional[str] = None,
+    failure_mode_id: Optional[str] = None,
+    status: Optional[str] = None,
+) -> List[AgentSuggestion]:
+    get_project_or_404(project_id)
+    suggestions = [
+        suggestion
+        for suggestion in _agent_suggestions.values()
+        if suggestion.project_id == project_id
+        and (corpus_id is None or suggestion.corpus_id == corpus_id)
+        and (review_item_id is None or suggestion.review_item_id == review_item_id)
+        and (failure_mode_id is None or suggestion.failure_mode_id == failure_mode_id)
+        and (status is None or suggestion.status == status)
+    ]
+    return sorted(suggestions, key=lambda suggestion: suggestion.updated_at, reverse=True)
+
+
+@app.post("/api/projects/{project_id}/agent-suggestions", status_code=201)
+def create_agent_suggestion(
+    project_id: str,
+    payload: AgentSuggestionCreate,
+) -> AgentSuggestion:
+    get_project_or_404(project_id)
+    item = get_review_item_or_404(project_id, payload.review_item_id)
+    if payload.failure_mode_id is not None:
+        failure_mode = get_failure_mode_or_404(project_id, payload.failure_mode_id)
+        if failure_mode.agent_design_id != item.agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Failure mode must belong to the same agent design as the review item.",
+            )
+    now = datetime.now(timezone.utc)
+    suggestion = AgentSuggestion(
+        id=f"agent_suggestion_{uuid4().hex[:12]}",
+        project_id=project_id,
+        agent_design_id=item.agent_design_id,
+        corpus_id=item.corpus_id,
+        review_item_id=item.id,
+        failure_mode_id=payload.failure_mode_id,
+        body=payload.body.strip(),
+        quote=payload.quote,
+        span_start=payload.span_start,
+        span_end=payload.span_end,
+        rationale=payload.rationale.strip(),
+        confidence=payload.confidence,
+        source=payload.source.strip(),
+        status=payload.status,
+        metadata=payload.metadata,
+        created_at=now,
+        updated_at=now,
+    )
+    _agent_suggestions[suggestion.id] = suggestion
+    store.save_record("agent_suggestions", suggestion.id, suggestion)
+    return suggestion
+
+
+@app.get("/api/projects/{project_id}/agent-suggestions/{suggestion_id}")
+def get_agent_suggestion(project_id: str, suggestion_id: str) -> AgentSuggestion:
+    get_project_or_404(project_id)
+    return get_agent_suggestion_or_404(project_id, suggestion_id)
+
+
+@app.patch("/api/projects/{project_id}/agent-suggestions/{suggestion_id}")
+def update_agent_suggestion(
+    project_id: str,
+    suggestion_id: str,
+    payload: AgentSuggestionUpdate,
+) -> AgentSuggestion:
+    get_project_or_404(project_id)
+    existing = get_agent_suggestion_or_404(project_id, suggestion_id)
+    if payload.failure_mode_id is not None:
+        failure_mode = get_failure_mode_or_404(project_id, payload.failure_mode_id)
+        if failure_mode.agent_design_id != existing.agent_design_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Failure mode must belong to the same agent design as the suggestion.",
+            )
+    updated = existing.model_copy(
+        update={
+            "failure_mode_id": (
+                payload.failure_mode_id
+                if payload.failure_mode_id is not None
+                else existing.failure_mode_id
+            ),
+            "body": payload.body.strip() if payload.body is not None else existing.body,
+            "quote": payload.quote if payload.quote is not None else existing.quote,
+            "span_start": payload.span_start if payload.span_start is not None else existing.span_start,
+            "span_end": payload.span_end if payload.span_end is not None else existing.span_end,
+            "rationale": (
+                payload.rationale.strip()
+                if payload.rationale is not None
+                else existing.rationale
+            ),
+            "confidence": payload.confidence if payload.confidence is not None else existing.confidence,
+            "status": payload.status if payload.status is not None else existing.status,
+            "metadata": payload.metadata if payload.metadata is not None else existing.metadata,
+            "updated_at": datetime.now(timezone.utc),
+        }
+    )
+    _agent_suggestions[updated.id] = updated
+    store.save_record("agent_suggestions", updated.id, updated)
+    return updated
 
 
 @app.post("/api/projects/{project_id}/runs/{run_id}/evaluate", status_code=201)

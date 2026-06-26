@@ -362,6 +362,257 @@ class ReviewNote(BaseModel):
     created_at: datetime
 
 
+class LangfuseObjectRef(BaseModel):
+    trace_id: Optional[str] = None
+    observation_id: Optional[str] = None
+    object_type: Literal["TRACE", "OBSERVATION"] = "TRACE"
+    url: Optional[str] = None
+    queue_id: Optional[str] = None
+    score_ids: List[str] = Field(default_factory=list)
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
+class ReviewCorpusCreate(BaseModel):
+    agent_design_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = ""
+    source: Literal["edd", "langfuse", "mixed"] = "edd"
+    langfuse_queue_id: Optional[str] = None
+    langfuse_score_config_ids: List[str] = Field(default_factory=list)
+    status: str = "draft"
+
+
+class ReviewCorpusUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    langfuse_queue_id: Optional[str] = None
+    langfuse_score_config_ids: Optional[List[str]] = None
+    status: Optional[str] = None
+
+
+class ReviewCorpus(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    name: str
+    description: str
+    source: str
+    langfuse_queue_id: Optional[str] = None
+    langfuse_score_config_ids: List[str]
+    status: str
+    artifact_ids: List[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewItemCreate(BaseModel):
+    corpus_id: str = Field(min_length=1)
+    source_kind: Literal["artifact", "run", "eval_result", "trace"] = "artifact"
+    source_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    content: str = ""
+    langfuse_ref: Optional[LangfuseObjectRef] = None
+    metadata: Dict[str, object] = Field(default_factory=dict)
+    status: str = "unreviewed"
+
+
+class ReviewItemUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    metadata: Optional[Dict[str, object]] = None
+    status: Optional[str] = None
+
+
+class ReviewItem(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    corpus_id: str
+    source_kind: str
+    source_id: str
+    title: str
+    content: str
+    langfuse_ref: Optional[LangfuseObjectRef] = None
+    metadata: Dict[str, object]
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class LangfuseReviewItemImport(BaseModel):
+    source_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    content: str = ""
+    trace_id: Optional[str] = None
+    observation_id: Optional[str] = None
+    object_type: Literal["TRACE", "OBSERVATION"] = "TRACE"
+    url: Optional[str] = None
+    queue_id: Optional[str] = None
+    score_ids: List[str] = Field(default_factory=list)
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
+class LangfuseReviewItemsImportCreate(BaseModel):
+    items: List[LangfuseReviewItemImport] = Field(default_factory=list)
+
+
+class LangfuseReviewItemsImportResult(BaseModel):
+    review_items: List[ReviewItem]
+    imported_count: int
+    skipped_count: int
+
+
+class FailureModeCreate(BaseModel):
+    agent_design_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    root_cause: str = ""
+    severity: str = "medium"
+    status: str = "candidate"
+    langfuse_score_name: Optional[str] = None
+    example_annotation_ids: List[str] = Field(default_factory=list)
+
+
+class FailureModeUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    root_cause: Optional[str] = None
+    severity: Optional[str] = None
+    status: Optional[str] = None
+    langfuse_score_name: Optional[str] = None
+    example_annotation_ids: Optional[List[str]] = None
+
+
+class FailureMode(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    name: str
+    description: str
+    root_cause: str
+    severity: str
+    status: str
+    langfuse_score_name: Optional[str] = None
+    example_annotation_ids: List[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewAnnotationCreate(BaseModel):
+    review_item_id: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    quote: str = ""
+    span_start: Optional[int] = None
+    span_end: Optional[int] = None
+    author: Literal["human", "agent", "platform"] = "human"
+    failure_mode_id: Optional[str] = None
+    suggestion_id: Optional[str] = None
+    langfuse_score_id: Optional[str] = None
+    status: Literal["accepted", "suggested", "dismissed"] = "accepted"
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
+class ReviewAnnotationUpdate(BaseModel):
+    body: Optional[str] = None
+    quote: Optional[str] = None
+    span_start: Optional[int] = None
+    span_end: Optional[int] = None
+    failure_mode_id: Optional[str] = None
+    langfuse_score_id: Optional[str] = None
+    status: Optional[Literal["accepted", "suggested", "dismissed"]] = None
+    metadata: Optional[Dict[str, object]] = None
+
+
+class ReviewAnnotation(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    corpus_id: str
+    review_item_id: str
+    body: str
+    quote: str
+    span_start: Optional[int] = None
+    span_end: Optional[int] = None
+    author: str
+    failure_mode_id: Optional[str] = None
+    suggestion_id: Optional[str] = None
+    langfuse_score_id: Optional[str] = None
+    status: str
+    metadata: Dict[str, object]
+    created_at: datetime
+    updated_at: datetime
+
+
+class LangfuseAnnotationImport(BaseModel):
+    review_item_id: Optional[str] = None
+    source_id: Optional[str] = None
+    trace_id: Optional[str] = None
+    observation_id: Optional[str] = None
+    open_coding: str = Field(min_length=1)
+    pass_fail: Optional[Literal["pass", "fail", "unknown"]] = None
+    failure_mode_name: Optional[str] = None
+    failure_mode_description: str = ""
+    langfuse_score_id: Optional[str] = None
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
+class LangfuseAnnotationsImportCreate(BaseModel):
+    annotations: List[LangfuseAnnotationImport] = Field(default_factory=list)
+
+
+class LangfuseAnnotationsImportResult(BaseModel):
+    annotations: List[ReviewAnnotation]
+    failure_modes: List[FailureMode]
+    imported_count: int
+    skipped_count: int
+
+
+class AgentSuggestionCreate(BaseModel):
+    review_item_id: str = Field(min_length=1)
+    failure_mode_id: Optional[str] = None
+    body: str = Field(min_length=1)
+    quote: str = ""
+    span_start: Optional[int] = None
+    span_end: Optional[int] = None
+    rationale: str = ""
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    source: str = "agent"
+    status: Literal["pending", "accepted", "dismissed"] = "pending"
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
+class AgentSuggestionUpdate(BaseModel):
+    failure_mode_id: Optional[str] = None
+    body: Optional[str] = None
+    quote: Optional[str] = None
+    span_start: Optional[int] = None
+    span_end: Optional[int] = None
+    rationale: Optional[str] = None
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    status: Optional[Literal["pending", "accepted", "dismissed"]] = None
+    metadata: Optional[Dict[str, object]] = None
+
+
+class AgentSuggestion(BaseModel):
+    id: str
+    project_id: str
+    agent_design_id: str
+    corpus_id: str
+    review_item_id: str
+    failure_mode_id: Optional[str] = None
+    body: str
+    quote: str
+    span_start: Optional[int] = None
+    span_end: Optional[int] = None
+    rationale: str
+    confidence: Optional[float] = None
+    source: str
+    status: str
+    metadata: Dict[str, object]
+    created_at: datetime
+    updated_at: datetime
+
+
 class AgentRunResult(BaseModel):
     id: str
     project_id: str

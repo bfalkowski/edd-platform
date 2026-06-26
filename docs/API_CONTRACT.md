@@ -341,6 +341,77 @@ decided_by
 created_at
 ```
 
+### Discovery Error Analysis
+
+Discovery error analysis turns messy traces, runs, and artifacts into structured
+failure evidence before the proof loop proposes fixes.
+
+The minimum durable objects are:
+
+- `ReviewCorpus`: a project-scoped set of review items for one agent design.
+- `ReviewItem`: a trace, Langfuse generation observation, run, eval result, or
+  artifact selected for review.
+- `ReviewAnnotation`: a free-text human or agent note on a review item.
+- `FailureMode`: a first-class taxonomy category discovered from annotations.
+- `AgentSuggestion`: a proposed annotation or mode match that requires human
+  accept/dismiss before it influences confirmed evidence.
+
+```text
+GET   /api/projects/{project_id}/review-corpora
+POST  /api/projects/{project_id}/review-corpora
+GET   /api/projects/{project_id}/review-corpora/{corpus_id}
+PATCH /api/projects/{project_id}/review-corpora/{corpus_id}
+POST  /api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-items
+POST  /api/projects/{project_id}/review-corpora/{corpus_id}/langfuse-annotations
+
+GET   /api/projects/{project_id}/review-items
+POST  /api/projects/{project_id}/review-items
+GET   /api/projects/{project_id}/review-items/{review_item_id}
+PATCH /api/projects/{project_id}/review-items/{review_item_id}
+
+GET   /api/projects/{project_id}/review-annotations
+POST  /api/projects/{project_id}/review-annotations
+GET   /api/projects/{project_id}/review-annotations/{annotation_id}
+PATCH /api/projects/{project_id}/review-annotations/{annotation_id}
+
+GET   /api/projects/{project_id}/failure-modes
+POST  /api/projects/{project_id}/failure-modes
+GET   /api/projects/{project_id}/failure-modes/{failure_mode_id}
+PATCH /api/projects/{project_id}/failure-modes/{failure_mode_id}
+
+GET   /api/projects/{project_id}/agent-suggestions
+POST  /api/projects/{project_id}/agent-suggestions
+GET   /api/projects/{project_id}/agent-suggestions/{suggestion_id}
+PATCH /api/projects/{project_id}/agent-suggestions/{suggestion_id}
+```
+
+Langfuse integration is represented through refs on corpus/items/annotations:
+
+```text
+langfuse_queue_id
+langfuse_score_config_ids
+langfuse_ref.trace_id
+langfuse_ref.observation_id
+langfuse_ref.object_type
+langfuse_ref.score_ids
+langfuse_score_id
+```
+
+For OpenTelemetry traces, `ReviewItem.langfuse_ref.object_type` may be
+`OBSERVATION` so the UI can target a Langfuse generation observation when
+trace-level input/output is empty. EDD stores these refs as evidence links; live
+Langfuse queue and score mutations stay explicit and opt-in.
+
+The Langfuse import endpoints are deterministic landing zones for live sync
+workflows:
+
+- `langfuse-items` imports selected queue items or trace/generation observation
+  rows into EDD review items and skips duplicates by source, trace, or
+  observation id.
+- `langfuse-annotations` imports open-coding/pass-fail/category score rows into
+  accepted EDD review annotations and creates candidate `FailureMode` records
+  for new category labels.
+
 ### Review Notes
 
 Review notes are platform-owned human comments on evidence artifacts. They can
