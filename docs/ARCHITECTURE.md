@@ -12,6 +12,8 @@ Planning companions:
 - [`SYSTEM_TRADEOFFS.md`](SYSTEM_TRADEOFFS.md) records the main architecture tradeoffs.
 - [`OPERABILITY_AND_FAILURE_MODES.md`](OPERABILITY_AND_FAILURE_MODES.md) describes expected failure behavior and recovery paths.
 - [`ARCHITECTURE_DEEP_DIVES.md`](ARCHITECTURE_DEEP_DIVES.md) expands the eval pipeline, tool governance, evidence context, and readiness flows.
+- [`hld/HLD-005-relational-metadata-and-polars-analysis-plane.md`](hld/HLD-005-relational-metadata-and-polars-analysis-plane.md)
+  defines the Postgres source-of-truth plus Polars analysis read-side.
 
 ## System Context
 
@@ -20,7 +22,8 @@ flowchart LR
   User["User / evaluator / researcher"]
   UI["React console<br/>apps/web"]
   API["Platform API<br/>apps/api"]
-  Store["Project + evidence store<br/>projects, designs, artifacts, links, runs, evals, gates"]
+  Store["Relational product store<br/>projects, designs, artifacts, links, runs, evals, gates, jobs"]
+  Analysis["Polars analysis plane<br/>trace, span, review-corpus, failure-rate snapshots"]
   Tools["Tool governance<br/>definitions, approval, allowlists"]
   Runner["Runner package<br/>packages/runner"]
   LangGraph["LangChain / LangGraph<br/>agent + tool loop"]
@@ -29,6 +32,7 @@ flowchart LR
   User --> UI
   UI --> API
   API --> Store
+  API --> Analysis
   API --> Tools
   API --> Runner
   Tools --> Runner

@@ -927,6 +927,73 @@
         "title": "AgentVersionCreate",
         "type": "object"
       },
+      "AnalysisSnapshotMetadata": {
+        "properties": {
+          "annotation_count": {
+            "default": 0,
+            "title": "Annotation Count",
+            "type": "integer"
+          },
+          "directory": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directory"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "failure_mode_count": {
+            "default": 0,
+            "title": "Failure Mode Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "item_count": {
+            "default": 0,
+            "title": "Item Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "materialized",
+              "loaded",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AnalysisSnapshotMetadata",
+        "type": "object"
+      },
       "ArtifactLink": {
         "properties": {
           "created_at": {
@@ -4068,6 +4135,16 @@
           "rationale": {
             "title": "Rationale",
             "type": "string"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisSnapshotMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_kind_counts": {
             "additionalProperties": {

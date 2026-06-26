@@ -716,11 +716,12 @@ async function createAgentDesign(
 async function createAgentDesignFromOutcome(
   projectId: string,
   outcome: string,
+  name?: string,
 ): Promise<OutcomeAgentResponse> {
   const response = await fetch(`${apiBase}/projects/${projectId}/agent-designs/from-outcome`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ outcome }),
+    body: JSON.stringify({ outcome, name: name || undefined }),
   });
   if (!response.ok) {
     throw await responseError(response, "Unable to draft agent from outcome.");
@@ -790,6 +791,15 @@ async function updateToolDefinitionStatus(
     throw await responseError(response, "Unable to update tool status.");
   }
   return response.json();
+}
+
+async function deleteToolDefinition(projectId: string, toolId: string): Promise<void> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/tools/${toolId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to delete tool.");
+  }
 }
 
 async function updateAgentDesignToolAllowlist(
@@ -1269,13 +1279,37 @@ async function updateAgentSuggestionStatus(
   return response.json();
 }
 
+async function generateFixProposal(
+  projectId: string,
+  agentDesignId: string,
+  targetVersionId: string,
+  failurePackets: FailurePacket[],
+  contractId: string,
+): Promise<{ proposed_instructions: string; rationale: string }> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/fix-proposals/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_design_id: agentDesignId,
+      target_version_id: targetVersionId,
+      addressed_failure_packet_ids: failurePackets.map((p) => p.id),
+      validation_contract_id: contractId,
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to generate fix proposal.");
+  }
+  return response.json();
+}
+
 async function createFixProposal(
   projectId: string,
   agentDesignId: string,
   targetVersionId: string,
   failurePackets: FailurePacket[],
   contractId: string,
-  requiredPhrase: string,
+  proposedInstructions: string,
+  rationale: string,
 ): Promise<FixProposal> {
   const response = await fetch(`${apiBase}/projects/${projectId}/fix-proposals`, {
     method: "POST",
@@ -1283,15 +1317,10 @@ async function createFixProposal(
     body: JSON.stringify({
       agent_design_id: agentDesignId,
       target_version_id: targetVersionId,
-      title: `Clarify expected response: ${requiredPhrase}`,
-      rationale: "The baseline failed the explicit success criteria.",
-      proposed_changes: [
-        {
-          surface: "instructions",
-          change: candidateInstructions(requiredPhrase),
-        },
-      ],
-      addressed_failure_packet_ids: failurePackets.map((packet) => packet.id),
+      title: "LLM-generated fix for failed evaluation",
+      rationale,
+      proposed_changes: [{ surface: "instructions", change: proposedInstructions }],
+      addressed_failure_packet_ids: failurePackets.map((p) => p.id),
       validation_contract_ids: [contractId],
     }),
   });
@@ -1657,9 +1686,6 @@ function inferExpectedResponse(agent: AgentDesign): string {
   return intent || agent.name;
 }
 
-function candidateInstructions(expectedResponse: string): string {
-  return `Respond with: ${expectedResponse.trim()}`;
-}
 
 async function hydrateEddFlow(projectId: string, agent: AgentDesign): Promise<EddFlowState> {
   const [versions, scenarios, contracts, runs, failurePackets, fixProposals, comparisons] =
@@ -1758,6 +1784,9 @@ function App() {
   const [newFailureModeDescription, setNewFailureModeDescription] = useState("");
   const [selectedFailureModeId, setSelectedFailureModeId] = useState("");
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
+  const [generatedInstructions, setGeneratedInstructions] = useState<string | null>(null);
+  const [generatedRationale, setGeneratedRationale] = useState<string>("");
+  const [isGeneratingFix, setIsGeneratingFix] = useState(false);
   const [isDiscoveryBusy, setIsDiscoveryBusy] = useState(false);
   const [fixEditText, setFixEditText] = useState("");
   const [isSavingFix, setIsSavingFix] = useState(false);
@@ -2130,6 +2159,8 @@ function App() {
     let isCurrent = true;
     setEddFlow({ failurePackets: [] });
     setAnalysisNote(null);
+    setGeneratedInstructions(null);
+    setGeneratedRationale("");
     setAnalysisNoteText("");
     setAnalysisFailureMode("");
     setAnalysisSeverity("medium");
@@ -2227,7 +2258,7 @@ function App() {
         throw new Error("No active project is available.");
       }
       const outcome = intent.trim();
-      const drafted = await createAgentDesignFromOutcome(project.id, outcome);
+      const drafted = await createAgentDesignFromOutcome(project.id, outcome, name.trim() || undefined);
       setAgents((items) => [drafted.agent, ...items]);
       setTools((items) => {
         const draftedById = new Map(drafted.draft_tools.map((tool) => [tool.id, tool]));
@@ -2472,6 +2503,35 @@ function App() {
       setActivity(`Draft tool created: ${tool.name}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create tool definition.");
+    } finally {
+      setUpdatingTools(false);
+    }
+  }
+
+  async function handleDeleteTool(tool: ToolDefinition) {
+    if (!project) {
+      return;
+    }
+    if (!window.confirm(`Delete tool "${tool.name}"? This cannot be undone.`)) {
+      return;
+    }
+    setError(null);
+    setUpdatingTools(true);
+    try {
+      await deleteToolDefinition(project.id, tool.id);
+      setTools((items) => items.filter((item) => item.id !== tool.id));
+      if (selectedAgent) {
+        setAgents((items) =>
+          items.map((agent) =>
+            agent.id === selectedAgent.id
+              ? { ...agent, allowed_tool_names: agent.allowed_tool_names.filter((n) => n !== tool.name) }
+              : agent,
+          ),
+        );
+      }
+      setActivity(`Deleted tool: ${tool.name}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete tool.");
     } finally {
       setUpdatingTools(false);
     }
@@ -2947,6 +3007,8 @@ function App() {
       );
       setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
       setAnalysisNote(null);
+    setGeneratedInstructions(null);
+    setGeneratedRationale("");
       setAnalysisNoteText("");
       setAnalysisFailureMode("");
       setAnalysisSeverity("medium");
@@ -3047,6 +3109,34 @@ function App() {
     }
   }
 
+  async function handleGenerateFix() {
+    const currentFailurePackets = failurePacketsForEval(eddFlow, eddFlow.baselineEval?.id);
+    if (!project || !selectedAgent || !eddFlow.baselineVersion || !eddFlow.contract) {
+      return;
+    }
+    setError(null);
+    setActivity("Generating fix from failure evidence...");
+    setIsGeneratingFix(true);
+    try {
+      const result = await generateFixProposal(
+        project.id,
+        selectedAgent.id,
+        eddFlow.baselineVersion.id,
+        currentFailurePackets,
+        eddFlow.contract.id,
+      );
+      setGeneratedInstructions(result.proposed_instructions);
+      setGeneratedRationale(result.rationale);
+      setActivity("Fix generated. Review and confirm to create v" +
+        ((eddFlow.baselineVersion.version_label.match(/\d+/)?.[0] ?? 0) as number + 1) + ".");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to generate fix.");
+      setActivity(null);
+    } finally {
+      setIsGeneratingFix(false);
+    }
+  }
+
   async function handleCreateFixProposal() {
     const currentFailurePackets = failurePacketsForEval(eddFlow, eddFlow.baselineEval?.id);
     if (
@@ -3054,12 +3144,12 @@ function App() {
       !selectedAgent ||
       !eddFlow.baselineVersion ||
       !eddFlow.contract ||
-      currentFailurePackets.length === 0
+      !generatedInstructions
     ) {
       return;
     }
     setError(null);
-    setActivity("Creating one targeted fix.");
+    setActivity("Saving fix proposal.");
     setIsFlowBusy(true);
     try {
       const fixProposal = await createFixProposal(
@@ -3068,10 +3158,11 @@ function App() {
         eddFlow.baselineVersion.id,
         currentFailurePackets,
         eddFlow.contract.id,
-        requiredPhrase.trim(),
+        generatedInstructions,
+        generatedRationale,
       );
       setEddFlow((flow) => ({ ...flow, fixProposal }));
-      setActivity("Fix proposal linked to failure evidence.");
+      setActivity("Fix proposal saved. Create the next version to apply it.");
       await refreshContext();
       await reviewFirstArtifact(fixProposal.artifact_ids);
     } catch (err) {
@@ -3083,7 +3174,7 @@ function App() {
   }
 
   async function handleCreateCandidate() {
-    if (!project || !selectedAgent || !eddFlow.baselineVersion || !eddFlow.fixProposal) {
+    if (!project || !selectedAgent || !eddFlow.baselineVersion || !eddFlow.fixProposal || !generatedInstructions) {
       return;
     }
     setError(null);
@@ -3093,7 +3184,7 @@ function App() {
       const candidateVersion = await createAgentVersion(project.id, selectedAgent.id, {
         parent_version_id: eddFlow.baselineVersion.id,
         source_fix_proposal_id: eddFlow.fixProposal.id,
-        instructions: candidateInstructions(requiredPhrase),
+        instructions: generatedInstructions,
         status: "candidate",
       });
       setEddFlow((flow) => ({ ...flow, candidateVersion }));
@@ -3195,6 +3286,8 @@ function App() {
       failurePackets: nextFailurePackets,
     }));
     setAnalysisNote(null);
+    setGeneratedInstructions(null);
+    setGeneratedRationale("");
     setAnalysisNoteText("");
     setAnalysisFailureMode("");
     setAnalysisSeverity("medium");
@@ -3313,24 +3406,34 @@ function App() {
         disabled: isFlowBusy || isSavingAnalysis || !analysisNoteText.trim() || !analysisTargetArtifactId,
       };
     }
-    if (!eddFlow.fixProposal && eddFlow.failurePackets.length > 0) {
+    if (!eddFlow.fixProposal && eddFlow.failurePackets.length > 0 && !generatedInstructions) {
       return {
         eyebrow: "Next action",
-        title: "Propose one fix",
-        detail: "Use the failure evidence to suggest one targeted instruction change.",
-        label: "Create fix",
+        title: "Generate a fix",
+        detail: "Claude will read the failure evidence and propose improved instructions.",
+        label: "Generate fix",
+        onClick: handleGenerateFix,
+        disabled: isFlowBusy || isGeneratingFix,
+      };
+    }
+    if (!eddFlow.fixProposal && generatedInstructions) {
+      return {
+        eyebrow: "Next action",
+        title: "Confirm and save fix",
+        detail: "Review the proposed instructions below, then save to lock them in.",
+        label: "Save fix proposal",
         onClick: handleCreateFixProposal,
-        disabled: isFlowBusy,
+        disabled: isFlowBusy || !generatedInstructions.trim(),
       };
     }
     if (!eddFlow.candidateVersion && eddFlow.fixProposal) {
       return {
         eyebrow: "Next action",
         title: "Create the next version",
-        detail: "Apply the proposed fix to create a new agent version.",
+        detail: "Apply the saved fix to create a new agent version.",
         label: "Create version",
         onClick: handleCreateCandidate,
-        disabled: isFlowBusy,
+        disabled: isFlowBusy || !generatedInstructions,
       };
     }
     if (!eddFlow.candidateRun && eddFlow.candidateVersion) {
@@ -3364,11 +3467,22 @@ function App() {
       };
     }
     if (eddFlow.comparison && eddFlow.candidateVersion && eddFlow.candidateRun && eddFlow.candidateEval) {
+      const candidatePassed = eddFlow.candidateEval.passed === true;
+      if (candidatePassed) {
+        return {
+          eyebrow: "Iteration complete — passed",
+          title: eddFlow.comparison.summary,
+          detail: "The new version passed the success criteria. You can promote it or keep the evidence as-is.",
+          label: "Done",
+          onClick: undefined,
+          disabled: true,
+        };
+      }
       return {
-        eyebrow: "Iteration complete",
+        eyebrow: "Iteration complete — still failing",
         title: eddFlow.comparison.summary,
-        detail: "Continue from this version if another bounded improvement is needed.",
-        label: "Continue improving",
+        detail: "The new version still fails. Name the remaining failure below to propose another targeted fix.",
+        label: "Try another fix",
         onClick: handleContinueImprovement,
         disabled: isFlowBusy,
       };
@@ -3573,6 +3687,15 @@ function App() {
               <p className="eyebrow">Start from outcome</p>
               <h2>What result should the agent produce?</h2>
               <label>
+                Agent name
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Anthropic Jobs Agent"
+                  required
+                />
+              </label>
+              <label>
                 Desired outcome
                 <textarea
                   value={intent}
@@ -3581,43 +3704,42 @@ function App() {
                   required
                 />
               </label>
+              <div className="intent-mode-row">
+                <span className="intent-mode-label">Run mode</span>
+                <div className="run-mode-control" aria-label="Run mode">
+                  <button
+                    className={runMode === "mock" ? "mode-option active" : "mode-option"}
+                    type="button"
+                    onClick={() => setRunMode("mock")}
+                  >
+                    Mock
+                  </button>
+                  <button
+                    className={runMode === "live" ? "mode-option active" : "mode-option"}
+                    type="button"
+                    onClick={() => setRunMode("live")}
+                  >
+                    Live Anthropic
+                  </button>
+                </div>
+              </div>
               <div className="intent-actions">
                 <button
                   className="primary-button"
                   type="button"
-                  disabled={!intent.trim() || isDraftingAgent}
+                  disabled={!name.trim() || !intent.trim() || isDraftingAgent}
                   onClick={handleDraftFromOutcome}
                 >
                   {isDraftingAgent ? "Drafting..." : "Draft from outcome"}
                 </button>
                 <button
                   className="secondary-button"
-                  type="button"
-                  onClick={() => setManualCreateOpen((open) => !open)}
+                  type="submit"
+                  disabled={!name.trim() || !intent.trim()}
                 >
-                  {manualCreateOpen ? "Hide manual fields" : "Create manually"}
+                  Save without drafting
                 </button>
               </div>
-              {manualCreateOpen ? (
-                <div className="manual-create-fields">
-                  <label>
-                    Agent name
-                    <input
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      placeholder="Customer Service Triage Agent"
-                      required={manualCreateOpen}
-                    />
-                  </label>
-                  <button
-                    className="secondary-button"
-                    type="submit"
-                    disabled={!name.trim() || !intent.trim()}
-                  >
-                    Save manual agent
-                  </button>
-                </div>
-              ) : null}
               {error ? <p className="error-text">{error}</p> : null}
             </form>
           ) : null}
@@ -3688,7 +3810,7 @@ function App() {
                     type="button"
                     onClick={() => setRunMode("live")}
                   >
-                    Live OpenAI
+                    Live Anthropic
                   </button>
                 </div>
               </div>
@@ -3993,7 +4115,7 @@ function App() {
                         <h4>{currentLoopAction.title}</h4>
                         <p>{currentLoopAction.detail}</p>
                         <div className="proof-mode-summary" aria-label="Run and judge modes">
-                          <span>Run: {displayedRunMode === "live" ? "Live OpenAI" : "Mock"}</span>
+                          <span>Run: {displayedRunMode === "live" ? "Live Anthropic" : "Mock"}</span>
                           <span>
                             Judge:{" "}
                             {displayedJudgeMode === "live" ? "Live rubric" : "Deterministic checks"}
@@ -4011,6 +4133,27 @@ function App() {
                         >
                           {currentLoopAction.label}
                         </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {generatedInstructions !== null && !eddFlow.fixProposal ? (
+                    <div className="generated-fix-panel">
+                      <div className="generated-fix-header">
+                        <p className="artifact-type">Generated fix</p>
+                        <h4>Proposed instructions for next version</h4>
+                        <p>Claude wrote these based on the failure evidence. Edit before saving.</p>
+                      </div>
+                      <label className="generated-fix-label">
+                        Proposed instructions
+                        <textarea
+                          className="generated-fix-textarea"
+                          value={generatedInstructions}
+                          onChange={(e) => setGeneratedInstructions(e.target.value)}
+                          rows={10}
+                        />
+                      </label>
+                      {generatedRationale ? (
+                        <p className="generated-fix-rationale">{generatedRationale}</p>
                       ) : null}
                     </div>
                   ) : null}
@@ -4089,86 +4232,113 @@ function App() {
                     </div>
                   ) : null}
                   {showFailureAnalysis ? (
-                    <div className="failure-analysis-panel">
-                      <div className="failure-analysis-summary">
-                        <h4>Failed checks</h4>
-                        {deterministicRubricOnlyFailure ? (
-                          <p className="judge-mode-note">
-                            This result only failed rubric checks under deterministic judging. Run the
-                            live rubric judge to score the open-ended outcome.
+                    <div className={analysisNote ? "failure-analysis-panel analysis-complete" : "failure-analysis-panel"}>
+                      <div className="failure-analysis-header">
+                        <div className="failure-step-eyebrow">
+                          {analysisNote ? (
+                            <span className="step-badge step-badge--done">✓ Analysis saved</span>
+                          ) : (
+                            <span className="step-badge step-badge--required">Required — complete before proposing a fix</span>
+                          )}
+                        </div>
+                        <h4>{analysisNote ? "Failure named" : "Name this failure"}</h4>
+                        {!analysisNote ? (
+                          <p className="failure-analysis-instruction">
+                            Describe why the response failed so the fix proposal stays targeted. Fill in the review note and click Save.
                           </p>
                         ) : null}
-                        <div className="failed-check-list">
-                          {failedBaselineChecks.length === 0 ? (
-                            <span>No failed checks were returned.</span>
-                          ) : (
-                            failedBaselineChecks.map((check) => (
-                              <span key={check.check_id}>
-                                <strong>{check.check_id}</strong>
-                                {check.comment || check.observed}
-                              </span>
-                            ))
-                          )}
-                        </div>
                       </div>
-                      <div className="failure-analysis-form">
-                        <div className="analysis-field-row">
+                      <div className="failure-analysis-body">
+                        <div className="failure-analysis-summary">
+                          <p className="compact-section-label">Failed checks</p>
+                          {deterministicRubricOnlyFailure ? (
+                            <p className="judge-mode-note">
+                              This result only failed rubric checks under deterministic judging. Run the
+                              live rubric judge to score the open-ended outcome.
+                            </p>
+                          ) : null}
+                          <div className="failed-check-list">
+                            {failedBaselineChecks.length === 0 ? (
+                              <span>No failed checks were returned.</span>
+                            ) : (
+                              failedBaselineChecks.map((check) => (
+                                <span key={check.check_id}>
+                                  <strong>{check.check_id}</strong>
+                                  {check.comment || check.observed}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                        <div className="failure-analysis-form">
+                          <div className="analysis-field-row">
+                            <label className="compact-label">
+                              <span>Failure mode</span>
+                              <input
+                                value={analysisFailureMode}
+                                onChange={(event) => setAnalysisFailureMode(event.target.value)}
+                                placeholder="e.g. missed rollback recommendation"
+                                disabled={!!analysisNote}
+                              />
+                            </label>
+                            <label className="compact-label">
+                              <span>Severity</span>
+                              <select
+                                value={analysisSeverity}
+                                onChange={(event) => setAnalysisSeverity(event.target.value)}
+                                disabled={!!analysisNote}
+                              >
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                              </select>
+                            </label>
+                          </div>
                           <label className="compact-label">
-                            <span>Failure mode</span>
-                            <input
-                              value={analysisFailureMode}
-                              onChange={(event) => setAnalysisFailureMode(event.target.value)}
-                              placeholder="failed expected phrase"
+                            <span>Review note <span className="required-marker">*</span></span>
+                            <textarea
+                              value={analysisNoteText}
+                              onChange={(event) => setAnalysisNoteText(event.target.value)}
+                              placeholder="The response did not satisfy the success criteria because…"
+                              disabled={!!analysisNote}
                             />
                           </label>
-                          <label className="compact-label">
-                            <span>Severity</span>
-                            <select
-                              value={analysisSeverity}
-                              onChange={(event) => setAnalysisSeverity(event.target.value)}
-                            >
-                              <option value="low">Low</option>
-                              <option value="medium">Medium</option>
-                              <option value="high">High</option>
-                            </select>
-                          </label>
-                        </div>
-                        <label className="compact-label">
-                          <span>Review note</span>
-                          <textarea
-                            value={analysisNoteText}
-                            onChange={(event) => setAnalysisNoteText(event.target.value)}
-                            placeholder="The response did not satisfy the explicit success criteria because..."
-                          />
-                        </label>
-                        {activity ? <p className="activity-text">{activity}</p> : null}
-                        {error ? <p className="error-text">{error}</p> : null}
-                        <div className="analysis-action-row">
-                          {analysisNote ? (
-                            <span className="saved-analysis-chip">Analysis saved</span>
-                          ) : (
-                            <span>Targeting current failure evidence</span>
-                          )}
-                          <button
-                            className="secondary-button"
-                            type="button"
-                            onClick={handleSaveAnalysisNote}
-                            disabled={
-                              isFlowBusy ||
-                              isSavingAnalysis ||
-                              !analysisNoteText.trim() ||
-                              !analysisTargetArtifactId
-                            }
-                          >
-                            Save analysis
-                          </button>
+                          {activity ? <p className="activity-text">{activity}</p> : null}
+                          {error ? <p className="error-text">{error}</p> : null}
+                          {!analysisNote ? (
+                            <div className="analysis-action-row">
+                              <button
+                                className="primary-button"
+                                type="button"
+                                onClick={handleSaveAnalysisNote}
+                                disabled={
+                                  isFlowBusy ||
+                                  isSavingAnalysis ||
+                                  !analysisNoteText.trim() ||
+                                  !analysisTargetArtifactId
+                                }
+                              >
+                                Save analysis
+                              </button>
+                              <span>Then: propose a targeted fix →</span>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
                   ) : null}
                   {eddFlow.comparison ? (
-                    <div className="comparison-summary">
-                      <strong>{eddFlow.comparison.summary}</strong>
+                    <div className={
+                      eddFlow.candidateEval?.passed
+                        ? "comparison-summary comparison-summary--passed"
+                        : "comparison-summary comparison-summary--failed"
+                    }>
+                      <div className="comparison-outcome">
+                        <span className="comparison-outcome-badge">
+                          {eddFlow.candidateEval?.passed ? "✓ Passed" : "✗ Still failing"}
+                        </span>
+                        <strong>{eddFlow.comparison.summary}</strong>
+                      </div>
                       <span>
                         Fixed {eddFlow.comparison.fixed_failure_packet_ids.length} · Remaining{" "}
                         {eddFlow.comparison.remaining_failure_packet_ids.length} · New{" "}
@@ -4799,19 +4969,28 @@ function App() {
                 filteredApprovedTools.map((tool) => {
                   const isAllowed = selectedAgent.allowed_tool_names.includes(tool.name);
                   return (
-                    <button
-                      className={isAllowed ? "tool-marketplace-item active" : "tool-marketplace-item"}
-                      type="button"
-                      key={tool.id}
-                      onClick={() => handleToggleTool(tool.name)}
-                      disabled={updatingTools}
-                      aria-pressed={isAllowed}
-                    >
-                      <span>{isAllowed ? "Enabled" : "Available"}</span>
-                      <strong>{tool.name}</strong>
-                      <small>{tool.description}</small>
-                      <em>{tool.implementation_kind}</em>
-                    </button>
+                    <div className="tool-marketplace-item-row" key={tool.id}>
+                      <button
+                        className={isAllowed ? "tool-marketplace-item active" : "tool-marketplace-item"}
+                        type="button"
+                        onClick={() => handleToggleTool(tool.name)}
+                        disabled={updatingTools}
+                        aria-pressed={isAllowed}
+                      >
+                        <span>{isAllowed ? "Enabled" : "Available"}</span>
+                        <strong>{tool.name}</strong>
+                        <small>{tool.description}</small>
+                      </button>
+                      <button
+                        className="tool-delete-button"
+                        type="button"
+                        title="Delete tool"
+                        disabled={updatingTools}
+                        onClick={() => handleDeleteTool(tool)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   );
                 })
               )}
@@ -4823,18 +5002,28 @@ function App() {
                   <span>{filteredDraftTools.length}</span>
                 </div>
                 {filteredDraftTools.map((tool) => (
-                  <button
-                    className="tool-marketplace-item draft"
-                    type="button"
-                    key={tool.id}
-                    onClick={() => handleApproveAndEnableTool(tool)}
-                    disabled={updatingTools}
-                  >
-                    <span>Draft</span>
-                    <strong>{tool.name}</strong>
-                    <small>{tool.description}</small>
-                    <em>Approve and assign</em>
-                  </button>
+                  <div className="tool-marketplace-item-row" key={tool.id}>
+                    <button
+                      className="tool-marketplace-item draft"
+                      type="button"
+                      onClick={() => handleApproveAndEnableTool(tool)}
+                      disabled={updatingTools}
+                    >
+                      <span>Draft</span>
+                      <strong>{tool.name}</strong>
+                      <small>{tool.description}</small>
+                      <em>Approve and assign</em>
+                    </button>
+                    <button
+                      className="tool-delete-button"
+                      type="button"
+                      title="Delete tool"
+                      disabled={updatingTools}
+                      onClick={() => handleDeleteTool(tool)}
+                    >
+                      ×
+                    </button>
+                  </div>
                 ))}
               </section>
             ) : null}

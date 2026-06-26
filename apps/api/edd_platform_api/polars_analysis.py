@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Dict, List
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional
 
 import polars as pl
 
 from edd_platform_api.schemas import (
+    AnalysisSnapshotMetadata,
     FailureMode,
     ReviewCorpusAnalysis,
     ReviewCoverageSummary,
@@ -13,6 +17,12 @@ from edd_platform_api.schemas import (
     ReviewItem,
     ReviewAnnotation,
 )
+
+
+SNAPSHOT_METADATA_FILE = "metadata.json"
+SNAPSHOT_ITEMS_FILE = "review_items.parquet"
+SNAPSHOT_ANNOTATIONS_FILE = "annotations.parquet"
+SNAPSHOT_FAILURE_MODES_FILE = "failure_modes.parquet"
 
 
 def review_corpus_analysis(
@@ -24,58 +34,95 @@ def review_corpus_analysis(
     annotations: List[ReviewAnnotation],
     failure_modes: List[FailureMode],
     pending_suggestions: int,
+    snapshot: Optional[AnalysisSnapshotMetadata] = None,
 ) -> ReviewCorpusAnalysis:
-    items_df = pl.DataFrame(
-        [
-            {
-                "id": item.id,
-                "source_kind": item.source_kind,
-                "status": item.status,
-                "has_langfuse_ref": item.langfuse_ref is not None,
-                "langfuse_object_type": (
-                    item.langfuse_ref.object_type if item.langfuse_ref else None
-                ),
-            }
-            for item in items
-        ],
-        schema={
-            "id": pl.String,
-            "source_kind": pl.String,
-            "status": pl.String,
-            "has_langfuse_ref": pl.Boolean,
-            "langfuse_object_type": pl.String,
-        },
+    return review_corpus_analysis_from_frames(
+        project_id=project_id,
+        corpus_id=corpus_id,
+        agent_design_id=agent_design_id,
+        items_df=review_items_frame(items),
+        annotations_df=review_annotations_frame(annotations),
+        failure_modes_df=failure_modes_frame(failure_modes),
+        pending_suggestions=pending_suggestions,
+        snapshot=snapshot,
     )
-    annotations_df = pl.DataFrame(
-        [
-            {
-                "id": annotation.id,
-                "review_item_id": annotation.review_item_id,
-                "status": annotation.status,
-                "failure_mode_id": annotation.failure_mode_id,
-                "pass_fail": annotation.metadata.get("pass_fail"),
-            }
-            for annotation in annotations
-        ],
-        schema={
-            "id": pl.String,
-            "review_item_id": pl.String,
-            "status": pl.String,
-            "failure_mode_id": pl.String,
-            "pass_fail": pl.String,
-        },
+
+
+def review_corpus_analysis_from_snapshot(
+    *,
+    project_id: str,
+    corpus_id: str,
+    agent_design_id: str,
+    pending_suggestions: int,
+    snapshot_dir: Path,
+) -> Optional[ReviewCorpusAnalysis]:
+    items_path = snapshot_dir / SNAPSHOT_ITEMS_FILE
+    annotations_path = snapshot_dir / SNAPSHOT_ANNOTATIONS_FILE
+    failure_modes_path = snapshot_dir / SNAPSHOT_FAILURE_MODES_FILE
+    if not items_path.exists() or not annotations_path.exists() or not failure_modes_path.exists():
+        return None
+    items_df = pl.read_parquet(items_path)
+    annotations_df = pl.read_parquet(annotations_path)
+    failure_modes_df = pl.read_parquet(failure_modes_path)
+    snapshot = load_snapshot_metadata(
+        snapshot_dir=snapshot_dir,
+        status="loaded",
+        item_count=items_df.height,
+        annotation_count=annotations_df.height,
+        failure_mode_count=failure_modes_df.height,
     )
-    failure_modes_df = pl.DataFrame(
-        [
-            {
-                "id": failure_mode.id,
-                "name": failure_mode.name,
-                "severity": failure_mode.severity,
-            }
-            for failure_mode in failure_modes
-        ],
-        schema={"id": pl.String, "name": pl.String, "severity": pl.String},
+    return review_corpus_analysis_from_frames(
+        project_id=project_id,
+        corpus_id=corpus_id,
+        agent_design_id=agent_design_id,
+        items_df=items_df,
+        annotations_df=annotations_df,
+        failure_modes_df=failure_modes_df,
+        pending_suggestions=pending_suggestions,
+        snapshot=snapshot,
     )
+
+
+def materialize_review_corpus_snapshot(
+    *,
+    snapshot_dir: Path,
+    items: List[ReviewItem],
+    annotations: List[ReviewAnnotation],
+    failure_modes: List[FailureMode],
+) -> AnalysisSnapshotMetadata:
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    items_df = review_items_frame(items)
+    annotations_df = review_annotations_frame(annotations)
+    failure_modes_df = failure_modes_frame(failure_modes)
+    items_df.write_parquet(snapshot_dir / SNAPSHOT_ITEMS_FILE)
+    annotations_df.write_parquet(snapshot_dir / SNAPSHOT_ANNOTATIONS_FILE)
+    failure_modes_df.write_parquet(snapshot_dir / SNAPSHOT_FAILURE_MODES_FILE)
+    snapshot = AnalysisSnapshotMetadata(
+        status="materialized",
+        directory=str(snapshot_dir),
+        generated_at=datetime.now(timezone.utc),
+        item_count=items_df.height,
+        annotation_count=annotations_df.height,
+        failure_mode_count=failure_modes_df.height,
+    )
+    (snapshot_dir / SNAPSHOT_METADATA_FILE).write_text(
+        json.dumps(snapshot.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return snapshot
+
+
+def review_corpus_analysis_from_frames(
+    *,
+    project_id: str,
+    corpus_id: str,
+    agent_design_id: str,
+    items_df: pl.DataFrame,
+    annotations_df: pl.DataFrame,
+    failure_modes_df: pl.DataFrame,
+    pending_suggestions: int,
+    snapshot: Optional[AnalysisSnapshotMetadata] = None,
+) -> ReviewCorpusAnalysis:
 
     accepted_annotations = annotations_df.filter(pl.col("status") == "accepted")
     coverage = ReviewCoverageSummary(
@@ -98,11 +145,97 @@ def review_corpus_analysis(
         pass_fail_counts=count_by(annotations_df, "pass_fail"),
         failure_mode_counts=failure_mode_counts(accepted_annotations, failure_modes_df),
         failure_rates=failure_rates(items_df, accepted_annotations),
+        snapshot=snapshot,
         rationale=(
             "Polars computes read-side corpus analytics from platform-owned "
             "review records; Postgres remains the source of truth for metadata, "
             "workflow state, and evidence artifacts."
         ),
+    )
+
+
+def review_items_frame(items: List[ReviewItem]) -> pl.DataFrame:
+    return pl.DataFrame(
+        [
+            {
+                "id": item.id,
+                "source_kind": item.source_kind,
+                "status": item.status,
+                "has_langfuse_ref": item.langfuse_ref is not None,
+                "langfuse_object_type": (
+                    item.langfuse_ref.object_type if item.langfuse_ref else None
+                ),
+            }
+            for item in items
+        ],
+        schema={
+            "id": pl.String,
+            "source_kind": pl.String,
+            "status": pl.String,
+            "has_langfuse_ref": pl.Boolean,
+            "langfuse_object_type": pl.String,
+        },
+    )
+
+
+def review_annotations_frame(annotations: List[ReviewAnnotation]) -> pl.DataFrame:
+    return pl.DataFrame(
+        [
+            {
+                "id": annotation.id,
+                "review_item_id": annotation.review_item_id,
+                "status": annotation.status,
+                "failure_mode_id": annotation.failure_mode_id,
+                "pass_fail": annotation.metadata.get("pass_fail"),
+            }
+            for annotation in annotations
+        ],
+        schema={
+            "id": pl.String,
+            "review_item_id": pl.String,
+            "status": pl.String,
+            "failure_mode_id": pl.String,
+            "pass_fail": pl.String,
+        },
+    )
+
+
+def failure_modes_frame(failure_modes: List[FailureMode]) -> pl.DataFrame:
+    return pl.DataFrame(
+        [
+            {
+                "id": failure_mode.id,
+                "name": failure_mode.name,
+                "severity": failure_mode.severity,
+            }
+            for failure_mode in failure_modes
+        ],
+        schema={"id": pl.String, "name": pl.String, "severity": pl.String},
+    )
+
+
+def load_snapshot_metadata(
+    *,
+    snapshot_dir: Path,
+    status: str,
+    item_count: int,
+    annotation_count: int,
+    failure_mode_count: int,
+) -> AnalysisSnapshotMetadata:
+    metadata_path = snapshot_dir / SNAPSHOT_METADATA_FILE
+    generated_at = None
+    if metadata_path.exists():
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        generated_at_value = payload.get("generated_at")
+        if generated_at_value:
+            generated_at = datetime.fromisoformat(generated_at_value)
+    return AnalysisSnapshotMetadata(
+        status=status,
+        directory=str(snapshot_dir),
+        generated_at=generated_at,
+        item_count=item_count,
+        annotation_count=annotation_count,
+        failure_mode_count=failure_mode_count,
     )
 
 

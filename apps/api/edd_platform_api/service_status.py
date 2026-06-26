@@ -34,7 +34,7 @@ def service_url_reachable(url: str) -> bool:
 
 def dependency_statuses() -> List[ServiceStatus]:
     storage_backend = os.environ.get("EDD_PLATFORM_STORAGE_BACKEND", "postgres").strip() or "postgres"
-    openai_configured = bool(os.environ.get("OPENAI_API_KEY", "").strip())
+    anthropic_configured = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
     langfuse_url = (
         os.environ.get("LANGFUSE_HOST", "").strip()
         or os.environ.get("LANGFUSE_BASE_URL", "").strip()
@@ -55,15 +55,15 @@ def dependency_statuses() -> List[ServiceStatus]:
             description=f"API persistence backend: {storage_backend}.",
         ),
         ServiceStatus(
-            id="openai",
-            name="OpenAI",
-            status="configured" if openai_configured else "not_configured",
-            configured=openai_configured,
-            url="https://platform.openai.com/api-keys",
+            id="anthropic",
+            name="Anthropic",
+            status="configured" if anthropic_configured else "not_configured",
+            configured=anthropic_configured,
+            url="https://console.anthropic.com/settings/keys",
             description=(
                 "Live agent runs are enabled."
-                if openai_configured
-                else "Set OPENAI_API_KEY before starting the API to enable live runs."
+                if anthropic_configured
+                else "Set ANTHROPIC_API_KEY before starting the API to enable live runs."
             ),
         ),
         ServiceStatus(

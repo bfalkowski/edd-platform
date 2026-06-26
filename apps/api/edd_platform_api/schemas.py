@@ -669,6 +669,16 @@ class ReviewFailureRate(BaseModel):
     failure_rate: float
 
 
+class AnalysisSnapshotMetadata(BaseModel):
+    status: Literal["materialized", "loaded", "unavailable"]
+    directory: Optional[str] = None
+    generated_at: Optional[datetime] = None
+    item_count: int = 0
+    annotation_count: int = 0
+    failure_mode_count: int = 0
+    error: Optional[str] = None
+
+
 class ReviewCorpusAnalysis(BaseModel):
     corpus_id: str
     project_id: str
@@ -680,6 +690,7 @@ class ReviewCorpusAnalysis(BaseModel):
     pass_fail_counts: Dict[str, int]
     failure_mode_counts: List[ReviewFailureModeCount]
     failure_rates: List[ReviewFailureRate]
+    snapshot: Optional[AnalysisSnapshotMetadata] = None
     rationale: str
 
 
@@ -887,8 +898,21 @@ class AgentDesignCreated(BaseModel):
     artifact: ArtifactRecord
 
 
+class FixProposalGenerateRequest(BaseModel):
+    agent_design_id: str
+    target_version_id: str
+    addressed_failure_packet_ids: List[str] = Field(default_factory=list)
+    validation_contract_id: Optional[str] = None
+
+
+class FixProposalGenerated(BaseModel):
+    proposed_instructions: str
+    rationale: str
+
+
 class OutcomeAgentCreate(BaseModel):
     outcome: str = Field(min_length=1)
+    name: Optional[str] = None
 
 
 class OutcomeAgentCreated(BaseModel):

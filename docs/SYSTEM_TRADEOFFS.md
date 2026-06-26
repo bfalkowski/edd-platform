@@ -134,6 +134,36 @@ product state in the platform API and store.
 Langfuse is valuable for observing live behavior, but EDD Platform's product
 model is the evidence loop. The platform must own that loop.
 
+## Relational Metadata Plus Columnar Analysis
+
+### Decision
+
+Keep product records, jobs, permissions, artifacts, and evidence links in a
+relational store while projecting trace, span, review-corpus, and failure-mode
+rows into a Polars-readable analysis plane.
+
+### Benefits
+
+- Preserves transactional product invariants in Postgres.
+- Makes high-volume trace and corpus analytics cheap to scan locally.
+- Keeps deterministic local and CI workflows independent of external analysis
+  services.
+- Lets the platform rebuild analytical snapshots from source-of-truth records.
+
+### Costs
+
+- Introduces derived read models that can become stale.
+- Requires snapshot freshness metadata and retry/rebuild paths.
+- Adds a materialization boundary between product writes and analytical reads.
+- Requires discipline to keep Polars out of the transactional request path.
+
+### Why It Fits
+
+EDD Platform needs both durable evidence workflow state and analytical review
+over trace corpora. Treating Polars as a read-side analysis library, rather
+than a database server, keeps the architecture simple while matching the
+metadata-versus-trace-data split used by mature eval platforms.
+
 ## Monorepo With Package Boundaries
 
 ### Decision
@@ -183,4 +213,3 @@ long-running work can move to queues and workers later.
 
 The platform first needs a correct evidence model. Once the model is stable,
 background execution can scale it without changing the product vocabulary.
-

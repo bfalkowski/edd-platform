@@ -43,14 +43,16 @@ Statuses:
 | Gates | HLD-002, HLD-003 | covered | partial | partial | Gate definitions are stored as artifacts and can be created from the readiness view. |
 | Gate decisions | HLD-001, HLD-002 | covered | partial | partial | Gate decisions create readiness artifacts linked to gate and supporting evidence. |
 | Langfuse trace refs | HLD-001, HLD-002 | covered | partial | covered | Trace refs are stored as artifacts with Open trace links; live agent runs create Langfuse agent observations with child generation observations for raw OpenAI calls. |
+| Relational metadata and Polars analysis plane | HLD-005 | planned | planned | covered | Postgres remains source of truth for product records, jobs, and evidence links; Polars is a rebuildable columnar read-side for traces, spans, review corpora, and failure-rate analytics. |
 | Frontend design language | Frontend guide | n/a | covered | covered | Use `docs/design/FRONTEND_GUIDE.md`. |
 | AI-agent development guardrails | Engineering guide | n/a | n/a | covered | Use `docs/engineering/AI_AGENT_DEVELOPMENT.md`. |
 
 ## Immediate Planning Gaps
 
 The Phase 2 EDD backbone is now covered by HLD and OpenAPI contracts. The next
-gaps are broader run/replay views, evidence-summary UI, public docs migration,
-and eventual async execution design for long-running run/eval workloads.
+gaps are broader run/replay views, evidence-summary UI, implementation of the
+Polars analysis materialization slice, and eventual async execution design for
+long-running run/eval workloads.
 
 ## Rule
 

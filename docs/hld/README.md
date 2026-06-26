@@ -21,6 +21,7 @@ to use the consolidated product language:
 | [HLD-002](HLD-002-product-architecture-and-data-model.md) | Product Architecture and Data Model | Draft |
 | [HLD-003](HLD-003-eval-driven-agent-design-workflow.md) | Eval-Driven Agent Design Workflow | Draft |
 | [HLD-004](HLD-004-eval-contracts-runs-judges-and-fixes.md) | Eval Contracts, Runs, Judges, and Fixes | Draft |
+| [HLD-005](HLD-005-relational-metadata-and-polars-analysis-plane.md) | Relational Metadata and Polars Analysis Plane | Draft |
 
 ## Notes
 

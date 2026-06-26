@@ -420,7 +420,12 @@ workflows:
 - `analysis` returns a Polars-backed read-side summary for the corpus: coverage,
   source mix, annotation status/pass-fail counts, failure-mode counts, and
   failure-rate tables. EDD records remain the source of truth; Polars is only
-  the columnar analysis plane for trace/corpus sampling.
+  the columnar analysis plane for trace/corpus sampling. When
+  `EDD_PLATFORM_ANALYSIS_SNAPSHOT_DIR` is configured, the API materializes
+  corpus rows to a project-scoped snapshot directory, reads analysis from the
+  latest Parquet snapshot, and returns snapshot metadata including status,
+  directory, generated timestamp, and row counts. Without the env var, the API
+  falls back to deterministic in-process analysis over platform records.
 - `langfuse-items` imports selected queue items or trace/generation observation
   rows into EDD review items and skips duplicates by source, trace, or
   observation id.

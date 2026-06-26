@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import edd_platform_api.main as api_main
 from edd_platform_api import service_status
 from edd_runner import (
-    OpenAIRunnerConfig,
+    AnthropicRunnerConfig,
     RunnerAgentDesign,
     RunnerResult,
     RunnerScenario,
@@ -16,7 +16,7 @@ from edd_runner import (
     RunnerToolDefinition,
     build_langchain_tools,
     extract_response_text,
-    run_openai_agent_with_langfuse,
+    run_anthropic_agent_with_langfuse,
 )
 from edd_platform_api.main import app  # noqa: E402
 
@@ -26,7 +26,7 @@ edd_runner = sys.modules["edd_runner"]
 def test_service_status_reports_dependency_configuration(monkeypatch) -> None:
     client = TestClient(app)
     monkeypatch.setenv("EDD_PLATFORM_STORAGE_BACKEND", "memory")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
     monkeypatch.setenv("LANGFUSE_HOST", "http://localhost:3001")
@@ -38,8 +38,8 @@ def test_service_status_reports_dependency_configuration(monkeypatch) -> None:
     services = {service["id"]: service for service in response.json()["services"]}
     assert services["storage"]["status"] == "online"
     assert services["storage"]["description"] == "API persistence backend: memory."
-    assert services["openai"]["status"] == "configured"
-    assert services["openai"]["configured"] is True
+    assert services["anthropic"]["status"] == "configured"
+    assert services["anthropic"]["configured"] is True
     assert services["langfuse"]["status"] == "offline"
     assert services["langfuse"]["configured"] is True
     assert services["langfuse"]["url"] == "http://localhost:3001"
@@ -399,8 +399,8 @@ def test_evidence_summary_includes_langfuse_dataset_refs() -> None:
 def test_live_evidence_summary_records_token_usage(monkeypatch) -> None:
     client = TestClient(app)
     seen_prompt = {}
-    monkeypatch.setenv("EDD_OPENAI_INPUT_COST_PER_1M", "1.00")
-    monkeypatch.setenv("EDD_OPENAI_OUTPUT_COST_PER_1M", "2.00")
+    monkeypatch.setenv("EDD_ANTHROPIC_INPUT_COST_PER_1M", "1.00")
+    monkeypatch.setenv("EDD_ANTHROPIC_OUTPUT_COST_PER_1M", "2.00")
 
     def fake_live_summary(prompt: str):
         seen_prompt["value"] = prompt
@@ -427,7 +427,7 @@ def test_live_evidence_summary_records_token_usage(monkeypatch) -> None:
     assert response.status_code == 201
     summary = response.json()
     assert "Live evidence summary" in summary["summary"]
-    assert summary["provider"] == "openai"
+    assert summary["provider"] == "anthropic"
     assert summary["model"] == "test-summary-model"
     assert summary["token_usage"] == {"input_tokens": 20, "output_tokens": 10}
     assert summary["cost_estimate"] == 0.00004
@@ -1026,7 +1026,7 @@ def test_langfuse_trace_url_failure_does_not_fail_live_run(monkeypatch) -> None:
         def flush(self):
             raise RuntimeError("Langfuse offline.")
 
-    def fake_run_openai_agent_core(agent, scenario, config, tool_definitions):
+    def fake_run_anthropic_agent_core(agent, scenario, config, tool_definitions):
         return RunnerResult(
             id="run_fake",
             agent_design_id=agent.id,
@@ -1043,16 +1043,16 @@ def test_langfuse_trace_url_failure_does_not_fail_live_run(monkeypatch) -> None:
         "langfuse",
         types.SimpleNamespace(get_client=lambda: FakeLangfuse()),
     )
-    monkeypatch.setattr(edd_runner, "run_openai_agent_core", fake_run_openai_agent_core)
+    monkeypatch.setattr(edd_runner, "run_anthropic_agent_core", fake_run_anthropic_agent_core)
 
-    result = run_openai_agent_with_langfuse(
+    result = run_anthropic_agent_with_langfuse(
         agent=RunnerAgentDesign(
             id="agent_fake",
             name="Fake Agent",
             intent="Answer safely.",
         ),
         scenario=RunnerScenario(input="A scenario."),
-        config=OpenAIRunnerConfig(api_key="test-key"),
+        config=AnthropicRunnerConfig(api_key="test-key"),
         tool_definitions=[],
     )
 
@@ -1062,7 +1062,7 @@ def test_langfuse_trace_url_failure_does_not_fail_live_run(monkeypatch) -> None:
     assert "Linked Langfuse trace trace_fake." in result.evidence
 
 
-def test_openai_responses_core_records_langfuse_generation(monkeypatch) -> None:
+def test_anthropic_messages_core_records_langfuse_generation(monkeypatch) -> None:
     generation_updates: list[dict] = []
     generation_starts: list[dict] = []
 
@@ -1081,7 +1081,7 @@ def test_openai_responses_core_records_langfuse_generation(monkeypatch) -> None:
             generation_starts.append(kwargs)
             return FakeGeneration()
 
-    class FakeOpenAIResponse:
+    class FakeAnthropicResponse:
         def __enter__(self):
             return self
 
@@ -1091,20 +1091,21 @@ def test_openai_responses_core_records_langfuse_generation(monkeypatch) -> None:
         def read(self):
             return json.dumps(
                 {
-                    "id": "resp_fake",
-                    "status": "completed",
-                    "output_text": "Tim",
+                    "id": "msg_fake",
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "Tim"}],
+                    "stop_reason": "end_turn",
                     "usage": {
                         "input_tokens": 12,
                         "output_tokens": 3,
-                        "total_tokens": 15,
                     },
                 }
             ).encode("utf-8")
 
     def fake_urlopen(_request, timeout):
         assert timeout == 60
-        return FakeOpenAIResponse()
+        return FakeAnthropicResponse()
 
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
@@ -1115,25 +1116,24 @@ def test_openai_responses_core_records_langfuse_generation(monkeypatch) -> None:
     )
     monkeypatch.setattr(edd_runner, "urlopen", fake_urlopen)
 
-    result = edd_runner.run_openai_agent_core(
+    result = edd_runner.run_anthropic_agent_core(
         agent=RunnerAgentDesign(id="agent_tim", name="tim", intent="Always respond Tim."),
         scenario=RunnerScenario(input="Say the agent name."),
-        config=OpenAIRunnerConfig(api_key="test-key", model="gpt-5-nano"),
+        config=AnthropicRunnerConfig(api_key="test-key", model="claude-sonnet-4-6"),
         tool_definitions=[],
     )
 
     assert result.response == "Tim"
     assert generation_starts[0]["as_type"] == "generation"
-    assert generation_starts[0]["name"] == "openai.responses"
-    assert generation_starts[0]["model"] == "gpt-5-nano"
-    assert generation_starts[0]["input"][1]["content"] == "Say the agent name."
+    assert generation_starts[0]["name"] == "anthropic.messages"
+    assert generation_starts[0]["model"] == "claude-sonnet-4-6"
+    assert generation_starts[0]["input"][0]["content"] == "Say the agent name."
     assert generation_updates[0]["output"] == "Tim"
     assert generation_updates[0]["usage_details"] == {
         "input_tokens": 12,
         "output_tokens": 3,
-        "total_tokens": 15,
     }
-    assert generation_updates[0]["metadata"]["openai_response_id"] == "resp_fake"
+    assert generation_updates[0]["metadata"]["anthropic_message_id"] == "msg_fake"
 
 
 def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> None:
@@ -1162,7 +1162,7 @@ def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> Non
         def flush(self):
             generation_events.append("flush")
 
-    class FakeOpenAIResponse:
+    class FakeAnthropicResponse:
         def __enter__(self):
             return self
 
@@ -1172,22 +1172,23 @@ def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> Non
         def read(self):
             return json.dumps(
                 {
-                    "id": "resp_judge_fake",
-                    "status": "completed",
-                    "output_text": "PASS: The answer satisfies the rubric.",
+                    "id": "msg_judge_fake",
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "PASS: The answer satisfies the rubric."}],
+                    "stop_reason": "end_turn",
                     "usage": {
                         "input_tokens": 20,
                         "output_tokens": 6,
-                        "total_tokens": 26,
                     },
                 }
             ).encode("utf-8")
 
     def fake_urlopen(_request, timeout):
         assert timeout == 60
-        return FakeOpenAIResponse()
+        return FakeAnthropicResponse()
 
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
     monkeypatch.setitem(
@@ -1203,23 +1204,21 @@ def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> Non
     )
 
     assert response_text.startswith("PASS")
-    assert model == "gpt-5-nano"
+    assert model == "claude-sonnet-4-6"
     assert token_usage == {
         "input_tokens": 20,
         "output_tokens": 6,
-        "total_tokens": 26,
     }
     assert generation_starts[0]["trace_context"] == {"trace_id": "trace_fake"}
     assert generation_starts[0]["as_type"] == "generation"
-    assert generation_starts[0]["name"] == "openai.responses.judge"
-    assert generation_starts[0]["model"] == "gpt-5-nano"
+    assert generation_starts[0]["name"] == "anthropic.messages.judge"
+    assert generation_starts[0]["model"] == "claude-sonnet-4-6"
     assert generation_updates[0]["output"] == response_text
     assert generation_updates[0]["usage_details"] == {
         "input_tokens": 20,
         "output_tokens": 6,
-        "total_tokens": 26,
     }
-    assert generation_updates[0]["metadata"]["openai_response_id"] == "resp_judge_fake"
+    assert generation_updates[0]["metadata"]["anthropic_message_id"] == "msg_judge_fake"
     assert generation_events == ["enter", "update", "exit", "flush"]
 
 
@@ -2491,8 +2490,8 @@ def test_contract_driven_run_evaluation_creates_eval_result() -> None:
 def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
     client = TestClient(app)
     seen_prompt = {}
-    monkeypatch.setenv("EDD_OPENAI_INPUT_COST_PER_1M", "1.00")
-    monkeypatch.setenv("EDD_OPENAI_OUTPUT_COST_PER_1M", "2.00")
+    monkeypatch.setenv("EDD_ANTHROPIC_INPUT_COST_PER_1M", "1.00")
+    monkeypatch.setenv("EDD_ANTHROPIC_OUTPUT_COST_PER_1M", "2.00")
 
     def fake_live_judge(prompt: str, trace_id: str | None = None):
         seen_prompt["value"] = prompt
@@ -2573,7 +2572,7 @@ def test_live_judge_requires_openai_api_key(monkeypatch) -> None:
     client = TestClient(app)
 
     def fake_live_judge(prompt: str, trace_id: str | None = None):
-        raise RuntimeError("OPENAI_API_KEY is required for live OpenAI runs.")
+        raise RuntimeError("ANTHROPIC_API_KEY is required for live Anthropic runs.")
 
     monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)
     agent = client.post(
@@ -2611,7 +2610,7 @@ def test_live_judge_requires_openai_api_key(monkeypatch) -> None:
     )
 
     assert eval_response.status_code == 400
-    assert "OPENAI_API_KEY" in eval_response.json()["detail"]
+    assert "ANTHROPIC_API_KEY" in eval_response.json()["detail"]
 
 
 def test_create_trace_ref_links_langfuse_trace_to_run_and_eval_artifacts() -> None:
@@ -3418,7 +3417,7 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
     def fake_config_from_env():
         return object()
 
-    def fake_run_openai_agent(agent_design, scenario, config, tool_definitions):
+    def fake_run_anthropic_agent(agent_design, scenario, config, tool_definitions):
         assert agent_design.allowed_tool_names == ["get_weather"]
         assert len(tool_definitions) == 1
         assert tool_definitions[0].name == "get_weather"
@@ -3445,8 +3444,8 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
             created_at=datetime.now(timezone.utc),
         )
 
-    monkeypatch.setattr(api_main, "openai_config_from_env", fake_config_from_env)
-    monkeypatch.setattr(api_main, "run_openai_agent", fake_run_openai_agent)
+    monkeypatch.setattr(api_main, "anthropic_config_from_env", fake_config_from_env)
+    monkeypatch.setattr(api_main, "run_anthropic_agent", fake_run_anthropic_agent)
 
     response = client.post(
         f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
@@ -3529,7 +3528,7 @@ def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) ->
     def fake_config_from_env():
         return object()
 
-    def fake_run_openai_agent(agent_design, scenario_input, config, tool_definitions):
+    def fake_run_anthropic_agent(agent_design, scenario_input, config, tool_definitions):
         return RunnerResult(
             id="run_live_traced_fake",
             agent_design_id=agent_design.id,
@@ -3543,8 +3542,8 @@ def test_live_project_run_creates_trace_ref_from_runner_metadata(monkeypatch) ->
             created_at=datetime.now(timezone.utc),
         )
 
-    monkeypatch.setattr(api_main, "openai_config_from_env", fake_config_from_env)
-    monkeypatch.setattr(api_main, "run_openai_agent", fake_run_openai_agent)
+    monkeypatch.setattr(api_main, "anthropic_config_from_env", fake_config_from_env)
+    monkeypatch.setattr(api_main, "run_anthropic_agent", fake_run_anthropic_agent)
 
     run_response = client.post(
         "/api/projects/project_default/runs",
@@ -3616,7 +3615,7 @@ def test_live_project_run_eval_writes_langfuse_score_refs(monkeypatch) -> None:
     def fake_config_from_env():
         return object()
 
-    def fake_run_openai_agent(agent_design, scenario_input, config, tool_definitions):
+    def fake_run_anthropic_agent(agent_design, scenario_input, config, tool_definitions):
         return RunnerResult(
             id="run_live_score_fake",
             agent_design_id=agent_design.id,
@@ -3633,8 +3632,8 @@ def test_live_project_run_eval_writes_langfuse_score_refs(monkeypatch) -> None:
     monkeypatch.setenv("EDD_PLATFORM_LANGFUSE_SCORE_SYNC", "live")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
-    monkeypatch.setattr(api_main, "openai_config_from_env", fake_config_from_env)
-    monkeypatch.setattr(api_main, "run_openai_agent", fake_run_openai_agent)
+    monkeypatch.setattr(api_main, "anthropic_config_from_env", fake_config_from_env)
+    monkeypatch.setattr(api_main, "run_anthropic_agent", fake_run_anthropic_agent)
     monkeypatch.setattr(api_main, "get_langfuse_client", lambda: FakeLangfuse())
 
     agent = client.post(
@@ -3775,9 +3774,9 @@ def test_live_run_requires_openai_api_key(monkeypatch) -> None:
     agent = create_response.json()["agent"]
 
     def fake_config_from_env():
-        raise RuntimeError("OPENAI_API_KEY is required for live OpenAI runs.")
+        raise RuntimeError("ANTHROPIC_API_KEY is required for live Anthropic runs.")
 
-    monkeypatch.setattr(api_main, "openai_config_from_env", fake_config_from_env)
+    monkeypatch.setattr(api_main, "anthropic_config_from_env", fake_config_from_env)
 
     response = client.post(
         f"/api/projects/project_default/agent-designs/{agent['id']}/runs",
@@ -3788,23 +3787,18 @@ def test_live_run_requires_openai_api_key(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
-    assert "OPENAI_API_KEY" in response.json()["detail"]
+    assert "ANTHROPIC_API_KEY" in response.json()["detail"]
 
 
-def test_extract_response_text_from_nested_response_output() -> None:
+def test_extract_response_text_from_anthropic_content_block() -> None:
     payload = {
-        "output": [
-            {"type": "reasoning", "summary": []},
-            {
-                "type": "message",
-                "content": [
-                    {
-                        "type": "output_text",
-                        "text": "A grounded live response.",
-                    }
-                ],
-            },
-        ]
+        "id": "msg_test",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+            {"type": "text", "text": "A grounded live response."},
+        ],
+        "stop_reason": "end_turn",
     }
 
     assert extract_response_text(payload) == "A grounded live response."

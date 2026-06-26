@@ -60,10 +60,9 @@ class RunnerResult(BaseModel):
 
 
 @dataclass(frozen=True)
-class OpenAIRunnerConfig:
+class AnthropicRunnerConfig:
     api_key: str
-    model: str = "gpt-5-nano"
-    base_url: str = "https://api.openai.com/v1"
+    model: str = "claude-sonnet-4-6"
 
 
 def run_mock_agent(agent: RunnerAgentDesign, scenario: RunnerScenario) -> RunnerResult:
@@ -177,7 +176,7 @@ def get_weather(zip_code: str) -> str:
         return f"Weather lookup unavailable for ZIP {normalized}: {exc}"
 
 
-def fetch_web_page(url: str) -> str:
+def call_http_api(url: str) -> str:
     """Fetch a public web page and return a compact response summary."""
     target_url = url.strip()
     parsed = urlparse(target_url)
@@ -185,10 +184,10 @@ def fetch_web_page(url: str) -> str:
         return "Web page fetch unavailable: URL must use http or https."
     request = Request(target_url, headers={"User-Agent": "edd-platform-agent-tool/1.0"})
     try:
-        with urlopen(request, timeout=10) as response:
+        with urlopen(request, timeout=15) as response:
             status_code = response.getcode()
             content_type = response.headers.get("Content-Type", "unknown")
-            body = response.read(4096).decode("utf-8", errors="replace")
+            body = response.read(65536).decode("utf-8", errors="replace")
     except HTTPError as exc:
         status_code = exc.code
         content_type = exc.headers.get("Content-Type", "unknown") if exc.headers else "unknown"
@@ -196,10 +195,22 @@ def fetch_web_page(url: str) -> str:
     except URLError as exc:
         return f"Web page fetch unavailable for {target_url}: {exc.reason}"
 
-    excerpt = re.sub(r"\s+", " ", body).strip()[:1000]
+    is_json = "json" in content_type.lower()
+    if is_json:
+        # Compact whitespace and cap at 4K — enough to extract structured fields in one pass.
+        # Large JSON APIs (e.g. Greenhouse jobs) return many KB; cap prevents context blowout
+        # across multi-turn tool loops where each response re-enters the message history.
+        content = re.sub(r"\s+", " ", body).strip()[:4000]
+    else:
+        # Strip HTML tags, collapse whitespace, cap at 4K of readable text.
+        content = re.sub(r"<[^>]+>", " ", body)
+        content = re.sub(r"\s+", " ", content).strip()[:4000]
+
+    truncated = len(body) > 4000
+    suffix = f" [truncated — {len(body)} bytes total]" if truncated else ""
     return (
         f"Fetched {target_url}: HTTP {status_code}; content-type {content_type}; "
-        f"excerpt: {excerpt or 'empty response'}"
+        f"{'json' if is_json else 'text'}: {content or 'empty response'}{suffix}"
     )
 
 
@@ -209,7 +220,7 @@ def get_sync_playwright():
     return sync_playwright()
 
 
-def render_web_page(url: str, query: str = "", max_chars: int = 4000) -> str:
+def browse_webpage(url: str, query: str = "", max_chars: int = 4000) -> str:
     """Render a public web page and return visible text plus useful links."""
     target_url = url.strip()
     parsed = urlparse(target_url)
@@ -289,20 +300,20 @@ def build_langchain_tools(tool_definitions: List[RunnerToolDefinition]):
                 return get_weather(zip_code)
 
             tools.append(weather_tool)
-        elif definition.implementation_key == "fetch_web_page":
+        elif definition.implementation_key == "call_http_api":
 
-            @tool("fetch_web_page")
+            @tool("call_http_api")
             def web_page_tool(url: str) -> str:
                 """Fetch a public web page by URL and return a compact response summary."""
-                return fetch_web_page(url)
+                return call_http_api(url)
 
             tools.append(web_page_tool)
-        elif definition.implementation_key == "render_web_page":
+        elif definition.implementation_key == "browse_webpage":
 
-            @tool("render_web_page")
+            @tool("browse_webpage")
             def rendered_web_page_tool(url: str, query: str = "", max_chars: int = 4000) -> str:
                 """Render a public web page and return visible text and links."""
-                return render_web_page(url, query=query, max_chars=max_chars)
+                return browse_webpage(url, query=query, max_chars=max_chars)
 
             tools.append(rendered_web_page_tool)
         elif definition.implementation_kind == "mock" or definition.implementation_key.startswith("mock."):
@@ -342,14 +353,13 @@ def build_langfuse_langchain_callbacks():
     return [CallbackHandler(trace_context=trace_context)]
 
 
-def openai_config_from_env() -> OpenAIRunnerConfig:
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+def anthropic_config_from_env() -> AnthropicRunnerConfig:
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is required for live OpenAI runs.")
-    return OpenAIRunnerConfig(
+        raise RuntimeError("ANTHROPIC_API_KEY is required for live Anthropic runs.")
+    return AnthropicRunnerConfig(
         api_key=api_key,
-        model=os.environ.get("EDD_OPENAI_MODEL", "gpt-5-nano").strip() or "gpt-5-nano",
-        base_url=os.environ.get("EDD_OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/"),
+        model=os.environ.get("EDD_ANTHROPIC_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6",
     )
 
 
@@ -371,46 +381,34 @@ def collect_text_values(value) -> List[str]:
 
 
 def extract_response_text(payload: dict) -> str:
-    output_text = payload.get("output_text")
-    if isinstance(output_text, str) and output_text.strip():
-        return output_text.strip()
-
-    return "\n".join(collect_text_values(payload.get("output", []))).strip()
+    for block in payload.get("content", []):
+        if isinstance(block, dict) and block.get("type") == "text":
+            text = block.get("text", "")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+    return ""
 
 
 def describe_empty_response(payload: dict) -> str:
-    status = payload.get("status")
-    incomplete_details = payload.get("incomplete_details")
-    if status == "incomplete" and isinstance(incomplete_details, dict):
-        reason = incomplete_details.get("reason", "unknown")
-        return f"OpenAI response was incomplete: {reason}."
-    output_types = [
-        item.get("type")
-        for item in payload.get("output", [])
-        if isinstance(item, dict) and isinstance(item.get("type"), str)
-    ]
-    if output_types:
-        return f"OpenAI response did not include output text. Output types: {', '.join(output_types)}."
-    return "OpenAI response did not include output text."
+    stop_reason = payload.get("stop_reason")
+    if stop_reason and stop_reason != "end_turn":
+        return f"Anthropic response stopped early: {stop_reason}."
+    return "Anthropic response did not include output text."
 
 
-def usage_details_from_openai_payload(payload: dict) -> dict[str, Any]:
+def usage_details_from_anthropic_payload(payload: dict) -> dict[str, Any]:
     usage = payload.get("usage")
     if not isinstance(usage, dict):
         return {}
     details: dict[str, Any] = {}
-    for source_key, target_key in [
-        ("input_tokens", "input_tokens"),
-        ("output_tokens", "output_tokens"),
-        ("total_tokens", "total_tokens"),
-    ]:
-        value = usage.get(source_key)
+    for key in ("input_tokens", "output_tokens"):
+        value = usage.get(key)
         if isinstance(value, int):
-            details[target_key] = value
+            details[key] = value
     return details
 
 
-def openai_responses_generation_context(config: OpenAIRunnerConfig, body: dict):
+def anthropic_generation_context(config: AnthropicRunnerConfig, messages: list):
     if not langfuse_tracing_enabled():
         return None
     try:
@@ -422,55 +420,53 @@ def openai_responses_generation_context(config: OpenAIRunnerConfig, body: dict):
         langfuse = get_client()
         return langfuse.start_as_current_observation(
             as_type="generation",
-            name="openai.responses",
+            name="anthropic.messages",
             model=config.model,
-            input=body["input"],
+            input=messages,
             metadata={
-                "provider": "openai",
-                "endpoint": "/responses",
-                "reasoning_effort": body.get("reasoning", {}).get("effort"),
-                "text_verbosity": body.get("text", {}).get("verbosity"),
+                "provider": "anthropic",
+                "endpoint": "/v1/messages",
             },
         )
     except Exception:
         return None
 
 
-def send_openai_responses_request(config: OpenAIRunnerConfig, body: dict) -> dict:
-    request = Request(
-        f"{config.base_url}/responses",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+def send_anthropic_messages_request(config: AnthropicRunnerConfig, body: dict) -> dict:
     try:
-        with urlopen(request, timeout=60) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"OpenAI request failed with status {exc.code}: {detail}") from exc
-    except URLError as exc:
-        raise RuntimeError(f"OpenAI request failed: {exc.reason}") from exc
+        import anthropic as anthropic_sdk
+    except ImportError as exc:
+        raise RuntimeError("anthropic package is required for live runs: pip install anthropic") from exc
+    client = anthropic_sdk.Anthropic(api_key=config.api_key)
+    try:
+        response = client.messages.create(
+            model=body["model"],
+            max_tokens=body.get("max_tokens", 2000),
+            system=body.get("system", ""),
+            messages=body["messages"],
+        )
+        return response.model_dump()
+    except anthropic_sdk.APIStatusError as exc:
+        raise RuntimeError(f"Anthropic request failed with status {exc.status_code}: {exc.message}") from exc
+    except anthropic_sdk.APIConnectionError as exc:
+        raise RuntimeError(f"Anthropic request failed: {exc}") from exc
 
 
-def run_openai_agent(
+def run_anthropic_agent(
     agent: RunnerAgentDesign,
     scenario: RunnerScenario,
-    config: OpenAIRunnerConfig,
+    config: AnthropicRunnerConfig,
     tool_definitions: List[RunnerToolDefinition] | None = None,
 ) -> RunnerResult:
     """Run a scenario through a LangGraph-backed LangChain agent."""
     if langfuse_tracing_enabled():
-        return run_openai_agent_with_langfuse(
+        return run_anthropic_agent_with_langfuse(
             agent=agent,
             scenario=scenario,
             config=config,
             tool_definitions=tool_definitions,
         )
-    return run_openai_agent_core(
+    return run_anthropic_agent_core(
         agent=agent,
         scenario=scenario,
         config=config,
@@ -485,17 +481,17 @@ def langfuse_tracing_enabled() -> bool:
     )
 
 
-def run_openai_agent_with_langfuse(
+def run_anthropic_agent_with_langfuse(
     *,
     agent: RunnerAgentDesign,
     scenario: RunnerScenario,
-    config: OpenAIRunnerConfig,
+    config: AnthropicRunnerConfig,
     tool_definitions: List[RunnerToolDefinition] | None = None,
 ) -> RunnerResult:
     try:
         from langfuse import get_client
     except ImportError:
-        return run_openai_agent_core(
+        return run_anthropic_agent_core(
             agent=agent,
             scenario=scenario,
             config=config,
@@ -518,7 +514,7 @@ def run_openai_agent_with_langfuse(
             "allowed_tools": agent.allowed_tool_names,
         },
     ) as observation:
-        result = run_openai_agent_core(
+        result = run_anthropic_agent_core(
             agent=agent,
             scenario=scenario,
             config=config,
@@ -551,11 +547,11 @@ def run_openai_agent_with_langfuse(
     )
 
 
-def run_openai_agent_core(
+def run_anthropic_agent_core(
     *,
     agent: RunnerAgentDesign,
     scenario: RunnerScenario,
-    config: OpenAIRunnerConfig,
+    config: AnthropicRunnerConfig,
     tool_definitions: List[RunnerToolDefinition] | None = None,
 ) -> RunnerResult:
     instructions = (
@@ -567,40 +563,32 @@ def run_openai_agent_core(
     if active_tools:
         return run_langchain_agent(agent, scenario, config, instructions, active_tools)
 
+    system_prompt = f"{instructions}\n\nAgent name: {agent.name}\nDesign intent: {agent.intent}"
+    messages = [{"role": "user", "content": scenario.input}]
     body = {
         "model": config.model,
-        "reasoning": {"effort": "minimal"},
-        "text": {"verbosity": "low"},
-        "input": [
-            {
-                "role": "system",
-                "content": f"{instructions}\n\nAgent name: {agent.name}\nDesign intent: {agent.intent}",
-            },
-            {
-                "role": "user",
-                "content": scenario.input,
-            },
-        ],
-        "max_output_tokens": 2000,
+        "max_tokens": 2000,
+        "system": system_prompt,
+        "messages": messages,
     }
-    generation_context = openai_responses_generation_context(config, body)
+    generation_context = anthropic_generation_context(config, messages)
     if generation_context is None:
-        payload = send_openai_responses_request(config, body)
+        payload = send_anthropic_messages_request(config, body)
         response_text = extract_response_text(payload)
         if not response_text:
             raise RuntimeError(describe_empty_response(payload))
     else:
         with generation_context as generation:
-            payload = send_openai_responses_request(config, body)
+            payload = send_anthropic_messages_request(config, body)
             response_text = extract_response_text(payload)
             if not response_text:
                 raise RuntimeError(describe_empty_response(payload))
             generation.update(
                 output=response_text,
-                usage_details=usage_details_from_openai_payload(payload),
+                usage_details=usage_details_from_anthropic_payload(payload),
                 metadata={
-                    "openai_response_id": payload.get("id"),
-                    "status": payload.get("status"),
+                    "anthropic_message_id": payload.get("id"),
+                    "stop_reason": payload.get("stop_reason"),
                 },
             )
 
@@ -612,13 +600,13 @@ def run_openai_agent_core(
         response=response_text,
         tool_calls=[
             RunnerToolCall(
-                name="openai.responses",
+                name="anthropic.messages",
                 input=scenario.input,
                 output=config.model,
             )
         ],
         evidence=[
-            f"Used OpenAI Responses API model {config.model}.",
+            f"Used Anthropic Messages API model {config.model}.",
             "Live provider run; output should be evaluated before promotion.",
         ],
         created_at=datetime.now(timezone.utc),
@@ -637,7 +625,7 @@ def message_text(message) -> str:
 def run_langchain_agent(
     agent: RunnerAgentDesign,
     scenario: RunnerScenario,
-    config: OpenAIRunnerConfig,
+    config: AnthropicRunnerConfig,
     instructions: str,
     tools,
 ) -> RunnerResult:
@@ -647,7 +635,7 @@ def run_langchain_agent(
         raise RuntimeError("LangChain agent execution requires langchain to be installed.") from exc
 
     graph = create_agent(
-        model=f"openai:{config.model}",
+        model=f"anthropic:{config.model}",
         tools=tools,
         system_prompt=(
             f"{instructions}\n\n"
@@ -657,7 +645,9 @@ def run_langchain_agent(
         ),
     )
     callbacks = build_langfuse_langchain_callbacks()
-    invoke_config = {"callbacks": callbacks} if callbacks else None
+    invoke_config: dict = {"recursion_limit": 10}
+    if callbacks:
+        invoke_config["callbacks"] = callbacks
     result = graph.invoke(
         {"messages": [{"role": "user", "content": scenario.input}]},
         config=invoke_config,
@@ -697,7 +687,7 @@ def run_langchain_agent(
             )
         ],
         evidence=[
-            f"Used LangChain/LangGraph agent with OpenAI model {config.model}.",
+            f"Used LangChain/LangGraph agent with Anthropic model {config.model}.",
             f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}.",
         ],
         created_at=datetime.now(timezone.utc),
@@ -705,16 +695,16 @@ def run_langchain_agent(
 
 
 __all__ = [
-    "OpenAIRunnerConfig",
+    "AnthropicRunnerConfig",
     "RunnerAgentDesign",
     "RunnerResult",
     "RunnerScenario",
     "RunnerToolCall",
     "RunnerToolDefinition",
+    "anthropic_config_from_env",
     "build_langchain_tools",
     "build_langfuse_langchain_callbacks",
     "langfuse_tracing_enabled",
-    "openai_config_from_env",
+    "run_anthropic_agent",
     "run_mock_agent",
-    "run_openai_agent",
 ]

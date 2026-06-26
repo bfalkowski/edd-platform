@@ -15,7 +15,11 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Response
 
 from edd_platform_api.service_status import ServiceStatusResponse, service_status_response
-from edd_platform_api.polars_analysis import review_corpus_analysis
+from edd_platform_api.polars_analysis import (
+    materialize_review_corpus_snapshot,
+    review_corpus_analysis,
+    review_corpus_analysis_from_snapshot,
+)
 from edd_platform_api.tool_adapters import tool_adapter_contract
 from edd_platform_api.evidence_context import (
     build_deterministic_evidence_summary,
@@ -26,6 +30,29 @@ from edd_platform_api.eval_checks import (
     contract_generated_checks,
     evaluate_contract_check,
     evaluate_run_text,
+)
+from edd_platform_api.lookups import (
+    get_agent_design_or_404,
+    get_agent_suggestion_or_404,
+    get_agent_version_or_404,
+    get_artifact_or_404,
+    get_comparison_or_404,
+    get_eval_contract_or_404,
+    get_eval_result_or_404,
+    get_failure_mode_or_404,
+    get_failure_packet_or_404,
+    get_fix_proposal_or_404,
+    get_gate_decision_or_404,
+    get_gate_definition_or_404,
+    get_judge_prompt_template_or_404,
+    get_project_or_404,
+    get_review_annotation_or_404,
+    get_review_corpus_or_404,
+    get_review_item_or_404,
+    get_review_note_or_404,
+    get_run_or_404,
+    get_scenario_or_404,
+    get_trace_ref_or_404,
 )
 from edd_platform_api.schemas import (
     AgentDesignCreate,
@@ -78,6 +105,7 @@ from edd_platform_api.schemas import (
     AgentSuggestionCreate,
     AgentSuggestionUpdate,
     AgentSuggestion,
+    AnalysisSnapshotMetadata,
     ReviewCoverageSummary,
     ReviewSamplingCandidate,
     ReviewSamplingPlan,
@@ -94,6 +122,8 @@ from edd_platform_api.schemas import (
     FailurePacketUpdate,
     FailurePacket,
     FixProposalCreate,
+    FixProposalGenerateRequest,
+    FixProposalGenerated,
     FixProposalUpdate,
     FixProposal,
     ComparisonCreate,
@@ -107,7 +137,36 @@ from edd_platform_api.schemas import (
     EvidenceSummaryCreate,
     EvidenceSummary,
 )
-from edd_platform_api.storage import create_store_from_env
+from edd_platform_api.state import (
+    _agent_designs,
+    _agent_suggestions,
+    _agent_versions,
+    _artifact_links,
+    _artifacts,
+    _comparisons,
+    _eval_contracts,
+    _eval_results,
+    _evidence_summaries,
+    _failure_modes,
+    _failure_packets,
+    _fix_proposals,
+    _gate_decisions,
+    _gate_definitions,
+    _judge_outputs,
+    _judge_prompt_templates,
+    _projects,
+    _review_annotations,
+    _review_corpora,
+    _review_items,
+    _review_notes,
+    _runs,
+    _scenarios,
+    _tool_definitions,
+    _trace_refs,
+    default_project,
+    seeded_at,
+    store,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 RUNNER_ROOT = ROOT / "packages" / "runner"
@@ -115,197 +174,25 @@ if str(RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(RUNNER_ROOT))
 
 from edd_runner import (  # noqa: E402
+    AnthropicRunnerConfig,
     RunnerAgentDesign,
     RunnerScenario,
     RunnerToolDefinition,
+    anthropic_config_from_env,
     describe_empty_response,
     extract_response_text,
-    openai_config_from_env,
+    run_anthropic_agent,
     run_mock_agent,
-    run_openai_agent,
 )
 
+
+try:
+    from opentelemetry.instrumentation.anthropic import AnthropicInstrumentor
+    AnthropicInstrumentor().instrument()
+except Exception:
+    pass
 
 app = FastAPI(title="EDD Platform API")
-store = create_store_from_env()
-seeded_at = datetime.now(timezone.utc)
-default_project = Project(
-    id="project_default",
-    name="EDD Platform",
-    description="Local EDD product workspace.",
-    created_at=seeded_at,
-    updated_at=seeded_at,
-)
-_projects: Dict[str, Project] = store.load_collection("projects", Project)
-_agent_designs: Dict[str, AgentDesign] = store.load_collection("agent_designs", AgentDesign)
-_scenarios: Dict[str, Scenario] = store.load_collection("scenarios", Scenario)
-_eval_contracts: Dict[str, EvalContract] = store.load_collection("eval_contracts", EvalContract)
-_judge_prompt_templates: Dict[str, JudgePromptTemplate] = store.load_collection(
-    "judge_prompt_templates",
-    JudgePromptTemplate,
-)
-_gate_definitions: Dict[str, GateDefinition] = store.load_collection(
-    "gate_definitions",
-    GateDefinition,
-)
-_gate_decisions: Dict[str, GateDecision] = store.load_collection(
-    "gate_decisions",
-    GateDecision,
-)
-_agent_versions: Dict[str, AgentVersion] = store.load_collection("agent_versions", AgentVersion)
-_runs: Dict[str, RunRecord] = store.load_collection("runs", RunRecord)
-_trace_refs: Dict[str, TraceRef] = store.load_collection("trace_refs", TraceRef)
-_review_notes: Dict[str, ReviewNote] = store.load_collection("review_notes", ReviewNote)
-_review_corpora: Dict[str, ReviewCorpus] = store.load_collection("review_corpora", ReviewCorpus)
-_review_items: Dict[str, ReviewItem] = store.load_collection("review_items", ReviewItem)
-_review_annotations: Dict[str, ReviewAnnotation] = store.load_collection(
-    "review_annotations",
-    ReviewAnnotation,
-)
-_failure_modes: Dict[str, FailureMode] = store.load_collection("failure_modes", FailureMode)
-_agent_suggestions: Dict[str, AgentSuggestion] = store.load_collection(
-    "agent_suggestions",
-    AgentSuggestion,
-)
-_eval_results: Dict[str, EvalResult] = store.load_collection("eval_results", EvalResult)
-_judge_outputs: Dict[str, JudgeOutput] = store.load_collection("judge_outputs", JudgeOutput)
-_failure_packets: Dict[str, FailurePacket] = store.load_collection("failure_packets", FailurePacket)
-_fix_proposals: Dict[str, FixProposal] = store.load_collection("fix_proposals", FixProposal)
-_comparisons: Dict[str, Comparison] = store.load_collection("comparisons", Comparison)
-_artifacts: Dict[str, ArtifactRecord] = store.load_collection("artifacts", ArtifactRecord)
-_artifact_links: Dict[str, ArtifactLink] = store.load_collection("artifact_links", ArtifactLink)
-_tool_definitions: Dict[str, ToolDefinition] = store.load_collection("tool_definitions", ToolDefinition)
-_evidence_summaries: Dict[str, EvidenceSummary] = store.load_collection(
-    "evidence_summaries",
-    EvidenceSummary,
-)
-if default_project.id not in _projects:
-    _projects[default_project.id] = default_project
-    store.save_record("projects", default_project.id, default_project)
-
-default_tool = ToolDefinition(
-    id="tool_get_weather",
-    project_id=default_project.id,
-    name="get_weather",
-    description="Get current weather for a US ZIP code.",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "zip_code": {"type": "string", "description": "US ZIP code."}
-        },
-        "required": ["zip_code"],
-    },
-    output_schema={
-        "type": "object",
-        "properties": {
-            "summary": {"type": "string"},
-            "source": {"type": "string"},
-        },
-        "required": ["summary"],
-    },
-    output_description="Current temperature and conditions.",
-    implementation_kind="builtin",
-    implementation_key="open_meteo_weather",
-    config_schema={},
-    mock_response="Current weather for 06511 New Haven, CT: 76°F and clear sky.",
-    status="approved",
-    created_at=seeded_at,
-    updated_at=seeded_at,
-)
-web_page_tool = ToolDefinition(
-    id="tool_fetch_web_page",
-    project_id=default_project.id,
-    name="fetch_web_page",
-    description="Fetch a public web page by URL and return a compact response summary.",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "url": {
-                "type": "string",
-                "format": "uri",
-                "description": "HTTP or HTTPS URL to fetch.",
-            }
-        },
-        "required": ["url"],
-    },
-    output_schema={
-        "type": "object",
-        "properties": {
-            "summary": {"type": "string"},
-            "status_code": {"type": "integer"},
-            "content_type": {"type": "string"},
-            "excerpt": {"type": "string"},
-        },
-        "required": ["summary"],
-    },
-    output_description="HTTP status, content type, and a short body excerpt.",
-    implementation_kind="builtin",
-    implementation_key="fetch_web_page",
-    config_schema={},
-    mock_response="Fetched https://example.com: HTTP 200; content-type text/html; excerpt: Example Domain.",
-    status="approved",
-    created_at=seeded_at,
-    updated_at=seeded_at,
-)
-rendered_page_tool = ToolDefinition(
-    id="tool_render_web_page",
-    project_id=default_project.id,
-    name="render_web_page",
-    description="Render a public web page with a browser and return visible text plus useful links.",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "url": {
-                "type": "string",
-                "format": "uri",
-                "description": "HTTP or HTTPS URL to render.",
-            },
-            "query": {
-                "type": "string",
-                "description": "Optional extraction goal for the rendered page.",
-            },
-            "max_chars": {
-                "type": "integer",
-                "minimum": 500,
-                "maximum": 8000,
-                "description": "Maximum visible text characters to return.",
-            },
-        },
-        "required": ["url"],
-    },
-    output_schema={
-        "type": "object",
-        "properties": {
-            "title": {"type": "string"},
-            "visible_text": {"type": "string"},
-            "links": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": ["visible_text"],
-    },
-    output_description="Rendered page title, visible text excerpt, and useful links.",
-    implementation_kind="builtin",
-    implementation_key="render_web_page",
-    config_schema={},
-    mock_response=(
-        "Rendered https://example.com\nTitle\nExample Domain\n\n"
-        "Visible text excerpt\nExample Domain\n\nLinks\nNo links captured."
-    ),
-    status="approved",
-    created_at=seeded_at,
-    updated_at=seeded_at,
-)
-for seeded_tool_definition in [default_tool, web_page_tool, rendered_page_tool]:
-    existing_tool_definition = _tool_definitions.get(seeded_tool_definition.id)
-    if existing_tool_definition is None or (
-        seeded_tool_definition.id == default_tool.id
-        and existing_tool_definition.implementation_key == "local_weather_fixture"
-    ):
-        _tool_definitions[seeded_tool_definition.id] = seeded_tool_definition
-        store.save_record(
-            "tool_definitions",
-            seeded_tool_definition.id,
-            seeded_tool_definition,
-        )
 
 
 @app.get("/health")
@@ -316,134 +203,6 @@ def health() -> Dict[str, str]:
 @app.get("/api/services", response_model=ServiceStatusResponse)
 def get_service_status() -> ServiceStatusResponse:
     return service_status_response()
-
-
-def get_project_or_404(project_id: str) -> Project:
-    project = _projects.get(project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    return project
-
-
-def get_artifact_or_404(project_id: str, artifact_id: str) -> ArtifactRecord:
-    artifact = _artifacts.get(artifact_id)
-    if artifact is None or artifact.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Artifact not found.")
-    return artifact
-
-
-def get_agent_design_or_404(project_id: str, agent_id: str) -> AgentDesign:
-    agent = _agent_designs.get(agent_id)
-    if agent is None or agent.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Agent design not found.")
-    return agent
-
-
-def get_scenario_or_404(project_id: str, scenario_id: str) -> Scenario:
-    scenario = _scenarios.get(scenario_id)
-    if scenario is None or scenario.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Scenario not found.")
-    return scenario
-
-
-def get_eval_contract_or_404(project_id: str, contract_id: str) -> EvalContract:
-    contract = _eval_contracts.get(contract_id)
-    if contract is None or contract.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Eval contract not found.")
-    return contract
-
-
-def get_judge_prompt_template_or_404(
-    project_id: str,
-    judge_prompt_template_id: str,
-) -> JudgePromptTemplate:
-    template = _judge_prompt_templates.get(judge_prompt_template_id)
-    if template is None or template.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Judge prompt template not found.")
-    return template
-
-
-def get_gate_definition_or_404(project_id: str, gate_id: str) -> GateDefinition:
-    gate = _gate_definitions.get(gate_id)
-    if gate is None or gate.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Gate definition not found.")
-    return gate
-
-
-def get_gate_decision_or_404(project_id: str, decision_id: str) -> GateDecision:
-    decision = _gate_decisions.get(decision_id)
-    if decision is None or decision.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Gate decision not found.")
-    return decision
-
-
-def get_agent_version_or_404(project_id: str, version_id: str) -> AgentVersion:
-    version = _agent_versions.get(version_id)
-    if version is None or version.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Agent version not found.")
-    return version
-
-
-def get_eval_result_or_404(project_id: str, eval_result_id: str) -> EvalResult:
-    eval_result = _eval_results.get(eval_result_id)
-    if eval_result is None or eval_result.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Eval result not found.")
-    return eval_result
-
-
-def get_trace_ref_or_404(project_id: str, trace_ref_id: str) -> TraceRef:
-    trace_ref = _trace_refs.get(trace_ref_id)
-    if trace_ref is None or trace_ref.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Trace reference not found.")
-    return trace_ref
-
-
-def get_review_note_or_404(project_id: str, review_note_id: str) -> ReviewNote:
-    review_note = _review_notes.get(review_note_id)
-    if review_note is None or review_note.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Review note not found.")
-    return review_note
-
-
-def get_review_corpus_or_404(project_id: str, corpus_id: str) -> ReviewCorpus:
-    corpus = _review_corpora.get(corpus_id)
-    if corpus is None or corpus.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Review corpus not found.")
-    return corpus
-
-
-def get_review_item_or_404(project_id: str, review_item_id: str) -> ReviewItem:
-    item = _review_items.get(review_item_id)
-    if item is None or item.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Review item not found.")
-    return item
-
-
-def get_review_annotation_or_404(
-    project_id: str,
-    annotation_id: str,
-) -> ReviewAnnotation:
-    annotation = _review_annotations.get(annotation_id)
-    if annotation is None or annotation.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Review annotation not found.")
-    return annotation
-
-
-def get_failure_mode_or_404(project_id: str, failure_mode_id: str) -> FailureMode:
-    failure_mode = _failure_modes.get(failure_mode_id)
-    if failure_mode is None or failure_mode.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Failure mode not found.")
-    return failure_mode
-
-
-def get_agent_suggestion_or_404(
-    project_id: str,
-    suggestion_id: str,
-) -> AgentSuggestion:
-    suggestion = _agent_suggestions.get(suggestion_id)
-    if suggestion is None or suggestion.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Agent suggestion not found.")
-    return suggestion
 
 
 def find_review_item_for_langfuse_import(
@@ -738,6 +497,31 @@ def review_corpus_analysis_for_corpus(
             and suggestion.status == "pending"
         ]
     )
+    snapshot_dir = analysis_snapshot_dir_for_corpus(project_id=project_id, corpus_id=corpus.id)
+    snapshot_error = None
+    if snapshot_dir is not None:
+        try:
+            materialize_review_corpus_snapshot(
+                snapshot_dir=snapshot_dir,
+                items=items,
+                annotations=annotations,
+                failure_modes=failure_modes,
+            )
+            snapshot_analysis = review_corpus_analysis_from_snapshot(
+                project_id=project_id,
+                corpus_id=corpus.id,
+                agent_design_id=corpus.agent_design_id,
+                pending_suggestions=pending_suggestions,
+                snapshot_dir=snapshot_dir,
+            )
+            if snapshot_analysis is not None:
+                return snapshot_analysis
+        except Exception as exc:
+            snapshot_error = AnalysisSnapshotMetadata(
+                status="unavailable",
+                directory=str(snapshot_dir),
+                error=str(exc),
+            )
     return review_corpus_analysis(
         project_id=project_id,
         corpus_id=corpus.id,
@@ -746,7 +530,15 @@ def review_corpus_analysis_for_corpus(
         annotations=annotations,
         failure_modes=failure_modes,
         pending_suggestions=pending_suggestions,
+        snapshot=snapshot_error,
     )
+
+
+def analysis_snapshot_dir_for_corpus(*, project_id: str, corpus_id: str) -> Optional[Path]:
+    root = os.getenv("EDD_PLATFORM_ANALYSIS_SNAPSHOT_DIR")
+    if not root:
+        return None
+    return Path(root) / "projects" / project_id / "review-corpora" / corpus_id
 
 
 def discovery_evidence_artifacts(
@@ -915,27 +707,6 @@ def create_discovery_run_and_eval(
     _eval_results[eval_result.id] = eval_result
     store.save_record("eval_results", eval_result.id, eval_result)
     return run, eval_result
-
-
-def get_failure_packet_or_404(project_id: str, failure_packet_id: str) -> FailurePacket:
-    failure_packet = _failure_packets.get(failure_packet_id)
-    if failure_packet is None or failure_packet.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Failure packet not found.")
-    return failure_packet
-
-
-def get_fix_proposal_or_404(project_id: str, fix_proposal_id: str) -> FixProposal:
-    fix_proposal = _fix_proposals.get(fix_proposal_id)
-    if fix_proposal is None or fix_proposal.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Fix proposal not found.")
-    return fix_proposal
-
-
-def get_comparison_or_404(project_id: str, comparison_id: str) -> Comparison:
-    comparison = _comparisons.get(comparison_id)
-    if comparison is None or comparison.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Comparison not found.")
-    return comparison
 
 
 def find_agent_design_artifact(agent_id: str) -> Optional[ArtifactRecord]:
@@ -1753,8 +1524,8 @@ seed_sentiment_observer_defaults()
 
 apartment_search_agent_intent = (
     "Find rental listings for a requested location and return a concrete list of homes or apartments. "
-    "Use fetch_web_page first for simple pages. If the fetched page looks like a JavaScript app shell, "
-    "use render_web_page on the same URL to inspect visible listings. For Zillow-style searches, return "
+    "Use call_http_api first for simple pages. If the fetched page looks like a JavaScript app shell, "
+    "use browse_webpage on the same URL to inspect visible listings. For Zillow-style searches, return "
     "listing name or address, visible rent, bedrooms when shown, and a source link. Do not mark the task "
     "complete with only a limitation explanation unless both static fetch and rendered page inspection fail."
 )
@@ -1762,7 +1533,7 @@ apartment_search_agent_intent = (
 
 def seed_apartment_search_agent_defaults() -> None:
     now = seeded_at
-    tool_names = ["fetch_web_page", "render_web_page"]
+    tool_names = ["call_http_api", "browse_webpage"]
     existing_agent = _agent_designs.get("agent_apartment_search")
     if existing_agent is None:
         agent = AgentDesign(
@@ -2261,26 +2032,22 @@ def build_live_judge_prompt(
     )
 
 
-def usage_details_from_openai_payload(payload: Dict[str, object]) -> Dict[str, Any]:
+def usage_details_from_anthropic_payload(payload: Dict[str, object]) -> Dict[str, Any]:
     usage = payload.get("usage")
     if not isinstance(usage, dict):
         return {}
     details: Dict[str, Any] = {}
-    for source_key, target_key in [
-        ("input_tokens", "input_tokens"),
-        ("output_tokens", "output_tokens"),
-        ("total_tokens", "total_tokens"),
-    ]:
-        value = usage.get(source_key)
+    for key in ("input_tokens", "output_tokens"):
+        value = usage.get(key)
         if isinstance(value, int):
-            details[target_key] = value
+            details[key] = value
     return details
 
 
 def live_judge_generation_context(
     *,
     model: str,
-    body: Dict[str, object],
+    messages: List[Dict[str, object]],
     trace_id: Optional[str],
 ):
     if not langfuse_credentials_configured():
@@ -2290,15 +2057,13 @@ def live_judge_generation_context(
         return langfuse.start_as_current_observation(
             trace_context={"trace_id": trace_id} if trace_id else None,
             as_type="generation",
-            name="openai.responses.judge",
+            name="anthropic.messages.judge",
             model=model,
-            input=body["input"],
+            input=messages,
             metadata={
-                "provider": "openai",
-                "endpoint": "/responses",
+                "provider": "anthropic",
+                "endpoint": "/v1/messages",
                 "purpose": "eval_judge",
-                "reasoning_effort": body.get("reasoning", {}).get("effort"),
-                "text_verbosity": body.get("text", {}).get("verbosity"),
             },
         )
     except Exception:
@@ -2315,129 +2080,56 @@ def flush_langfuse_client() -> None:
         pass
 
 
+def _anthropic_client(config) -> "anthropic.Anthropic":
+    import anthropic as anthropic_sdk
+    return anthropic_sdk.Anthropic(api_key=config.api_key)
+
+
 def run_live_judge(
     prompt: str,
     trace_id: Optional[str] = None,
 ) -> tuple[str, str, Dict[str, object]]:
-    config = openai_config_from_env()
-    body = {
-        "model": config.model,
-        "reasoning": {"effort": "minimal"},
-        "text": {"verbosity": "low"},
-        "input": [
-            {
-                "role": "system",
-                "content": "You are an eval judge for an eval-driven design platform.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        "max_output_tokens": 1200,
-    }
-
-    def send_request() -> Dict[str, object]:
-        request = Request(
-            f"{config.base_url}/responses",
-            data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
+    import anthropic as anthropic_sdk
+    config = anthropic_config_from_env()
+    try:
+        response = _anthropic_client(config).messages.create(
+            model=config.model,
+            max_tokens=1200,
+            system="You are an eval judge for an eval-driven design platform.",
+            messages=[{"role": "user", "content": prompt}],
         )
-        try:
-            with urlopen(request, timeout=60) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenAI judge request failed with status {exc.code}: {detail}") from exc
-        except URLError as exc:
-            raise RuntimeError(f"OpenAI judge request failed: {exc.reason}") from exc
-
-        if not isinstance(payload, dict):
-            raise RuntimeError("OpenAI judge request returned an unexpected response.")
-        return payload
-
-    generation_context = live_judge_generation_context(
-        model=config.model,
-        body=body,
-        trace_id=trace_id,
-    )
-    if generation_context is None:
-        payload = send_request()
-    else:
-        with generation_context as generation:
-            payload = send_request()
-            response_text = extract_response_text(payload)
-            if not response_text:
-                raise RuntimeError(describe_empty_response(payload))
-            token_usage = payload.get("usage", {})
-            if not isinstance(token_usage, dict):
-                token_usage = {}
-            try:
-                generation.update(
-                    output=response_text,
-                    usage_details=usage_details_from_openai_payload(payload),
-                    metadata={
-                        "openai_response_id": payload.get("id"),
-                        "status": payload.get("status"),
-                        "trace_id": trace_id,
-                    },
-                )
-            except Exception:
-                pass
-        flush_langfuse_client()
-        return response_text, config.model, token_usage
-
+    except anthropic_sdk.APIStatusError as exc:
+        raise RuntimeError(f"Anthropic judge request failed with status {exc.status_code}: {exc.message}") from exc
+    except anthropic_sdk.APIConnectionError as exc:
+        raise RuntimeError(f"Anthropic judge request failed: {exc}") from exc
+    payload = response.model_dump()
     response_text = extract_response_text(payload)
     if not response_text:
         raise RuntimeError(describe_empty_response(payload))
     token_usage = payload.get("usage", {})
     if not isinstance(token_usage, dict):
         token_usage = {}
+    flush_langfuse_client()
     return response_text, config.model, token_usage
 
 
 def run_live_evidence_summary(prompt: str) -> tuple[str, str, Dict[str, object]]:
-    config = openai_config_from_env()
-    body = {
-        "model": config.model,
-        "reasoning": {"effort": "minimal"},
-        "text": {"verbosity": "low"},
-        "input": [
-            {
-                "role": "system",
-                "content": "You summarize bounded evidence for an eval-driven design platform.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        "max_output_tokens": 900,
-    }
-    request = Request(
-        f"{config.base_url}/responses",
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    import anthropic as anthropic_sdk
+    config = anthropic_config_from_env()
     try:
-        with urlopen(request, timeout=60) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
+        response = _anthropic_client(config).messages.create(
+            model=config.model,
+            max_tokens=900,
+            system="You summarize bounded evidence for an eval-driven design platform.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except anthropic_sdk.APIStatusError as exc:
         raise RuntimeError(
-            f"OpenAI evidence summary request failed with status {exc.code}: {detail}"
+            f"Anthropic evidence summary request failed with status {exc.status_code}: {exc.message}"
         ) from exc
-    except URLError as exc:
-        raise RuntimeError(f"OpenAI evidence summary request failed: {exc.reason}") from exc
-
+    except anthropic_sdk.APIConnectionError as exc:
+        raise RuntimeError(f"Anthropic evidence summary request failed: {exc}") from exc
+    payload = response.model_dump()
     response_text = extract_response_text(payload)
     if not response_text:
         raise RuntimeError(describe_empty_response(payload))
@@ -2445,6 +2137,65 @@ def run_live_evidence_summary(prompt: str) -> tuple[str, str, Dict[str, object]]
     if not isinstance(token_usage, dict):
         token_usage = {}
     return response_text, config.model, token_usage
+
+
+def _generate_rubric(outcome: str, output_focus: str, has_live_tools: bool = False) -> str:
+    _FALLBACK_RUBRIC = (
+        "Pass if the response directly satisfies the requested outcome "
+        "with specific, concrete details. Fail if the response is generic, "
+        "refuses to complete the task, or provides no actionable result."
+    )
+    try:
+        config = anthropic_config_from_env()
+        if has_live_tools:
+            tool_instruction = (
+                "The agent CAN fetch live data — it has web tools. "
+                "NEVER include 'notes limitations', 'acknowledges inability', or similar clauses. "
+                "Focus ONLY on whether the fetched data is specific and complete for the outcome."
+            )
+        else:
+            tool_instruction = (
+                "The agent has no live tools. "
+                "Pass if it provides the best available answer and is clear about what it cannot verify."
+            )
+        response = _anthropic_client(config).messages.create(
+            model=config.model,
+            max_tokens=150,
+            system=(
+                "You write eval rubrics for AI agent outputs. "
+                "Return ONLY one sentence starting with 'Pass if'. Max 50 words. "
+                "No preamble. No extra sentences. No 'and explicitly notes limitations'."
+            ),
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Outcome: {outcome}\n"
+                    f"Expected approach: {output_focus}\n"
+                    f"Constraint: {tool_instruction}\n"
+                    "Rubric:"
+                ),
+            }],
+        )
+        text = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                text = block.text.strip()
+                break
+        if not text:
+            return _FALLBACK_RUBRIC
+        # When agent has live tools, strip any clause about noting limitations
+        if has_live_tools:
+            for bad_phrase in [
+                ", and explicitly notes any limitations",
+                ", explicitly noting any limitations",
+                " and notes any limitations",
+                " while noting limitations",
+                ", noting any limitations",
+            ]:
+                text = text.replace(bad_phrase, "")
+        return text
+    except Exception:
+        return _FALLBACK_RUBRIC
 
 
 def token_count(token_usage: Dict[str, object], key: str) -> int:
@@ -2453,8 +2204,8 @@ def token_count(token_usage: Dict[str, object], key: str) -> int:
 
 
 def estimate_live_judge_cost(token_usage: Dict[str, object]) -> Optional[float]:
-    input_rate = os.environ.get("EDD_OPENAI_INPUT_COST_PER_1M", "").strip()
-    output_rate = os.environ.get("EDD_OPENAI_OUTPUT_COST_PER_1M", "").strip()
+    input_rate = os.environ.get("EDD_ANTHROPIC_INPUT_COST_PER_1M", "").strip()
+    output_rate = os.environ.get("EDD_ANTHROPIC_OUTPUT_COST_PER_1M", "").strip()
     if not input_rate or not output_rate:
         return None
     try:
@@ -2538,15 +2289,15 @@ def run_agent_with_runner(
     runner_scenario = RunnerScenario(input=scenario_input.strip())
     if mode == "live":
         try:
-            runner_result = run_openai_agent(
+            runner_result = run_anthropic_agent(
                 runner_agent,
                 runner_scenario,
-                openai_config_from_env(),
+                anthropic_config_from_env(),
                 approved_tools_for_agent(project_id, agent),
             )
         except RuntimeError as exc:
             detail = str(exc)
-            status_code = 400 if "OPENAI_API_KEY" in detail else 502
+            status_code = 400 if "ANTHROPIC_API_KEY" in detail else 502
             raise HTTPException(status_code=status_code, detail=detail) from exc
     else:
         runner_result = run_mock_agent(runner_agent, runner_scenario)
@@ -2941,13 +2692,6 @@ def create_fix_proposal_record(
     return fix_proposal
 
 
-def get_run_or_404(project_id: str, run_id: str) -> RunRecord:
-    run = _runs.get(run_id)
-    if run is None or run.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Run not found.")
-    return run
-
-
 def find_eval_result_for_run(
     *,
     project_id: str,
@@ -3195,7 +2939,10 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
         name=payload.name.strip(),
         intent=payload.intent.strip(),
         status="designing",
-        allowed_tool_names=payload.allowed_tool_names or ["get_weather"],
+        allowed_tool_names=payload.allowed_tool_names or [
+            t.name for t in _tool_definitions.values()
+            if t.project_id == project_id and t.status == "approved"
+        ],
         langfuse_prompt_name=(
             payload.langfuse_prompt_name.strip()
             if payload.langfuse_prompt_name is not None
@@ -3225,6 +2972,7 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
 def draft_agent_from_outcome(
     project_id: str,
     outcome: str,
+    agent_name: Optional[str] = None,
 ) -> OutcomeAgentCreated:
     normalized = " ".join(outcome.strip().split())
     lowered = normalized.lower()
@@ -3269,7 +3017,7 @@ def draft_agent_from_outcome(
     draft_tools: List[ToolDefinition] = []
     allowed_tools = []
     if is_web_task:
-        allowed_tools.extend(["fetch_web_page", "render_web_page"])
+        allowed_tools.extend(["call_http_api", "browse_webpage"])
     if is_weather_task:
         allowed_tools.append("get_weather")
     schedule_tool = find_project_tool_by_name(project_id, "lookup_event_schedule")
@@ -3399,7 +3147,7 @@ def draft_agent_from_outcome(
             "apartment",
             "source",
         ]
-        required_tools = ["render_web_page"]
+        required_tools = ["browse_webpage"]
     elif is_schedule_task:
         name = "Schedule Lookup Agent"
         output_focus = "Return the next scheduled event after the current reference date."
@@ -3426,7 +3174,7 @@ def draft_agent_from_outcome(
         name = "Web Research Agent"
         output_focus = "Return concrete findings from the requested web source."
         output_requirements = ["source"]
-        required_tools = ["render_web_page"]
+        required_tools = ["browse_webpage"]
     elif is_weather_task:
         name = "Weather Agent"
         output_focus = "Answer the requested weather question using the approved weather tool."
@@ -3444,9 +3192,14 @@ def draft_agent_from_outcome(
         "what next action would satisfy the outcome. "
         f"Include these output requirements explicitly: {', '.join(output_requirements)}."
     )
+
+    live_tool_keys = {"call_http_api", "browse_webpage", "open_meteo_weather"}
+    has_live_tools = bool(set(allowed_tools) & live_tool_keys)
+    rubric = _generate_rubric(normalized, output_focus, has_live_tools=has_live_tools)
+
     created = create_agent_design(
         project_id,
-        AgentDesignCreate(name=name, intent=intent, allowed_tool_names=allowed_tools),
+        AgentDesignCreate(name=agent_name.strip() if agent_name and agent_name.strip() else name, intent=intent, allowed_tool_names=allowed_tools),
     )
     now = datetime.now(timezone.utc)
     if created.agent.allowed_tool_names != allowed_tools:
@@ -3526,11 +3279,7 @@ def draft_agent_from_outcome(
                 {
                     "id": "outcome_rubric",
                     "type": "rubric_judge",
-                    "value": (
-                        "Pass only if the answer directly satisfies the requested outcome "
-                        "with concrete, source-backed details. Fail if it merely reports "
-                        "that a page was opened or that evidence may exist."
-                    ),
+                    "value": rubric,
                 }
             ],
             pass_criteria="all_checks_pass",
@@ -3554,7 +3303,7 @@ def create_agent_design_from_outcome(
     payload: OutcomeAgentCreate,
 ) -> OutcomeAgentCreated:
     get_project_or_404(project_id)
-    return draft_agent_from_outcome(project_id, payload.outcome)
+    return draft_agent_from_outcome(project_id, payload.outcome, agent_name=payload.name)
 
 
 @app.get("/api/projects/{project_id}/agent-designs/{agent_id}")
@@ -4172,7 +3921,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         scenario_id=scenario.id,
         eval_contract_id=payload.eval_contract_id,
         mode=runner_result.mode,
-        provider="openai" if runner_result.mode == "live" else "mock",
+        provider="anthropic" if runner_result.mode == "live" else "mock",
         model=None,
         input=runner_result.scenario_input,
         output=runner_result.response,
@@ -5301,7 +5050,7 @@ def evaluate_run(
             )
         except RuntimeError as exc:
             detail = str(exc)
-            status_code = 400 if "OPENAI_API_KEY" in detail else 502
+            status_code = 400 if "ANTHROPIC_API_KEY" in detail else 502
             raise HTTPException(status_code=status_code, detail=detail) from exc
         cost_estimate = estimate_live_judge_cost(token_usage)
         if any(check.check_type == "rubric_judge" for check in checks):
@@ -5603,6 +5352,76 @@ def list_fix_proposals(
     )
 
 
+@app.post("/api/projects/{project_id}/fix-proposals/generate")
+def generate_fix_proposal(
+    project_id: str,
+    payload: FixProposalGenerateRequest,
+) -> FixProposalGenerated:
+    get_project_or_404(project_id)
+    agent = get_agent_or_404(project_id, payload.agent_design_id)
+    version = _agent_versions.get(payload.target_version_id)
+    if version is None or version.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Agent version not found.")
+    packets = [
+        _failure_packets[pid]
+        for pid in payload.addressed_failure_packet_ids
+        if pid in _failure_packets and _failure_packets[pid].project_id == project_id
+    ]
+    contract = _eval_contracts.get(payload.validation_contract_id) if payload.validation_contract_id else None
+
+    rubric_text = ""
+    if contract:
+        for check in contract.checks:
+            if check.check_type == "rubric_judge" and check.value:
+                rubric_text = check.value
+                break
+
+    failure_lines = []
+    for p in packets:
+        failure_lines.append(f"- Failure: {p.title}")
+        failure_lines.append(f"  Diagnosis: {p.diagnosis}")
+        failure_lines.append(f"  Severity: {p.severity}")
+        if p.recommended_fix:
+            failure_lines.append(f"  Suggested fix direction: {p.recommended_fix}")
+    failure_summary = "\n".join(failure_lines) or "No failure packets provided."
+
+    prompt = (
+        f"You are improving an AI agent's instructions after a failed evaluation.\n\n"
+        f"Agent name: {agent.name}\n"
+        f"Agent intent: {agent.intent}\n"
+        f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}\n\n"
+        f"Current instructions ({version.version_label}):\n{version.instructions}\n\n"
+        f"What failed:\n{failure_summary}\n\n"
+        f"Success criteria (rubric): {rubric_text or 'Not specified.'}\n\n"
+        f"Write improved instructions for the next version that directly address the failure. "
+        f"Keep everything that worked. Fix only what caused the failure. "
+        f"If tools are available, be explicit about when and how to use them. "
+        f"Return only the instructions text — no preamble, no explanation, no headers."
+    )
+
+    try:
+        config = anthropic_config_from_env()
+        response = _anthropic_client(config).messages.create(
+            model=config.model,
+            max_tokens=1200,
+            system="You write precise AI agent instructions. Return only the instruction text.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        proposed_instructions = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                proposed_instructions = block.text.strip()
+                break
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LLM fix generation failed: {exc}") from exc
+
+    rationale = (
+        f"Generated fix addressing: {'; '.join(p.title for p in packets)}."
+        if packets else "Generated fix from failure context."
+    )
+    return {"proposed_instructions": proposed_instructions, "rationale": rationale}
+
+
 @app.post("/api/projects/{project_id}/fix-proposals", status_code=201)
 def create_fix_proposal(
     project_id: str,
@@ -5816,7 +5635,7 @@ def run_agent_design(
             run_id=runner_result.id,
             metadata={
                 "runner_mode": runner_result.mode,
-                "provider": "openai" if runner_result.mode == "live" else "mock",
+                "provider": "anthropic" if runner_result.mode == "live" else "mock",
                 "ad_hoc": True,
                 "prompt_refs": [ref.model_dump(mode="json") for ref in prompt_refs],
             },
@@ -5908,6 +5727,24 @@ def update_tool_definition(
     store.save_record("tool_definitions", updated.id, updated)
     upsert_tool_definition_artifact(updated, now)
     return updated
+
+
+@app.delete("/api/projects/{project_id}/tools/{tool_id}", status_code=204)
+def delete_tool_definition(project_id: str, tool_id: str) -> None:
+    get_project_or_404(project_id)
+    existing = _tool_definitions.get(tool_id)
+    if existing is None or existing.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Tool not found.")
+    del _tool_definitions[tool_id]
+    store.delete_record("tool_definitions", tool_id)
+    # Remove this tool from any agent's allowlist
+    for agent in list(_agent_designs.values()):
+        if agent.project_id == project_id and existing.name in agent.allowed_tool_names:
+            updated_names = [n for n in agent.allowed_tool_names if n != existing.name]
+            now = datetime.now(timezone.utc)
+            updated_agent = agent.model_copy(update={"allowed_tool_names": updated_names, "updated_at": now})
+            _agent_designs[agent.id] = updated_agent
+            store.save_record("agent_designs", agent.id, updated_agent)
 
 
 @app.get("/api/projects/{project_id}/tools/{tool_id}/adapter-contracts")
@@ -6182,7 +6019,7 @@ def create_evidence_summary(
             summary, model, token_usage = run_live_evidence_summary(prompt)
         except RuntimeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        provider = "openai"
+        provider = "anthropic"
         cost_estimate = estimate_live_judge_cost(token_usage)
     else:
         summary = build_deterministic_evidence_summary(

@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
 from edd_platform_api.main import app
@@ -450,6 +453,76 @@ def test_review_corpus_analysis_uses_polars_for_failure_rates() -> None:
         }
     ]
     assert analysis["failure_mode_counts"][0]["name"] == "missing_policy_evidence"
+
+
+def test_review_corpus_analysis_materializes_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("EDD_PLATFORM_ANALYSIS_SNAPSHOT_DIR", str(tmp_path))
+    client = TestClient(app)
+    agent = create_agent(client)
+    corpus = client.post(
+        "/api/projects/project_default/review-corpora",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Snapshot analysis corpus",
+            "source": "langfuse",
+        },
+    ).json()
+
+    import_response = client.post(
+        f"/api/projects/project_default/review-corpora/{corpus['id']}/langfuse-items",
+        json={
+            "items": [
+                {
+                    "source_id": "snapshot_trace:generation",
+                    "title": "Snapshot generation",
+                    "content": "The agent skipped evidence.",
+                    "trace_id": "snapshot_trace",
+                    "observation_id": "snapshot_generation",
+                    "object_type": "OBSERVATION",
+                },
+            ]
+        },
+    )
+    item = import_response.json()["review_items"][0]
+    annotation_response = client.post(
+        f"/api/projects/project_default/review-corpora/{corpus['id']}/langfuse-annotations",
+        json={
+            "annotations": [
+                {
+                    "review_item_id": item["id"],
+                    "open_coding": "Skipped evidence.",
+                    "pass_fail": "fail",
+                    "failure_mode_name": "snapshot_missing_evidence",
+                },
+            ]
+        },
+    )
+    assert annotation_response.status_code == 201
+
+    analysis_response = client.get(
+        f"/api/projects/project_default/review-corpora/{corpus['id']}/analysis"
+    )
+
+    assert analysis_response.status_code == 200
+    analysis = analysis_response.json()
+    assert analysis["coverage"]["total_items"] == 1
+    assert analysis["snapshot"]["status"] == "loaded"
+    assert analysis["snapshot"]["item_count"] == 1
+    assert analysis["snapshot"]["annotation_count"] == 1
+    snapshot_dir = (
+        tmp_path
+        / "projects"
+        / "project_default"
+        / "review-corpora"
+        / corpus["id"]
+    )
+    assert (snapshot_dir / "review_items.parquet").exists()
+    assert (snapshot_dir / "annotations.parquet").exists()
+    assert (snapshot_dir / "failure_modes.parquet").exists()
+    assert (snapshot_dir / "metadata.json").exists()
 
 
 def test_promote_annotation_creates_proof_loop_artifacts() -> None:

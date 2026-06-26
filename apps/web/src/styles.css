@@ -379,6 +379,19 @@ textarea {
   gap: 10px;
 }
 
+.intent-mode-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.intent-mode-label {
+  color: #606373;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .manual-create-fields {
   border-top: 1px solid var(--border);
   display: grid;
@@ -1373,6 +1386,36 @@ dd {
   gap: 10px;
 }
 
+.tool-marketplace-item-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.tool-marketplace-item-row .tool-marketplace-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-delete-button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid #e0e0e8;
+  border-radius: 10px;
+  color: #9a9aaa;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  padding: 0 10px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.tool-delete-button:hover {
+  background: #fde8e8;
+  border-color: #e8c0c0;
+  color: #8b2020;
+}
+
 .tool-marketplace-item {
   background: #f7f7f8;
   border: 1px solid #ececf1;
@@ -1923,8 +1966,42 @@ dd {
   border: 1px solid #e2e3ea;
   border-radius: 14px;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding: 16px;
+}
+
+.comparison-summary--passed {
+  background: #f4fbf5;
+  border-color: #b8dfc2;
+}
+
+.comparison-summary--failed {
+  background: #fdf7f7;
+  border-color: #e8c0c0;
+}
+
+.comparison-outcome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.comparison-outcome-badge {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.comparison-summary--passed .comparison-outcome-badge {
+  background: #d4f0dc;
+  color: #1a5c30;
+}
+
+.comparison-summary--failed .comparison-outcome-badge {
+  background: #fde8e8;
+  color: #8b2020;
 }
 
 .comparison-summary strong {
@@ -2099,12 +2176,137 @@ dd {
   padding: 4px 8px;
 }
 
+.generated-fix-panel {
+  background: #f4f6ff;
+  border: 1.5px solid #b8c8f0;
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.generated-fix-header p:first-child {
+  color: #3b5bdb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.generated-fix-header h4 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.generated-fix-header p:last-child {
+  color: #606373;
+  font-size: 13px;
+}
+
+.generated-fix-label {
+  display: grid;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+.generated-fix-textarea {
+  background: #fff;
+  border: 1px solid #c8d0e8;
+  border-radius: 8px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.generated-fix-rationale {
+  color: #606373;
+  font-size: 12px;
+  font-style: italic;
+}
+
 .failure-analysis-panel {
-  border-top: 1px solid #e2e3ea;
+  background: #fffaf3;
+  border: 1.5px solid #e8c97a;
+  border-radius: 14px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.failure-analysis-panel.analysis-complete {
+  background: #f7f7f8;
+  border-color: #e2e3ea;
+}
+
+.failure-analysis-header {
+  border-bottom: 1px solid #f0dda8;
+  padding-bottom: 14px;
+}
+
+.failure-analysis-panel.analysis-complete .failure-analysis-header {
+  border-bottom-color: #e2e3ea;
+}
+
+.failure-step-eyebrow {
+  margin-bottom: 8px;
+}
+
+.step-badge {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+}
+
+.step-badge--required {
+  background: #fef3c7;
+  border: 1px solid #e8c97a;
+  color: #7a4f0a;
+}
+
+.step-badge--done {
+  background: #eef7f0;
+  border: 1px solid #cfe7d4;
+  color: #256636;
+}
+
+.failure-analysis-header h4 {
+  color: #202123;
+  font-size: 18px;
+  line-height: 1.15;
+  margin: 0 0 6px;
+}
+
+.failure-analysis-instruction {
+  color: #5a4a1e;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.failure-analysis-body {
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
-  padding-top: 16px;
+}
+
+.compact-section-label {
+  color: #888a97;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.required-marker {
+  color: #c0392b;
 }
 
 .judge-mode-note {
@@ -2177,17 +2379,11 @@ dd {
   overflow-wrap: anywhere;
 }
 
-.failure-analysis-summary h4 {
-  color: #202123;
-  font-size: 18px;
-  line-height: 1.15;
-  margin: 0 0 10px;
-}
-
 .failure-analysis-summary p,
 .failure-analysis-form span,
 .analysis-action-row span {
   color: #606373;
+  font-size: 13px;
   line-height: 1.45;
   margin: 0;
 }
@@ -2229,8 +2425,9 @@ dd {
 .analysis-action-row {
   align-items: center;
   display: flex;
+  flex-direction: row-reverse;
   gap: 12px;
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 
 .failure-analysis-form .saved-analysis-chip {
@@ -2690,7 +2887,7 @@ dd {
     flex-direction: column;
   }
 
-  .failure-analysis-panel,
+  .failure-analysis-body,
   .analysis-field-row {
     grid-template-columns: 1fr;
   }

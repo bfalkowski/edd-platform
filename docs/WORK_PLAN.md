@@ -7,10 +7,10 @@ Beads is the operational task tracker. Use Beads for active ownership,
 dependencies, blockers, resume state, and verification notes. Update this file
 only when milestone state, product direction, or public planning anchors change.
 
-Last Beads reconciliation: 2026-06-17.
+Last Beads reconciliation: 2026-06-26.
 
-At reconciliation time, Beads reported 15 total issues: 9 closed, 1 in
-progress, and 5 open.
+At reconciliation time, Beads reported 30 total issues: 30 closed, 0 in
+progress, and 0 open.
 
 ## Product Direction
 
@@ -48,6 +48,8 @@ AgentDesign
   before feature code.
 - [`hld/HLD-004-eval-contracts-runs-judges-and-fixes.md`](hld/HLD-004-eval-contracts-runs-judges-and-fixes.md)
   defines the eval-driven implementation backbone.
+- [`hld/HLD-005-relational-metadata-and-polars-analysis-plane.md`](hld/HLD-005-relational-metadata-and-polars-analysis-plane.md)
+  defines the Postgres metadata store plus Polars trace/corpus analysis plane.
 - [`API_CONTRACT.md`](API_CONTRACT.md) defines API contract rules and OpenAPI
   generation.
 - [`HAPPY_PATH_WALKTHROUGH.md`](HAPPY_PATH_WALKTHROUGH.md) is the canonical
@@ -78,15 +80,16 @@ persistent state beyond in-memory storage.
 
 ### Eval Contract Backbone
 
-Substantially complete.
+Complete for the current product slice.
 
 Includes deterministic and live runner paths, scenario records, eval contracts,
 agent versions, project-scoped runs, contract-driven eval results, judge
 outputs, failure packets, fix proposals, comparisons, tool-call/tool-result
 evidence, and generated OpenAPI coverage for the backbone.
 
-Remaining backbone hardening is tracked in Beads, especially API module
-refactoring.
+Final backbone hardening included extracting API schemas, state/bootstrap,
+lookup helpers, eval checks, evidence context, tool adapter contracts, storage,
+and service status into focused modules.
 
 ### Builder UI for the EDD Loop
 
@@ -136,17 +139,20 @@ coverage and failure-rate summaries.
 
 ## Beads Queue At Last Reconciliation
 
-Use `bd ready` and `bd list` for the source of truth. At the 2026-06-17
-reconciliation, open work was:
+Use `bd ready` and `bd list` for the source of truth. At the 2026-06-26
+reconciliation, no Beads work was open or in progress. Recently completed
+epics and final hardening tasks were:
 
 | Bead | Priority | Status | Scope |
 |---|---|---|---|
-| `edd-wnt` | P1 | open epic | Prove eval-driven design for arbitrary agents. |
-| `edd-e9d` | P1 | open epic | Langfuse-backed eval data plane. |
-| `edd-wnt.4` | P2 | in progress | Refactor `apps/api/edd_platform_api/main.py` into focused modules without changing public API behavior. |
-| `edd-wnt.6` | P2 | open | Finish schema-first tool registry adapters. |
-| `edd-e9d.5` | P2 | open | Surface Langfuse evidence in UI and context packs. |
-| `edd-wnt.5` | P3 | open | Populate the dedicated public docs repo. |
+| `edd-wnt` | P1 | closed epic | Prove eval-driven design for arbitrary agents. |
+| `edd-e9d` | P1 | closed epic | Langfuse-backed eval data plane. |
+| `edd-wnt.4` | P2 | closed | Refactor `apps/api/edd_platform_api/main.py` into focused modules without changing public API behavior. |
+| `edd-wnt.6` | P2 | closed | Finish schema-first tool registry adapters. |
+| `edd-e9d.5` | P2 | closed | Surface Langfuse evidence in UI and context packs. |
+| `edd-wnt.5` | P3 | closed | Populate the dedicated public docs repo. |
+| `edd-6dn` | P2 | closed | Design relational metadata plus Polars trace analysis plane. |
+| `edd-eoa` | P2 | closed | Implement first Polars analysis snapshot materializer. |
 
 ## Current UI Status
 
@@ -172,9 +178,9 @@ The UI supports the proof-loop vertical slice:
 
 ## Next Product Hardening
 
-Keep the next work aligned with the active Beads queue:
+Create the next Beads task before starting implementation work. Candidate
+hardening areas are:
 
-- refactor the API main module into focused route, model, service, storage, and
-  app-wiring modules;
-- improve evidence-summary display and broader run/replay views;
-- migrate the public docs checklist into the dedicated docs repo.
+- improve evidence-summary display;
+- broaden run history and trace replay views;
+- harden async execution design for long-running run/eval workloads.
