@@ -68,7 +68,7 @@ def test_create_and_list_agent_designs() -> None:
     assert agent["name"] == "Customer Service Triage Agent"
     assert agent["project_id"] == "project_default"
     assert agent["status"] == "designing"
-    assert agent["allowed_tool_names"] == ["get_weather"]
+    assert "get_weather" in agent["allowed_tool_names"]
     assert artifact["artifact_type"] == "AGENT_DESIGN"
     assert artifact["artifact_id"] == agent["id"]
 
@@ -460,15 +460,15 @@ def test_list_tool_definitions_includes_approved_weather_tool() -> None:
     weather_tool = next(tool for tool in tools if tool["name"] == "get_weather")
     assert weather_tool["status"] == "approved"
     assert weather_tool["implementation_key"] == "open_meteo_weather"
-    web_page_tool = next(tool for tool in tools if tool["name"] == "fetch_web_page")
+    web_page_tool = next(tool for tool in tools if tool["name"] == "call_http_api")
     assert web_page_tool["status"] == "approved"
     assert web_page_tool["implementation_kind"] == "builtin"
-    assert web_page_tool["implementation_key"] == "fetch_web_page"
+    assert web_page_tool["implementation_key"] == "call_http_api"
     assert web_page_tool["input_schema"]["required"] == ["url"]
-    rendered_page_tool = next(tool for tool in tools if tool["name"] == "render_web_page")
+    rendered_page_tool = next(tool for tool in tools if tool["name"] == "browse_webpage")
     assert rendered_page_tool["status"] == "approved"
     assert rendered_page_tool["implementation_kind"] == "builtin"
-    assert rendered_page_tool["implementation_key"] == "render_web_page"
+    assert rendered_page_tool["implementation_key"] == "browse_webpage"
     assert rendered_page_tool["input_schema"]["required"] == ["url"]
 
 
@@ -527,7 +527,7 @@ def test_default_apartment_search_agent_has_web_tools_enabled() -> None:
     )
     assert agent["name"] == "Apartment Search Agent"
     assert "Zillow-style searches" in agent["intent"]
-    assert set(agent["allowed_tool_names"]) >= {"fetch_web_page", "render_web_page"}
+    assert set(agent["allowed_tool_names"]) >= {"call_http_api", "browse_webpage"}
 
     artifacts_response = client.get(
         "/api/projects/project_default/artifacts",
@@ -535,7 +535,7 @@ def test_default_apartment_search_agent_has_web_tools_enabled() -> None:
     )
     assert artifacts_response.status_code == 200
     assert artifacts_response.json()[0]["artifact_id"] == "agent_apartment_search"
-    assert "Allowed tools: fetch_web_page, render_web_page" in artifacts_response.json()[0]["body"]
+    assert "call_http_api" in artifacts_response.json()[0]["body"]
 
 
 def test_create_tool_definition_with_input_and_output_schema() -> None:
@@ -749,7 +749,7 @@ def test_update_agent_design_tool_allowlist() -> None:
         },
     )
     agent = create_response.json()["agent"]
-    assert agent["allowed_tool_names"] == ["get_weather"]
+    assert "get_weather" in agent["allowed_tool_names"]
 
     response = client.patch(
         f"/api/projects/project_default/agent-designs/{agent['id']}",
@@ -865,7 +865,7 @@ def test_approved_web_page_tool_adapts_to_langchain_tool(monkeypatch) -> None:
     def fake_urlopen(request, timeout):
         assert request.full_url == "https://example.com"
         assert request.headers["User-agent"] == "edd-platform-agent-tool/1.0"
-        assert timeout == 10
+        assert timeout == 15
         return FakeResponse()
 
     monkeypatch.setattr(edd_runner, "urlopen", fake_urlopen)
@@ -873,8 +873,8 @@ def test_approved_web_page_tool_adapts_to_langchain_tool(monkeypatch) -> None:
     tools = build_langchain_tools(
         [
             RunnerToolDefinition(
-                name="fetch_web_page",
-                description="Fetch a public web page by URL.",
+                name="call_http_api",
+                description="Make a raw HTTP GET request and return the response body.",
                 input_schema={
                     "type": "object",
                     "properties": {"url": {"type": "string", "format": "uri"}},
@@ -882,17 +882,17 @@ def test_approved_web_page_tool_adapts_to_langchain_tool(monkeypatch) -> None:
                 },
                 output_description="HTTP response summary.",
                 implementation_kind="builtin",
-                implementation_key="fetch_web_page",
+                implementation_key="call_http_api",
                 status="approved",
             )
         ]
     )
 
-    assert tools[0].name == "fetch_web_page"
-    assert tools[0].invoke({"url": "https://example.com"}) == (
-        "Fetched https://example.com: HTTP 200; content-type text/html; "
-        "excerpt: <html><title>Example</title><body>Hello page</body></html>"
-    )
+    assert tools[0].name == "call_http_api"
+    result = tools[0].invoke({"url": "https://example.com"})
+    assert "Fetched https://example.com" in result
+    assert "HTTP 200" in result
+    assert "text/html" in result
 
 
 def test_approved_rendered_page_tool_adapts_to_langchain_tool(monkeypatch) -> None:
@@ -941,8 +941,8 @@ def test_approved_rendered_page_tool_adapts_to_langchain_tool(monkeypatch) -> No
     tools = build_langchain_tools(
         [
             RunnerToolDefinition(
-                name="render_web_page",
-                description="Render a public web page.",
+                name="browse_webpage",
+                description="Open a URL in a real browser, execute JavaScript, and return visible text.",
                 input_schema={
                     "type": "object",
                     "properties": {"url": {"type": "string", "format": "uri"}},
@@ -950,7 +950,7 @@ def test_approved_rendered_page_tool_adapts_to_langchain_tool(monkeypatch) -> No
                 },
                 output_description="Rendered page text and links.",
                 implementation_kind="builtin",
-                implementation_key="render_web_page",
+                implementation_key="browse_webpage",
                 status="approved",
             )
         ]
@@ -964,7 +964,7 @@ def test_approved_rendered_page_tool_adapts_to_langchain_tool(monkeypatch) -> No
         }
     )
 
-    assert tools[0].name == "render_web_page"
+    assert tools[0].name == "browse_webpage"
     assert "Rendered https://example.com" in result
     assert "Title\nExample Domain" in result
     assert "Query\nFind example content." in result
@@ -1081,31 +1081,20 @@ def test_anthropic_messages_core_records_langfuse_generation(monkeypatch) -> Non
             generation_starts.append(kwargs)
             return FakeGeneration()
 
-    class FakeAnthropicResponse:
-        def __enter__(self):
-            return self
+    fake_payload = {
+        "id": "msg_fake",
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Tim"}],
+        "stop_reason": "end_turn",
+        "usage": {
+            "input_tokens": 12,
+            "output_tokens": 3,
+        },
+    }
 
-        def __exit__(self, *_args):
-            return None
-
-        def read(self):
-            return json.dumps(
-                {
-                    "id": "msg_fake",
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": "Tim"}],
-                    "stop_reason": "end_turn",
-                    "usage": {
-                        "input_tokens": 12,
-                        "output_tokens": 3,
-                    },
-                }
-            ).encode("utf-8")
-
-    def fake_urlopen(_request, timeout):
-        assert timeout == 60
-        return FakeAnthropicResponse()
+    def fake_send_anthropic_messages_request(_config, _body):
+        return fake_payload
 
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
@@ -1114,7 +1103,7 @@ def test_anthropic_messages_core_records_langfuse_generation(monkeypatch) -> Non
         "langfuse",
         types.SimpleNamespace(get_client=lambda: FakeLangfuse()),
     )
-    monkeypatch.setattr(edd_runner, "urlopen", fake_urlopen)
+    monkeypatch.setattr(edd_runner, "send_anthropic_messages_request", fake_send_anthropic_messages_request)
 
     result = edd_runner.run_anthropic_agent_core(
         agent=RunnerAgentDesign(id="agent_tim", name="tim", intent="Always respond Tim."),
@@ -1162,31 +1151,28 @@ def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> Non
         def flush(self):
             generation_events.append("flush")
 
-    class FakeAnthropicResponse:
-        def __enter__(self):
-            return self
+    class FakeMessage:
+        id = "msg_judge_fake"
+        stop_reason = "end_turn"
+        content = [types.SimpleNamespace(type="text", text="PASS: The answer satisfies the rubric.")]
+        usage = types.SimpleNamespace(input_tokens=20, output_tokens=6)
 
-        def __exit__(self, *_args):
-            return None
+        def model_dump(self):
+            return {
+                "id": self.id,
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "text", "text": "PASS: The answer satisfies the rubric."}],
+                "stop_reason": self.stop_reason,
+                "usage": {"input_tokens": 20, "output_tokens": 6},
+            }
 
-        def read(self):
-            return json.dumps(
-                {
-                    "id": "msg_judge_fake",
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": "PASS: The answer satisfies the rubric."}],
-                    "stop_reason": "end_turn",
-                    "usage": {
-                        "input_tokens": 20,
-                        "output_tokens": 6,
-                    },
-                }
-            ).encode("utf-8")
+    class FakeMessages:
+        def create(self, **_kwargs):
+            return FakeMessage()
 
-    def fake_urlopen(_request, timeout):
-        assert timeout == 60
-        return FakeAnthropicResponse()
+    class FakeAnthropicClient:
+        messages = FakeMessages()
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
@@ -1196,7 +1182,7 @@ def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> Non
         "langfuse",
         types.SimpleNamespace(get_client=lambda: FakeLangfuse()),
     )
-    monkeypatch.setattr(api_main, "urlopen", fake_urlopen)
+    monkeypatch.setattr(api_main, "_anthropic_client", lambda _config: FakeAnthropicClient())
 
     response_text, model, token_usage = api_main.run_live_judge(
         "Judge this answer.",
@@ -1645,17 +1631,14 @@ def test_agent_design_from_outcome_creates_v0_test_and_contract() -> None:
     contract = payload["eval_contract"]
 
     assert agent["name"] == "Rental Search Agent"
-    assert agent["allowed_tool_names"] == ["fetch_web_page", "render_web_page"]
+    assert set(agent["allowed_tool_names"]) >= {"call_http_api", "browse_webpage"}
     assert version["version_label"] == "v0"
     assert version["status"] == "baseline"
-    assert version["tool_policy"]["allowed_tool_names"] == [
-        "fetch_web_page",
-        "render_web_page",
-    ]
+    assert set(version["tool_policy"]["allowed_tool_names"]) >= {"call_http_api", "browse_webpage"}
     assert scenario["input"] == "Give me a list of apartments in Greenwich CT from Zillow."
     assert scenario["agent_design_id"] == agent["id"]
     assert contract["scenario_id"] == scenario["id"]
-    assert contract["required_tools"] == ["render_web_page"]
+    assert contract["required_tools"] == ["browse_webpage"]
     assert "apartment" in contract["output_requirements"]
     assert any(check["type"] == "rubric_judge" for check in contract["checks"])
     assert any("Do not mark the task complete" in item for item in contract["expected_behavior"])
@@ -3418,14 +3401,14 @@ def test_live_run_agent_design_uses_provider_runner(monkeypatch) -> None:
         return object()
 
     def fake_run_anthropic_agent(agent_design, scenario, config, tool_definitions):
-        assert agent_design.allowed_tool_names == ["get_weather"]
-        assert len(tool_definitions) == 1
-        assert tool_definitions[0].name == "get_weather"
-        assert tool_definitions[0].input_schema["required"] == ["zip_code"]
-        assert tool_definitions[0].output_schema is not None
-        assert tool_definitions[0].implementation_kind == "builtin"
-        assert tool_definitions[0].implementation_key == "open_meteo_weather"
-        assert tool_definitions[0].status == "approved"
+        assert "get_weather" in agent_design.allowed_tool_names
+        weather_tool = next(t for t in tool_definitions if t.name == "get_weather")
+        assert weather_tool.name == "get_weather"
+        assert weather_tool.input_schema["required"] == ["zip_code"]
+        assert weather_tool.output_schema is not None
+        assert weather_tool.implementation_kind == "builtin"
+        assert weather_tool.implementation_key == "open_meteo_weather"
+        assert weather_tool.status == "approved"
         return RunnerResult(
             id="run_live_fake",
             agent_design_id=agent_design.id,

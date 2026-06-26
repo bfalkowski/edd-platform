@@ -2091,24 +2091,44 @@ def run_live_judge(
 ) -> tuple[str, str, Dict[str, object]]:
     import anthropic as anthropic_sdk
     config = anthropic_config_from_env()
-    try:
-        response = _anthropic_client(config).messages.create(
-            model=config.model,
-            max_tokens=1200,
-            system="You are an eval judge for an eval-driven design platform.",
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except anthropic_sdk.APIStatusError as exc:
-        raise RuntimeError(f"Anthropic judge request failed with status {exc.status_code}: {exc.message}") from exc
-    except anthropic_sdk.APIConnectionError as exc:
-        raise RuntimeError(f"Anthropic judge request failed: {exc}") from exc
-    payload = response.model_dump()
+    messages: List[Dict[str, object]] = [{"role": "user", "content": prompt}]
+
+    def _call() -> Dict[str, object]:
+        try:
+            response = _anthropic_client(config).messages.create(
+                model=config.model,
+                max_tokens=1200,
+                system="You are an eval judge for an eval-driven design platform.",
+                messages=messages,
+            )
+            return response.model_dump()
+        except anthropic_sdk.APIStatusError as exc:
+            raise RuntimeError(f"Anthropic judge request failed with status {exc.status_code}: {exc.message}") from exc
+        except anthropic_sdk.APIConnectionError as exc:
+            raise RuntimeError(f"Anthropic judge request failed: {exc}") from exc
+
+    generation_context = live_judge_generation_context(
+        model=config.model,
+        messages=messages,
+        trace_id=trace_id,
+    )
+    payload = _call()
     response_text = extract_response_text(payload)
     if not response_text:
         raise RuntimeError(describe_empty_response(payload))
     token_usage = payload.get("usage", {})
     if not isinstance(token_usage, dict):
         token_usage = {}
+    if generation_context is not None:
+        with generation_context as generation:
+            generation.update(
+                output=response_text,
+                usage_details=token_usage,
+                metadata={
+                    "anthropic_message_id": payload.get("id"),
+                    "stop_reason": payload.get("stop_reason"),
+                },
+            )
     flush_langfuse_client()
     return response_text, config.model, token_usage
 
