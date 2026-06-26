@@ -119,6 +119,7 @@ mock behavior, and execution policy are still being designed.
 GET   /api/projects/{project_id}/tools
 POST  /api/projects/{project_id}/tools
 PATCH /api/projects/{project_id}/tools/{tool_id}
+GET   /api/projects/{project_id}/tools/{tool_id}/adapter-contracts
 ```
 
 Create request:
@@ -221,6 +222,11 @@ status
 created_at
 updated_at
 ```
+
+`adapter-contracts` is read-only. It projects the platform-owned tool schema
+into deterministic adapter payloads for LangChain, OpenAI tool calling, MCP, and
+eval validation. The platform remains the source of truth; adapters consume the
+same approved `input_schema`, `output_schema`, implementation key, and status.
 
 ### Eval Contracts
 

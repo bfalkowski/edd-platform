@@ -108,6 +108,11 @@ Project
 The canonical product language is in
 [`docs/PRODUCT_SPINE.md`](docs/PRODUCT_SPINE.md).
 
+Public-facing documentation should be published from
+[bfalkowski/edd-platform-docs](https://github.com/bfalkowski/edd-platform-docs).
+The initial migration checklist is tracked in
+[`docs/PUBLIC_DOCS_REPO.md`](docs/PUBLIC_DOCS_REPO.md).
+
 ## Repository Shape
 
 ```text

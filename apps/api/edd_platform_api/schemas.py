@@ -286,6 +286,16 @@ class ToolDefinitionUpdate(BaseModel):
     status: Optional[Literal["draft", "approved"]] = None
 
 
+class ToolAdapterContract(BaseModel):
+    tool_id: str
+    name: str
+    status: str
+    langchain: Dict[str, object]
+    openai: Dict[str, object]
+    mcp: Dict[str, object]
+    eval_validation: Dict[str, object]
+
+
 class AgentRunCreate(BaseModel):
     scenario_input: str = Field(
         default="A customer asks what the agent should do next.",

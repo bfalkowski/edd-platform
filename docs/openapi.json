@@ -5092,6 +5092,53 @@
         "title": "ServiceStatusResponse",
         "type": "object"
       },
+      "ToolAdapterContract": {
+        "properties": {
+          "eval_validation": {
+            "additionalProperties": true,
+            "title": "Eval Validation",
+            "type": "object"
+          },
+          "langchain": {
+            "additionalProperties": true,
+            "title": "Langchain",
+            "type": "object"
+          },
+          "mcp": {
+            "additionalProperties": true,
+            "title": "Mcp",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "openai": {
+            "additionalProperties": true,
+            "title": "Openai",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
+          "name",
+          "status",
+          "langchain",
+          "openai",
+          "mcp",
+          "eval_validation"
+        ],
+        "title": "ToolAdapterContract",
+        "type": "object"
+      },
       "ToolDefinition": {
         "properties": {
           "config_schema": {
@@ -9927,6 +9974,54 @@
           }
         },
         "summary": "Update Tool Definition"
+      }
+    },
+    "/api/projects/{project_id}/tools/{tool_id}/adapter-contracts": {
+      "get": {
+        "operationId": "get_tool_adapter_contracts_api_projects__project_id__tools__tool_id__adapter_contracts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolAdapterContract"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tool Adapter Contracts"
       }
     },
     "/api/projects/{project_id}/trace-refs": {

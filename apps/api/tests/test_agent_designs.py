@@ -679,6 +679,65 @@ def test_approve_tool_definition_then_allow_for_agent() -> None:
     assert "Status\napproved" in tool_artifact["body"]
 
 
+def test_tool_definition_exposes_schema_first_adapter_contracts() -> None:
+    client = TestClient(app)
+    tool = client.post(
+        "/api/projects/project_default/tools",
+        json={
+            "name": "lookup_order_status",
+            "description": "Look up an order by id.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "string", "description": "Order identifier."},
+                    "include_events": {"type": "boolean"},
+                },
+                "required": ["order_id"],
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string"},
+                    "summary": {"type": "string"},
+                },
+                "required": ["status"],
+            },
+            "output_description": "Order status summary.",
+            "implementation_kind": "mock",
+            "implementation_key": "mock.lookup_order_status",
+            "mock_response": "Order is awaiting carrier pickup.",
+        },
+    ).json()
+    approved = client.patch(
+        f"/api/projects/project_default/tools/{tool['id']}",
+        json={"status": "approved"},
+    ).json()
+
+    response = client.get(
+        f"/api/projects/project_default/tools/{approved['id']}/adapter-contracts"
+    )
+
+    assert response.status_code == 200
+    contract = response.json()
+    assert contract["tool_id"] == approved["id"]
+    assert contract["status"] == "approved"
+    assert contract["langchain"]["args_schema"] == approved["input_schema"]
+    assert contract["langchain"]["response_schema"] == approved["output_schema"]
+    assert contract["openai"] == {
+        "type": "function",
+        "function": {
+            "name": "lookup_order_status",
+            "description": "Look up an order by id.",
+            "parameters": approved["input_schema"],
+        },
+    }
+    assert contract["mcp"]["inputSchema"] == approved["input_schema"]
+    assert contract["mcp"]["outputSchema"] == approved["output_schema"]
+    assert contract["eval_validation"]["required_tool_name"] == "lookup_order_status"
+    assert contract["eval_validation"]["allowed_status"] == "approved"
+    assert contract["eval_validation"]["implementation_key"] == "mock.lookup_order_status"
+
+
 def test_update_agent_design_tool_allowlist() -> None:
     client = TestClient(app)
     create_response = client.post(

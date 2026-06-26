@@ -54,6 +54,8 @@ AgentDesign
   manual smoke script for validating the product flow.
 - [`engineering/TASK_TRACKING.md`](engineering/TASK_TRACKING.md) defines how
   this file and Beads work together.
+- [`PUBLIC_DOCS_REPO.md`](PUBLIC_DOCS_REPO.md) links the public documentation
+  repo and tracks the initial migration checklist.
 
 ## Completed Milestones
 
@@ -83,8 +85,8 @@ agent versions, project-scoped runs, contract-driven eval results, judge
 outputs, failure packets, fix proposals, comparisons, tool-call/tool-result
 evidence, and generated OpenAPI coverage for the backbone.
 
-Remaining backbone hardening is tracked in Beads, especially schema-first tool
-registry adapters and API module refactoring.
+Remaining backbone hardening is tracked in Beads, especially API module
+refactoring.
 
 ### Builder UI for the EDD Loop
 
@@ -172,9 +174,7 @@ The UI supports the proof-loop vertical slice:
 
 Keep the next work aligned with the active Beads queue:
 
-- finish the schema-first tool registry adapters;
 - refactor the API main module into focused route, model, service, storage, and
   app-wiring modules;
 - improve evidence-summary display and broader run/replay views;
-- populate the public docs repo with product concepts, guides, API references,
-  architecture notes, and local demo walkthroughs.
+- migrate the public docs checklist into the dedicated docs repo.

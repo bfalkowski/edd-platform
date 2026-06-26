@@ -18,6 +18,7 @@ REQUIRED_PATHS = {
     "/api/projects",
     "/api/projects/{project_id}",
     "/api/projects/{project_id}/tools",
+    "/api/projects/{project_id}/tools/{tool_id}/adapter-contracts",
     "/api/projects/{project_id}/agent-designs",
     "/api/projects/{project_id}/agent-designs/{agent_id}",
     "/api/projects/{project_id}/agent-designs/{agent_id}/runs",

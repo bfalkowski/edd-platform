@@ -4,7 +4,6 @@ import json
 import os
 import sys
 from base64 import b64encode
-from hashlib import sha256
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
@@ -17,6 +16,17 @@ from fastapi import FastAPI, HTTPException, Response
 
 from edd_platform_api.service_status import ServiceStatusResponse, service_status_response
 from edd_platform_api.polars_analysis import review_corpus_analysis
+from edd_platform_api.tool_adapters import tool_adapter_contract
+from edd_platform_api.evidence_context import (
+    build_deterministic_evidence_summary,
+    build_evidence_summary_prompt,
+    context_pack_cache_key,
+)
+from edd_platform_api.eval_checks import (
+    contract_generated_checks,
+    evaluate_contract_check,
+    evaluate_run_text,
+)
 from edd_platform_api.schemas import (
     AgentDesignCreate,
     AgentDesignUpdate,
@@ -41,6 +51,7 @@ from edd_platform_api.schemas import (
     ToolDefinition,
     ToolDefinitionCreate,
     ToolDefinitionUpdate,
+    ToolAdapterContract,
     AgentRunCreate,
     RunCreate,
     RunRecord,
@@ -2250,52 +2261,6 @@ def build_live_judge_prompt(
     )
 
 
-def contract_generated_checks(payload: EvalContractCreate) -> List[Dict[str, object]]:
-    checks: List[Dict[str, object]] = []
-    checks.extend(payload.checks)
-    checks.extend(
-        {
-            "id": f"requires_evidence_{index}",
-            "type": "output_contains",
-            "value": evidence,
-        }
-        for index, evidence in enumerate(payload.required_evidence, start=1)
-    )
-    checks.extend(
-        {
-            "id": f"requires_tool_{tool}",
-            "type": "tool_called",
-            "tool": tool,
-        }
-        for tool in payload.required_tools
-    )
-    checks.extend(
-        {
-            "id": f"forbids_tool_{tool}",
-            "type": "tool_not_called",
-            "tool": tool,
-        }
-        for tool in payload.forbidden_tools
-    )
-    checks.extend(
-        {
-            "id": f"forbids_behavior_{index}",
-            "type": "output_not_contains",
-            "value": behavior,
-        }
-        for index, behavior in enumerate(payload.forbidden_behavior, start=1)
-    )
-    checks.extend(
-        {
-            "id": f"requires_output_{index}",
-            "type": "output_contains",
-            "value": requirement,
-        }
-        for index, requirement in enumerate(payload.output_requirements, start=1)
-    )
-    return checks
-
-
 def usage_details_from_openai_payload(payload: Dict[str, object]) -> Dict[str, Any]:
     usage = payload.get("usage")
     if not isinstance(usage, dict):
@@ -2790,88 +2755,6 @@ def call_website_for_agent(
         trace_artifact=trace_artifact,
         artifact_ids=artifact_ids,
         created_at=now,
-    )
-
-
-def evaluate_run_text(body: str) -> List[EvalCheck]:
-    normalized = body.lower()
-    return [
-        EvalCheck(
-            id="mentions_evidence",
-            passed="evidence" in normalized,
-            comment="Response should gather or cite evidence before recommending action.",
-        ),
-        EvalCheck(
-            id="states_assumptions",
-            passed="assumption" in normalized,
-            comment="Response should make assumptions visible.",
-        ),
-        EvalCheck(
-            id="recommends_safe_action",
-            passed="safe next action" in normalized,
-            comment="Response should recommend a safe next action.",
-        ),
-    ]
-
-
-def evaluate_contract_check(
-    *,
-    check: Dict[str, object],
-    run: RunRecord,
-    evidence_artifact_ids: List[str],
-    run_artifact_body: str,
-) -> EvalCheckResult:
-    check_id = str(check.get("id") or "unnamed_check")
-    check_type = str(check.get("type") or "manual_review_required")
-    expected = str(check.get("value") or check.get("tool") or "")
-    normalized_output = run.output.lower()
-    normalized_body = run_artifact_body.lower()
-    normalized_expected = expected.lower()
-    expected_tool_marker = f"tool\n{normalized_expected}"
-
-    if check_type == "output_contains":
-        passed = bool(normalized_expected and normalized_expected in normalized_output)
-        observed = run.output
-        comment = f"Output should contain {expected!r}."
-    elif check_type == "output_not_contains":
-        passed = bool(normalized_expected and normalized_expected not in normalized_output)
-        observed = run.output
-        comment = f"Output should not contain {expected!r}."
-    elif check_type == "tool_called":
-        passed = bool(
-            normalized_expected
-            and (
-                f"- {normalized_expected}:" in normalized_body
-                or expected_tool_marker in normalized_body
-            )
-        )
-        observed = run_artifact_body
-        comment = f"Run should call tool {expected!r}."
-    elif check_type == "tool_not_called":
-        passed = bool(
-            normalized_expected
-            and f"- {normalized_expected}:" not in normalized_body
-            and expected_tool_marker not in normalized_body
-        )
-        observed = run_artifact_body
-        comment = f"Run should not call tool {expected!r}."
-    elif check_type == "rubric_judge":
-        passed = False
-        observed = run.output
-        comment = "Live judge required for rubric checks."
-    else:
-        passed = False
-        observed = "manual review required"
-        comment = f"Unsupported deterministic check type {check_type!r}."
-
-    return EvalCheckResult(
-        check_id=check_id,
-        check_type=check_type,
-        passed=passed,
-        observed=observed,
-        expected=expected,
-        evidence_artifact_ids=evidence_artifact_ids,
-        comment=comment,
     )
 
 
@@ -6027,6 +5910,18 @@ def update_tool_definition(
     return updated
 
 
+@app.get("/api/projects/{project_id}/tools/{tool_id}/adapter-contracts")
+def get_tool_adapter_contracts(
+    project_id: str,
+    tool_id: str,
+) -> ToolAdapterContract:
+    get_project_or_404(project_id)
+    tool = _tool_definitions.get(tool_id)
+    if tool is None or tool.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Tool not found.")
+    return tool_adapter_contract(tool)
+
+
 @app.post("/api/projects/{project_id}/artifacts/{artifact_id}/evaluate", status_code=201)
 def evaluate_run_artifact(project_id: str, artifact_id: str) -> EvalRunResult:
     get_project_or_404(project_id)
@@ -6215,109 +6110,6 @@ def assemble_context_pack_artifacts(
     if allowed_types is None:
         return artifacts
     return [artifact for artifact in artifacts if artifact.artifact_type in allowed_types]
-
-
-def context_pack_cache_key(
-    *,
-    project_id: str,
-    agent_design_id: Optional[str],
-    purpose: str,
-    summary_type: str,
-    mode: str,
-    artifacts: List[ArtifactRecord],
-) -> str:
-    payload = {
-        "project_id": project_id,
-        "agent_design_id": agent_design_id,
-        "purpose": purpose,
-        "summary_type": summary_type,
-        "mode": mode,
-        "artifacts": [
-            {
-                "id": artifact.id,
-                "artifact_type": artifact.artifact_type,
-                "updated_at": artifact.updated_at.isoformat(),
-            }
-            for artifact in artifacts
-        ],
-    }
-    return sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
-
-
-def build_evidence_summary_prompt(
-    *,
-    purpose: str,
-    summary_type: str,
-    artifacts: List[ArtifactRecord],
-) -> str:
-    artifact_blocks = "\n\n".join(
-        (
-            f"Artifact {index}: {artifact.artifact_type} / {artifact.title}\n"
-            f"Source: {artifact.source}\n"
-            f"External refs: {artifact_external_ref_summary(artifact)}\n"
-            f"Body:\n{artifact.body[:1200]}"
-        )
-        for index, artifact in enumerate(artifacts[:12], start=1)
-    )
-    return (
-        "Summarize the evidence context below for a product user. "
-        "Cite only the supplied artifacts. Keep it concise and decision-oriented.\n\n"
-        f"Context purpose: {purpose}\n"
-        f"Summary type: {summary_type}\n\n"
-        f"{artifact_blocks or 'No artifacts are available.'}"
-    )
-
-
-def build_deterministic_evidence_summary(
-    *,
-    purpose: str,
-    artifacts: List[ArtifactRecord],
-) -> str:
-    if not artifacts:
-        return f"No evidence artifacts are available for {purpose}."
-    type_counts: Dict[str, int] = {}
-    for artifact in artifacts:
-        type_counts[artifact.artifact_type] = type_counts.get(artifact.artifact_type, 0) + 1
-    counts = ", ".join(
-        f"{artifact_type.lower()}={count}"
-        for artifact_type, count in sorted(type_counts.items())
-    )
-    titles = "; ".join(artifact.title for artifact in artifacts[:3])
-    langfuse_refs = [
-        external_ref_display(ref)
-        for artifact in artifacts
-        for ref in artifact.external_refs
-        if ref.provider == "langfuse"
-    ]
-    langfuse_summary = ""
-    if langfuse_refs:
-        langfuse_summary = (
-            " Langfuse refs: "
-            + "; ".join(dict.fromkeys(langfuse_refs[:6]))
-            + "."
-        )
-    return (
-        f"{purpose} context includes {len(artifacts)} evidence artifacts "
-        f"({counts}). Key artifacts: {titles}.{langfuse_summary}"
-    )
-
-
-def external_ref_display(ref: ExternalArtifactRef) -> str:
-    label = ref.label or f"{ref.provider} {ref.ref_type}"
-    metadata_label = (
-        ref.metadata.get("score_name")
-        or ref.metadata.get("prompt_name")
-        or ref.metadata.get("dataset_name")
-        or ref.metadata.get("sync_mode")
-    )
-    detail = f" ({metadata_label})" if isinstance(metadata_label, str) and metadata_label else ""
-    return f"{label}{detail}: {ref.external_id}"
-
-
-def artifact_external_ref_summary(artifact: ArtifactRecord) -> str:
-    if not artifact.external_refs:
-        return "None"
-    return "; ".join(external_ref_display(ref) for ref in artifact.external_refs)
 
 
 @app.post("/api/projects/{project_id}/context-packs")
