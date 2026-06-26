@@ -2711,6 +2711,60 @@
         "title": "FixProposalCreate",
         "type": "object"
       },
+      "FixProposalGenerateRequest": {
+        "properties": {
+          "addressed_failure_packet_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Addressed Failure Packet Ids",
+            "type": "array"
+          },
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "target_version_id": {
+            "title": "Target Version Id",
+            "type": "string"
+          },
+          "validation_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Contract Id"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "target_version_id"
+        ],
+        "title": "FixProposalGenerateRequest",
+        "type": "object"
+      },
+      "FixProposalGenerated": {
+        "properties": {
+          "proposed_instructions": {
+            "title": "Proposed Instructions",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposed_instructions",
+          "rationale"
+        ],
+        "title": "FixProposalGenerated",
+        "type": "object"
+      },
       "FixProposalUpdate": {
         "properties": {
           "addressed_failure_packet_ids": {
@@ -3588,6 +3642,17 @@
       },
       "OutcomeAgentCreate": {
         "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
           "outcome": {
             "minLength": 1,
             "title": "Outcome",
@@ -7818,6 +7883,55 @@
         "summary": "Create Fix Proposal"
       }
     },
+    "/api/projects/{project_id}/fix-proposals/generate": {
+      "post": {
+        "operationId": "generate_fix_proposal_api_projects__project_id__fix_proposals_generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FixProposalGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixProposalGenerated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Fix Proposal"
+      }
+    },
     "/api/projects/{project_id}/fix-proposals/{fix_proposal_id}": {
       "get": {
         "operationId": "get_fix_proposal_api_projects__project_id__fix_proposals__fix_proposal_id__get",
@@ -9996,6 +10110,45 @@
       }
     },
     "/api/projects/{project_id}/tools/{tool_id}": {
+      "delete": {
+        "operationId": "delete_tool_definition_api_projects__project_id__tools__tool_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Tool Definition"
+      },
       "patch": {
         "operationId": "update_tool_definition_api_projects__project_id__tools__tool_id__patch",
         "parameters": [
