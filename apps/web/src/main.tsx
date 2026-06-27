@@ -663,12 +663,18 @@ async function responseError(response: Response, fallback: string): Promise<Erro
   try {
     const payload = await response.json();
     if (typeof payload.detail === "string") {
-      return new Error(payload.detail);
+      return new Error(`${payload.detail} (HTTP ${response.status})`);
+    }
+    if (Array.isArray(payload.detail)) {
+      const msg = payload.detail.map((d: { loc?: string[]; msg?: string }) =>
+        [d.loc?.join("."), d.msg].filter(Boolean).join(": ")
+      ).join("; ");
+      return new Error(`${msg} (HTTP ${response.status})`);
     }
   } catch {
     // Use the fallback below when the API returns a non-JSON error body.
   }
-  return new Error(fallback);
+  return new Error(`${fallback} (HTTP ${response.status})`);
 }
 
 async function listProjects(): Promise<Project[]> {
@@ -3213,9 +3219,13 @@ function App() {
   }
 
   async function handleCreateCandidate() {
-    if (!project || !selectedAgent || !eddFlow.baselineVersion || !eddFlow.fixProposal || !generatedInstructions) {
+    if (!project || !selectedAgent || !eddFlow.baselineVersion || !eddFlow.fixProposal) {
       return;
     }
+    const storedChange = eddFlow.fixProposal.proposed_changes[0]?.change;
+    const instructionsToUse: string | null =
+      generatedInstructions ?? (typeof storedChange === "string" ? storedChange : null);
+    if (!instructionsToUse) return;
     setError(null);
     setActivity("Creating the next version.");
     setIsFlowBusy(true);
@@ -3223,7 +3233,7 @@ function App() {
       const candidateVersion = await createAgentVersion(project.id, selectedAgent.id, {
         parent_version_id: eddFlow.baselineVersion.id,
         source_fix_proposal_id: eddFlow.fixProposal.id,
-        instructions: generatedInstructions,
+        instructions: instructionsToUse,
         status: "candidate",
       });
       setEddFlow((flow) => ({ ...flow, candidateVersion }));
@@ -3473,7 +3483,7 @@ function App() {
         detail: "Apply the saved fix to create a new agent version.",
         label: "Create version",
         onClick: handleCreateCandidate,
-        disabled: isFlowBusy || !generatedInstructions,
+        disabled: isFlowBusy || (!generatedInstructions && !eddFlow.fixProposal?.proposed_changes[0]?.change),
       };
     }
     if (!eddFlow.candidateRun && eddFlow.candidateVersion) {
