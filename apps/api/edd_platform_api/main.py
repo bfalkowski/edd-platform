@@ -5514,7 +5514,7 @@ def generate_fix_proposal(
     payload: FixProposalGenerateRequest,
 ) -> FixProposalGenerated:
     get_project_or_404(project_id)
-    agent = get_agent_or_404(project_id, payload.agent_design_id)
+    agent = get_agent_design_or_404(project_id, payload.agent_design_id)
     version = _agent_versions.get(payload.target_version_id)
     if version is None or version.project_id != project_id:
         raise HTTPException(status_code=404, detail="Agent version not found.")
