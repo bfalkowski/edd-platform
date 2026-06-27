@@ -1616,7 +1616,19 @@ def test_eval_contract_fields_generate_deterministic_checks() -> None:
     )
 
 
-def test_agent_design_from_outcome_creates_v0_test_and_contract() -> None:
+def test_agent_design_from_outcome_creates_v0_test_and_contract(monkeypatch) -> None:
+    monkeypatch.setattr(
+        api_main,
+        "_draft_agent_plan_from_llm",
+        lambda outcome, tools: {
+            "name": "Rental Search Agent",
+            "intent": f"Search for apartments: {outcome}",
+            "output_focus": "Return a concise list of matching rentals with concrete details.",
+            "output_requirements": ["apartment", "source"],
+            "allowed_tools": [t for t in tools if t in {"call_http_api", "browse_webpage"}],
+            "required_tools": ["browse_webpage"] if "browse_webpage" in tools else [],
+        },
+    )
     client = TestClient(app)
     response = client.post(
         "/api/projects/project_default/agent-designs/from-outcome",
@@ -1652,7 +1664,19 @@ def test_agent_design_from_outcome_creates_v0_test_and_contract() -> None:
     assert {"AGENT_DESIGN", "AGENT_VERSION", "SCENARIO", "EVAL_CONTRACT"} <= artifact_types
 
 
-def test_agent_design_from_schedule_outcome_auto_creates_needed_tool() -> None:
+def test_agent_design_from_schedule_outcome_auto_creates_needed_tool(monkeypatch) -> None:
+    monkeypatch.setattr(
+        api_main,
+        "_draft_agent_plan_from_llm",
+        lambda outcome, tools: {
+            "name": "Schedule Lookup Agent",
+            "intent": f"Find the next F1 race: {outcome}",
+            "output_focus": "Return the next scheduled event after the current reference date.",
+            "output_requirements": ["race", "date", "source"],
+            "allowed_tools": [t for t in tools if t == "lookup_event_schedule"],
+            "required_tools": [t for t in tools if t == "lookup_event_schedule"],
+        },
+    )
     client = TestClient(app)
     response = client.post(
         "/api/projects/project_default/agent-designs/from-outcome",
@@ -1686,7 +1710,19 @@ def test_agent_design_from_schedule_outcome_auto_creates_needed_tool() -> None:
     assert schedule_tools[0]["input_schema"]["required"] == ["series", "reference_date"]
 
 
-def test_agent_design_from_f1_typo_schedule_outcome_auto_creates_schedule_tool() -> None:
+def test_agent_design_from_f1_typo_schedule_outcome_auto_creates_schedule_tool(monkeypatch) -> None:
+    monkeypatch.setattr(
+        api_main,
+        "_draft_agent_plan_from_llm",
+        lambda outcome, tools: {
+            "name": "Schedule Lookup Agent",
+            "intent": f"Find the next race: {outcome}",
+            "output_focus": "Return the next scheduled event after the current reference date.",
+            "output_requirements": ["race", "date", "source"],
+            "allowed_tools": [t for t in tools if t == "lookup_event_schedule"],
+            "required_tools": [t for t in tools if t == "lookup_event_schedule"],
+        },
+    )
     client = TestClient(app)
     response = client.post(
         "/api/projects/project_default/agent-designs/from-outcome",
@@ -1706,7 +1742,19 @@ def test_agent_design_from_f1_typo_schedule_outcome_auto_creates_schedule_tool()
     assert "real-time access" in contract["forbidden_behavior"]
 
 
-def test_agent_design_from_schedule_outcome_uses_existing_approved_tool() -> None:
+def test_agent_design_from_schedule_outcome_uses_existing_approved_tool(monkeypatch) -> None:
+    monkeypatch.setattr(
+        api_main,
+        "_draft_agent_plan_from_llm",
+        lambda outcome, tools: {
+            "name": "Schedule Lookup Agent",
+            "intent": f"Find the next F1 race: {outcome}",
+            "output_focus": "Return the next scheduled event after the current reference date.",
+            "output_requirements": ["race", "date", "source"],
+            "allowed_tools": [t for t in tools if t == "lookup_event_schedule"],
+            "required_tools": [t for t in tools if t == "lookup_event_schedule"],
+        },
+    )
     client = TestClient(app)
     tools_response = client.get("/api/projects/project_default/tools")
     existing_tool = next(
@@ -1769,7 +1817,19 @@ def test_agent_design_from_schedule_outcome_uses_existing_approved_tool() -> Non
     assert contract["required_tools"] == ["lookup_event_schedule"]
 
 
-def test_agent_design_from_result_outcome_auto_creates_result_tool_and_rejects_refusal() -> None:
+def test_agent_design_from_result_outcome_auto_creates_result_tool_and_rejects_refusal(monkeypatch) -> None:
+    monkeypatch.setattr(
+        api_main,
+        "_draft_agent_plan_from_llm",
+        lambda outcome, tools: {
+            "name": "Race Result Agent",
+            "intent": f"Find the latest F1 race result: {outcome}",
+            "output_focus": "Return the winner of the latest completed race using current result evidence.",
+            "output_requirements": ["winner", "race", "source"],
+            "allowed_tools": [t for t in tools if t == "lookup_event_result"],
+            "required_tools": [t for t in tools if t == "lookup_event_result"],
+        },
+    )
     client = TestClient(app)
     response = client.post(
         "/api/projects/project_default/agent-designs/from-outcome",

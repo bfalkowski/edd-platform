@@ -2991,57 +2991,116 @@ def create_agent_design(project_id: str, payload: AgentDesignCreate) -> AgentDes
     return AgentDesignCreated(agent=agent, artifact=artifact)
 
 
+def _draft_agent_plan_from_llm(
+    outcome: str,
+    available_tools: List[str],
+) -> Dict[str, object]:
+    """Ask the LLM to plan an agent from a user outcome. Returns a dict with
+    name, intent, output_focus, output_requirements, allowed_tools, required_tools."""
+    import json as _json
+    from datetime import date as _date
+
+    tool_list = ", ".join(available_tools) if available_tools else "none"
+    today = _date.today().isoformat()
+
+    prompt = (
+        f"Today is {today}.\n\n"
+        f"A user wants an AI agent that does this:\n{outcome}\n\n"
+        f"Available tools in the project: {tool_list}\n\n"
+        "Design a minimal agent to satisfy this outcome. Respond with JSON only:\n"
+        "{\n"
+        '  "name": "Short agent name (2-4 words, title case)",\n'
+        '  "intent": "One paragraph describing what the agent does, how it uses its tools, '
+        'and what a good response looks like. Be specific about tool use order.",\n'
+        '  "output_focus": "One sentence describing the key output requirement.",\n'
+        '  "output_requirements": ["keyword1", "keyword2"],\n'
+        '  "allowed_tools": ["tool_name"],\n'
+        '  "required_tools": ["tool_name"]\n'
+        "}\n\n"
+        "Rules:\n"
+        "- allowed_tools and required_tools must only contain names from the available tools list.\n"
+        "- If a tool is in required_tools it must also be in allowed_tools.\n"
+        "- If no available tool fits, use empty lists.\n"
+        "- For web/SPA tasks (job boards, real estate, JS-heavy sites) prefer browse_webpage over call_http_api.\n"
+        "- output_requirements should be short keywords that must appear in a passing response."
+    )
+
+    try:
+        config = anthropic_config_from_env()
+        response = _anthropic_client(config).messages.create(
+            model=config.model,
+            max_tokens=800,
+            system="You design AI agents. Respond with valid JSON only, no markdown fences.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                raw = block.text.strip()
+                break
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        data = _json.loads(raw)
+        valid_tools = set(available_tools)
+        allowed = [t for t in data.get("allowed_tools", []) if t in valid_tools]
+        required = [t for t in data.get("required_tools", []) if t in valid_tools]
+        return {
+            "name": str(data.get("name", "Outcome Agent")),
+            "intent": str(data.get("intent", outcome)),
+            "output_focus": str(data.get("output_focus", "Return the requested outcome.")),
+            "output_requirements": [str(r) for r in data.get("output_requirements", ["outcome"])],
+            "allowed_tools": allowed,
+            "required_tools": required,
+        }
+    except Exception:
+        return {
+            "name": "Outcome Agent",
+            "intent": outcome,
+            "output_focus": "Return the requested outcome directly.",
+            "output_requirements": ["outcome"],
+            "allowed_tools": [],
+            "required_tools": [],
+        }
+
+
 def draft_agent_from_outcome(
     project_id: str,
     outcome: str,
     agent_name: Optional[str] = None,
 ) -> OutcomeAgentCreated:
     normalized = " ".join(outcome.strip().split())
-    lowered = normalized.lower()
-    is_listing_search = any(
-        term in lowered
-        for term in [
-            "apartment",
-            "apartments",
-            "rental",
-            "rentals",
-            "zillow",
-            "listing",
-            "listings",
-        ]
-    )
-    is_web_task = is_listing_search or any(
-        term in lowered for term in ["http://", "https://", "web page", "website", "site"]
-    )
-    is_f1_task = any(
-        term in lowered
-        for term in ["formula 1", "formula one", "formula1", "f1", "f 1", "f-1"]
-    ) or (
-        "race" in lowered
-        and any(term in lowered for term in ["next 1", "nexgt 1", "nxt 1"])
-    )
-    is_motorsport_event_task = any(
-        term in lowered
-        for term in ["grand prix", "event"]
-    ) or is_f1_task
-    is_result_task = is_motorsport_event_task and any(
-        term in lowered for term in ["last", "latest", "won", "winner", "result", "results"]
-    )
-    is_schedule_task = (
-        not is_result_task
-        and is_motorsport_event_task
-        and any(
-            term in lowered
-            for term in ["today", "current", "next", "nexgt", "nxt", "upcoming", "schedule"]
-        )
-    )
-    is_weather_task = "weather" in lowered
+
+    all_project_tools = [
+        t for t in _tool_definitions.values()
+        if t.project_id == project_id and t.status == "approved"
+    ]
+    available_tool_names = [t.name for t in all_project_tools]
+
+    plan = _draft_agent_plan_from_llm(normalized, available_tool_names)
+
+    name = plan["name"]
+    intent = plan["intent"]
+    output_focus = plan["output_focus"]
+    output_requirements = plan["output_requirements"]
+    allowed_tools = list(plan["allowed_tools"])
+    required_tools = list(plan["required_tools"])
+
     draft_tools: List[ToolDefinition] = []
-    allowed_tools = []
-    if is_web_task:
-        allowed_tools.extend(["call_http_api", "browse_webpage"])
-    if is_weather_task:
-        allowed_tools.append("get_weather")
+
+    lowered = normalized.lower()
+    _motorsport_terms = ["grand prix", "formula 1", "formula one", "formula1", "f1", "nexgt 1", "nxt 1"]
+    _is_motorsport = any(term in lowered for term in _motorsport_terms) or (
+        "race" in lowered and any(term in lowered for term in ["nexgt", "nxt"])
+    )
+    is_schedule_task = _is_motorsport and any(
+        term in lowered for term in ["next", "upcoming", "schedule", "when", "nexgt", "nxt"]
+    )
+    is_result_task = _is_motorsport and any(
+        term in lowered for term in ["last", "latest", "won", "winner", "result"]
+    )
+
+    schedule_tool = find_project_tool_by_name(project_id, "lookup_event_schedule")
+    result_tool = find_project_tool_by_name(project_id, "lookup_event_result")
     schedule_tool = find_project_tool_by_name(project_id, "lookup_event_schedule")
     result_tool = find_project_tool_by_name(project_id, "lookup_event_result")
     schedule_tool_response = (
@@ -3102,9 +3161,7 @@ def draft_agent_from_outcome(
             )
         elif schedule_tool.status != "approved":
             schedule_tool = approve_generated_tool(schedule_tool, schedule_tool_response)
-        if schedule_tool.status == "approved":
-            allowed_tools.append(schedule_tool.name)
-        else:
+        if schedule_tool.status != "approved":
             draft_tools.append(schedule_tool)
     if is_result_task:
         if result_tool is None:
@@ -3156,64 +3213,23 @@ def draft_agent_from_outcome(
             )
         elif result_tool.status != "approved":
             result_tool = approve_generated_tool(result_tool, result_tool_response)
-        if result_tool.status == "approved":
-            allowed_tools.append(result_tool.name)
-        else:
+        if result_tool.status != "approved":
             draft_tools.append(result_tool)
+    seen_tools: set[str] = set(allowed_tools)
+    if is_schedule_task and schedule_tool is not None:
+        if schedule_tool.name not in seen_tools:
+            allowed_tools.append(schedule_tool.name)
+            seen_tools.add(schedule_tool.name)
+        if schedule_tool.name not in required_tools:
+            required_tools.append(schedule_tool.name)
+    if is_result_task and result_tool is not None:
+        if result_tool.name not in seen_tools:
+            allowed_tools.append(result_tool.name)
+            seen_tools.add(result_tool.name)
+        if result_tool.name not in required_tools:
+            required_tools.append(result_tool.name)
+
     validate_allowed_tool_names(project_id, allowed_tools)
-
-    if is_listing_search:
-        name = "Rental Search Agent"
-        output_focus = "Return a concise list of matching rentals with concrete details."
-        output_requirements = [
-            "apartment",
-            "source",
-        ]
-        required_tools = ["browse_webpage"]
-    elif is_schedule_task:
-        name = "Schedule Lookup Agent"
-        output_focus = "Return the next scheduled event after the current reference date."
-        output_requirements = [
-            "race",
-            "date",
-            "source",
-        ]
-        required_tools = (
-            [schedule_tool.name]
-            if schedule_tool is not None
-            else []
-        )
-    elif is_result_task:
-        name = "Race Result Agent"
-        output_focus = "Return the winner of the latest completed race using current result evidence."
-        output_requirements = [
-            "winner",
-            "race",
-            "source",
-        ]
-        required_tools = [result_tool.name] if result_tool is not None else []
-    elif is_web_task:
-        name = "Web Research Agent"
-        output_focus = "Return concrete findings from the requested web source."
-        output_requirements = ["source"]
-        required_tools = ["browse_webpage"]
-    elif is_weather_task:
-        name = "Weather Agent"
-        output_focus = "Answer the requested weather question using the approved weather tool."
-        output_requirements = ["weather"]
-        required_tools = ["get_weather"]
-    else:
-        name = "Outcome Agent"
-        output_focus = "Return the requested outcome directly and identify any missing evidence."
-        output_requirements = ["outcome"]
-        required_tools = []
-
-    intent = (
-        f"Fulfill this user outcome: {normalized}\n\n"
-        f"{output_focus} If the available evidence is insufficient, say what is missing and "
-        "what next action would satisfy the outcome. "
-        f"Include these output requirements explicitly: {', '.join(output_requirements)}."
-    )
 
     live_tool_keys = {"call_http_api", "browse_webpage", "open_meteo_weather"}
     has_live_tools = bool(set(allowed_tools) & live_tool_keys)
