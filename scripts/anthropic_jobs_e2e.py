@@ -30,11 +30,15 @@ AGENT_INSTRUCTIONS = """\
 You help users find relevant job openings at Anthropic.
 
 When given a search topic:
-1. Call browse_webpage ONCE on https://www.anthropic.com/jobs — do not make additional calls.
-2. From the page content, identify roles related to the user's topic.
+1. Call browse_webpage EXACTLY ONCE on https://www.anthropic.com/careers/jobs.
+2. From what that single call returns, identify roles related to the user's topic.
 3. Return a concise list of matching job titles with their departments or locations.
 
-Important: complete the task in a single browse_webpage call. Do not refine or retry.
+Rules:
+- You have ONE tool call budget. Use it on https://www.anthropic.com/jobs.
+- Do NOT call browse_webpage a second time under any circumstances.
+- Do NOT follow links or load additional pages.
+- If the first call returns enough to answer, stop and respond immediately.
 """
 
 SCENARIO_INPUT = (
@@ -48,8 +52,6 @@ safeguards, trust and safety, policy, or alignment research.
 Pass requires ALL of the following:
 1. At least one specific job title is mentioned (not just "various roles").
 2. The response is grounded in what was actually on the careers page — no hallucinated titles.
-3. The agent completed the task using a single browse_webpage call. \
-   If the output or evidence section mentions multiple tool calls or retries, this is a FAIL.
 """
 
 
@@ -87,16 +89,16 @@ class ApiClient:
             raise RuntimeError(f"{method} {url} failed: {exc.reason}") from exc
 
     def create_agent(self, name: str, intent: str, allowed_tools: List[str]) -> JsonObject:
-        return self.request(
+        result = self.request(
             "POST",
             f"/projects/{self.project_id}/agent-designs",
             {
                 "name": name,
                 "intent": intent,
                 "allowed_tool_names": allowed_tools,
-                "status": "active",
             },
         )
+        return result["agent"]
 
     def create_version(self, agent_id: str, instructions: str) -> JsonObject:
         return self.request(
@@ -117,7 +119,7 @@ class ApiClient:
                 "agent_design_id": agent_id,
                 "name": name,
                 "input": input_text,
-                "setup_context": {"shape": "single_turn"},
+                "setup_context": "single_turn",
             },
         )
 
@@ -188,10 +190,13 @@ class ApiClient:
         self.request("DELETE", f"/projects/{self.project_id}/agent-designs/{agent_id}")
 
 
-def count_browse_calls(run_output: str) -> int:
-    """Count browse_webpage calls mentioned in the run output / evidence."""
-    lower = run_output.lower()
-    return lower.count("browse_webpage") + lower.count("browsed") + lower.count("fetched page")
+def count_tool_calls(run: JsonObject) -> int:
+    """Infer tool call count from artifact_ids.
+
+    Each tool call produces exactly two artifacts (TOOL_CALL + TOOL_RESULT).
+    The run itself produces one artifact. So: tool_calls = (len(artifact_ids) - 1) / 2.
+    """
+    return max(0, (len(run.get("artifact_ids", [])) - 1) // 2)
 
 
 def main() -> int:
@@ -240,10 +245,11 @@ def main() -> int:
         print(f"  run={run['id']}  status={run['status']}")
         print(f"\n--- Agent output ---\n{run['output']}\n---\n")
 
-        browse_calls = count_browse_calls(run["output"])
-        if browse_calls > 1:
+        tool_calls = count_tool_calls(run)
+        print(f"  tool_calls={tool_calls}")
+        if tool_calls > 1:
             print(
-                f"FAIL: agent made {browse_calls} browse_webpage calls (max 1 allowed).",
+                f"FAIL: agent made {tool_calls} tool calls (max 1 allowed).",
                 file=sys.stderr,
             )
             return 1
@@ -265,7 +271,7 @@ def main() -> int:
             print("FAIL: eval did not pass.", file=sys.stderr)
             return 1
 
-        print("PASS: agent found relevant jobs in a single browse_webpage call.")
+        print(f"PASS: agent found relevant jobs in {tool_calls} tool call(s).")
         return 0
 
     except Exception as exc:
