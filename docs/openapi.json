@@ -1744,6 +1744,20 @@
         "title": "EvalContractCreate",
         "type": "object"
       },
+      "EvalContractRubricUpdate": {
+        "properties": {
+          "rubric": {
+            "minLength": 1,
+            "title": "Rubric",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rubric"
+        ],
+        "title": "EvalContractRubricUpdate",
+        "type": "object"
+      },
       "EvalResult": {
         "properties": {
           "artifact_ids": {
@@ -2081,6 +2095,47 @@
           "external_id"
         ],
         "title": "ExternalArtifactRef",
+        "type": "object"
+      },
+      "FailureDiagnosis": {
+        "properties": {
+          "failure_mode": {
+            "title": "Failure Mode",
+            "type": "string"
+          },
+          "judge_output": {
+            "title": "Judge Output",
+            "type": "string"
+          },
+          "review_note": {
+            "title": "Review Note",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "failure_mode",
+          "severity",
+          "review_note",
+          "judge_output"
+        ],
+        "title": "FailureDiagnosis",
+        "type": "object"
+      },
+      "FailureDiagnosisRequest": {
+        "properties": {
+          "eval_result_id": {
+            "title": "Eval Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "eval_result_id"
+        ],
+        "title": "FailureDiagnosisRequest",
         "type": "object"
       },
       "FailureMode": {
@@ -3129,6 +3184,97 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "JudgeOutput": {
+        "properties": {
+          "artifact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "cost_estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Estimate"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "eval_result_id": {
+            "title": "Eval Result Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_summary": {
+            "title": "Input Summary",
+            "type": "string"
+          },
+          "judge_prompt_template_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Prompt Template Id"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "token_usage": {
+            "additionalProperties": true,
+            "title": "Token Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "eval_result_id",
+          "mode",
+          "input_summary",
+          "output",
+          "token_usage",
+          "artifact_ids",
+          "created_at"
+        ],
+        "title": "JudgeOutput",
         "type": "object"
       },
       "JudgePromptTemplate": {
@@ -7169,6 +7315,64 @@
         "summary": "Get Eval Contract"
       }
     },
+    "/api/projects/{project_id}/eval-contracts/{contract_id}/rubric": {
+      "patch": {
+        "operationId": "update_eval_contract_rubric_api_projects__project_id__eval_contracts__contract_id__rubric_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contract_id",
+            "required": true,
+            "schema": {
+              "title": "Contract Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalContractRubricUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalContract"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Eval Contract Rubric"
+      }
+    },
     "/api/projects/{project_id}/eval-results": {
       "get": {
         "operationId": "list_eval_results_api_projects__project_id__eval_results_get",
@@ -7339,6 +7543,55 @@
           }
         },
         "summary": "Create Evidence Summary"
+      }
+    },
+    "/api/projects/{project_id}/failure-diagnosis": {
+      "post": {
+        "operationId": "diagnose_failure_api_projects__project_id__failure_diagnosis_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailureDiagnosisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailureDiagnosis"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Diagnose Failure"
       }
     },
     "/api/projects/{project_id}/failure-modes": {
@@ -8369,6 +8622,65 @@
           }
         },
         "summary": "Create Gate Decision"
+      }
+    },
+    "/api/projects/{project_id}/judge-outputs": {
+      "get": {
+        "operationId": "list_judge_outputs_api_projects__project_id__judge_outputs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "eval_result_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Eval Result Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JudgeOutput"
+                  },
+                  "title": "Response List Judge Outputs Api Projects  Project Id  Judge Outputs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Judge Outputs"
       }
     },
     "/api/projects/{project_id}/judge-prompt-templates": {
