@@ -1323,6 +1323,23 @@ async function generateFixProposal(
   return response.json();
 }
 
+async function updateContractRubric(
+  projectId: string,
+  contractId: string,
+  rubric: string,
+): Promise<EvalContract> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/eval-contracts/${contractId}/rubric`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rubric }),
+    },
+  );
+  if (!response.ok) throw await responseError(response, "Failed to update rubric.");
+  return response.json();
+}
+
 async function createFixProposal(
   projectId: string,
   agentDesignId: string,
@@ -1823,6 +1840,9 @@ function App() {
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const [isEditingRubric, setIsEditingRubric] = useState(false);
+  const [rubricEditText, setRubricEditText] = useState("");
+  const [isSavingRubric, setIsSavingRubric] = useState(false);
   const [reviewCorpora, setReviewCorpora] = useState<ReviewCorpus[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [reviewAnnotations, setReviewAnnotations] = useState<ReviewAnnotation[]>([]);
@@ -3140,6 +3160,20 @@ function App() {
     }
   }
 
+  async function handleSaveRubric() {
+    if (!project || !eddFlow.contract) return;
+    setIsSavingRubric(true);
+    try {
+      const updated = await updateContractRubric(project.id, eddFlow.contract.id, rubricEditText);
+      setEddFlow((f) => ({ ...f, contract: updated }));
+      setIsEditingRubric(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save rubric.");
+    } finally {
+      setIsSavingRubric(false);
+    }
+  }
+
   async function handleSaveAnalysisNote() {
     if (!project || !eddFlow.baselineEval || !analysisTargetArtifactId) {
       return;
@@ -4133,7 +4167,47 @@ function App() {
                           </div>
                           <div>
                             <dt>Criterion</dt>
-                            <dd>{savedEvalSummary}</dd>
+                            <dd>
+                              {savedContractUsesRubric && isEditingRubric ? (
+                                <div className="rubric-inline-editor">
+                                  <textarea
+                                    className="rubric-inline-textarea"
+                                    value={rubricEditText}
+                                    onChange={(e) => setRubricEditText(e.target.value)}
+                                    rows={4}
+                                  />
+                                  <div className="rubric-inline-actions">
+                                    <button
+                                      className="primary-button"
+                                      type="button"
+                                      onClick={handleSaveRubric}
+                                      disabled={isSavingRubric || !rubricEditText.trim()}
+                                    >
+                                      {isSavingRubric ? "Saving..." : "Save"}
+                                    </button>
+                                    <button
+                                      className="secondary-button"
+                                      type="button"
+                                      onClick={() => setIsEditingRubric(false)}
+                                      disabled={isSavingRubric}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span
+                                  className={savedContractUsesRubric ? "rubric-summary-editable" : undefined}
+                                  title={savedContractUsesRubric ? "Click to edit rubric" : undefined}
+                                  onClick={savedContractUsesRubric ? () => {
+                                    setRubricEditText(savedEvalSummary);
+                                    setIsEditingRubric(true);
+                                  } : undefined}
+                                >
+                                  {savedEvalSummary}
+                                </span>
+                              )}
+                            </dd>
                           </div>
                           <div>
                             <dt>Latest result</dt>

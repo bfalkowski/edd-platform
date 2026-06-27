@@ -3014,3 +3014,38 @@ dd {
     min-height: auto;
   }
 }
+
+.rubric-summary-editable {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.rubric-summary-editable:hover {
+  opacity: 0.75;
+}
+
+.rubric-inline-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.rubric-inline-textarea {
+  width: 100%;
+  font-size: 13px;
+  font-family: inherit;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.rubric-inline-actions {
+  display: flex;
+  gap: 8px;
+}

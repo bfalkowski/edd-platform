@@ -67,6 +67,7 @@ from edd_platform_api.schemas import (
     Scenario,
     EvalContractCreate,
     EvalContract,
+    EvalContractRubricUpdate,
     JudgePromptTemplateCreate,
     JudgePromptTemplate,
     GateDefinitionCreate,
@@ -3776,6 +3777,28 @@ def create_eval_contract(project_id: str, payload: EvalContractCreate) -> EvalCo
 def get_eval_contract(project_id: str, contract_id: str) -> EvalContract:
     get_project_or_404(project_id)
     return get_eval_contract_or_404(project_id, contract_id)
+
+
+@app.patch("/api/projects/{project_id}/eval-contracts/{contract_id}/rubric")
+def update_eval_contract_rubric(
+    project_id: str,
+    contract_id: str,
+    payload: EvalContractRubricUpdate,
+) -> EvalContract:
+    get_project_or_404(project_id)
+    contract = get_eval_contract_or_404(project_id, contract_id)
+    updated_checks = []
+    for check in contract.checks:
+        if check.get("type") == "rubric_judge":
+            updated_checks.append({**check, "value": payload.rubric.strip()})
+        else:
+            updated_checks.append(check)
+    updated = contract.model_copy(
+        update={"checks": updated_checks, "updated_at": datetime.now(timezone.utc)}
+    )
+    _eval_contracts[contract_id] = updated
+    store.save_record("eval_contracts", contract_id, updated)
+    return updated
 
 
 @app.get("/api/projects/{project_id}/agent-designs/{agent_id}/versions")

@@ -111,6 +111,10 @@ class EvalContract(BaseModel):
     updated_at: datetime
 
 
+class EvalContractRubricUpdate(BaseModel):
+    rubric: str = Field(min_length=1)
+
+
 class JudgePromptTemplateCreate(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
