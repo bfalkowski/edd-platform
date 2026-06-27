@@ -2407,6 +2407,33 @@ dd {
   overflow-wrap: anywhere;
 }
 
+.judge-output-details {
+  margin-top: 10px;
+}
+
+.judge-output-details summary {
+  color: #3b5bdb;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.judge-output-text {
+  background: #f8f9fa;
+  border-left: 3px solid #c8d0e8;
+  color: #3a3c42;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 6px;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+}
+
+.auto-diagnose-button {
+  margin-top: 10px;
+}
+
 .failure-analysis-form {
   display: grid;
   gap: 14px;

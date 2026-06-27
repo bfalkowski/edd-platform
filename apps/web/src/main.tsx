@@ -1279,6 +1279,21 @@ async function updateAgentSuggestionStatus(
   return response.json();
 }
 
+async function diagnoseFailure(
+  projectId: string,
+  evalResultId: string,
+): Promise<{ failure_mode: string; severity: string; review_note: string; judge_output: string }> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/failure-diagnosis`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ eval_result_id: evalResultId }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to diagnose failure.");
+  }
+  return response.json();
+}
+
 async function generateFixProposal(
   projectId: string,
   agentDesignId: string,
@@ -1787,6 +1802,8 @@ function App() {
   const [generatedInstructions, setGeneratedInstructions] = useState<string | null>(null);
   const [generatedRationale, setGeneratedRationale] = useState<string>("");
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
+  const [judgeOutputText, setJudgeOutputText] = useState<string | null>(null);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [isDiscoveryBusy, setIsDiscoveryBusy] = useState(false);
   const [fixEditText, setFixEditText] = useState("");
   const [isSavingFix, setIsSavingFix] = useState(false);
@@ -2161,6 +2178,7 @@ function App() {
     setAnalysisNote(null);
     setGeneratedInstructions(null);
     setGeneratedRationale("");
+    setJudgeOutputText(null);
     setAnalysisNoteText("");
     setAnalysisFailureMode("");
     setAnalysisSeverity("medium");
@@ -3009,6 +3027,7 @@ function App() {
       setAnalysisNote(null);
     setGeneratedInstructions(null);
     setGeneratedRationale("");
+    setJudgeOutputText(null);
       setAnalysisNoteText("");
       setAnalysisFailureMode("");
       setAnalysisSeverity("medium");
@@ -3071,6 +3090,26 @@ function App() {
       setActivity(null);
     } finally {
       setIsFlowBusy(false);
+    }
+  }
+
+  async function handleDiagnoseFailure() {
+    if (!project || !eddFlow.baselineEval) return;
+    setError(null);
+    setIsDiagnosing(true);
+    setActivity("Analyzing failure evidence...");
+    try {
+      const result = await diagnoseFailure(project.id, eddFlow.baselineEval.id);
+      setJudgeOutputText(result.judge_output);
+      if (result.failure_mode) setAnalysisFailureMode(result.failure_mode);
+      if (result.severity) setAnalysisSeverity(result.severity);
+      if (result.review_note) setAnalysisNoteText(result.review_note);
+      setActivity(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to diagnose failure.");
+      setActivity(null);
+    } finally {
+      setIsDiagnosing(false);
     }
   }
 
@@ -3288,6 +3327,7 @@ function App() {
     setAnalysisNote(null);
     setGeneratedInstructions(null);
     setGeneratedRationale("");
+    setJudgeOutputText(null);
     setAnalysisNoteText("");
     setAnalysisFailureMode("");
     setAnalysisSeverity("medium");
@@ -4244,7 +4284,7 @@ function App() {
                         <h4>{analysisNote ? "Failure named" : "Name this failure"}</h4>
                         {!analysisNote ? (
                           <p className="failure-analysis-instruction">
-                            Describe why the response failed so the fix proposal stays targeted. Fill in the review note and click Save.
+                            Review the evidence below, then fill in the form or click Auto-diagnose to let Claude pre-fill it.
                           </p>
                         ) : null}
                       </div>
@@ -4269,6 +4309,23 @@ function App() {
                               ))
                             )}
                           </div>
+                          {judgeOutputText ? (
+                            <details className="judge-output-details">
+                              <summary>Judge reasoning</summary>
+                              <p className="judge-output-text">{judgeOutputText}</p>
+                            </details>
+                          ) : null}
+                          {!analysisNote && !isDiagnosing ? (
+                            <button
+                              className="secondary-button auto-diagnose-button"
+                              type="button"
+                              onClick={handleDiagnoseFailure}
+                              disabled={isDiagnosing || isFlowBusy}
+                            >
+                              Auto-diagnose
+                            </button>
+                          ) : null}
+                          {isDiagnosing ? <p className="activity-text">Analyzing failure evidence...</p> : null}
                         </div>
                         <div className="failure-analysis-form">
                           <div className="analysis-field-row">

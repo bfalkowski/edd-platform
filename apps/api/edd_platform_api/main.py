@@ -121,6 +121,8 @@ from edd_platform_api.schemas import (
     FailurePacketCreate,
     FailurePacketUpdate,
     FailurePacket,
+    FailureDiagnosisRequest,
+    FailureDiagnosis,
     FixProposalCreate,
     FixProposalGenerateRequest,
     FixProposalGenerated,
@@ -5243,6 +5245,97 @@ def list_eval_results(
         )
     ]
     return sorted(eval_results, key=lambda eval_result: eval_result.created_at, reverse=True)
+
+
+@app.get("/api/projects/{project_id}/judge-outputs")
+def list_judge_outputs(
+    project_id: str,
+    eval_result_id: Optional[str] = None,
+) -> List[JudgeOutput]:
+    get_project_or_404(project_id)
+    return [
+        j for j in _judge_outputs.values()
+        if j.project_id == project_id
+        and (eval_result_id is None or j.eval_result_id == eval_result_id)
+    ]
+
+
+@app.post("/api/projects/{project_id}/failure-diagnosis")
+def diagnose_failure(
+    project_id: str,
+    payload: FailureDiagnosisRequest,
+) -> FailureDiagnosis:
+    get_project_or_404(project_id)
+    eval_result = get_eval_result_or_404(project_id, payload.eval_result_id)
+    contract = _eval_contracts.get(eval_result.eval_contract_id)
+    run = _runs.get(eval_result.run_id)
+
+    judge_output = next(
+        (j for j in _judge_outputs.values() if j.eval_result_id == eval_result.id),
+        None,
+    )
+    judge_text = judge_output.output if judge_output else ""
+
+    failed_check_summaries = []
+    for check_result in eval_result.checks:
+        if not check_result.passed:
+            summary = f"- {check_result.check_id} ({check_result.check_type})"
+            if check_result.comment:
+                summary += f": {check_result.comment}"
+            elif check_result.observed:
+                summary += f": observed={check_result.observed}"
+            failed_check_summaries.append(summary)
+
+    rubric = ""
+    if contract:
+        for check in contract.checks:
+            if check.check_type == "rubric_judge" and check.value:
+                rubric = check.value
+                break
+
+    run_output = run.output if run else ""
+
+    prompt = (
+        "You are helping a developer debug why an AI agent failed an evaluation.\n\n"
+        f"Agent run output:\n{run_output[:1500]}\n\n"
+        f"Success criteria (rubric): {rubric or 'Not specified.'}\n\n"
+        f"Failed checks:\n" + ("\n".join(failed_check_summaries) or "None listed.") + "\n\n"
+        f"Judge verdict:\n{judge_text[:1500]}\n\n"
+        "Based on this evidence, provide:\n"
+        "1. failure_mode: a short phrase naming what went wrong (e.g. 'missed rollback step', 'hallucinated tool call')\n"
+        "2. severity: one of low / medium / high\n"
+        "3. review_note: one or two sentences explaining why the response failed and what specifically needs to change\n\n"
+        "Respond as JSON only: {\"failure_mode\": \"...\", \"severity\": \"...\", \"review_note\": \"...\"}"
+    )
+
+    try:
+        config = anthropic_config_from_env()
+        response = _anthropic_client(config).messages.create(
+            model=config.model,
+            max_tokens=400,
+            system="You diagnose AI agent evaluation failures. Respond with JSON only.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                raw = block.text.strip()
+                break
+        import json as _json
+        data = _json.loads(raw)
+        return {
+            "failure_mode": str(data.get("failure_mode", "")),
+            "severity": str(data.get("severity", "medium")),
+            "review_note": str(data.get("review_note", "")),
+            "judge_output": judge_text,
+        }
+    except Exception as exc:
+        return {
+            "failure_mode": "",
+            "severity": "medium",
+            "review_note": "",
+            "judge_output": judge_text,
+        }
 
 
 @app.get("/api/projects/{project_id}/failure-packets")

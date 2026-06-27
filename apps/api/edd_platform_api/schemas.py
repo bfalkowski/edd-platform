@@ -898,6 +898,17 @@ class AgentDesignCreated(BaseModel):
     artifact: ArtifactRecord
 
 
+class FailureDiagnosisRequest(BaseModel):
+    eval_result_id: str
+
+
+class FailureDiagnosis(BaseModel):
+    failure_mode: str
+    severity: str
+    review_note: str
+    judge_output: str
+
+
 class FixProposalGenerateRequest(BaseModel):
     agent_design_id: str
     target_version_id: str
