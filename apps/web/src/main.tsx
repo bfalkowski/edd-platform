@@ -1789,10 +1789,40 @@ function App() {
   const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
-  const [analysisNote, setAnalysisNote] = useState<ReviewNote | null>(null);
-  const [analysisNoteText, setAnalysisNoteText] = useState("");
-  const [analysisFailureMode, setAnalysisFailureMode] = useState("");
-  const [analysisSeverity, setAnalysisSeverity] = useState("medium");
+  // --- Proof loop ephemeral context (single source of truth for in-flight phase data) ---
+  type ProofLoopCtx = {
+    judgeOutputText: string | null;
+    analysisNoteText: string;
+    analysisFailureMode: string;
+    analysisSeverity: string;
+    analysisNote: ReviewNote | null;
+    generatedInstructions: string | null;
+    generatedRationale: string;
+  };
+  const initialProofLoopCtx: ProofLoopCtx = {
+    judgeOutputText: null,
+    analysisNoteText: "",
+    analysisFailureMode: "",
+    analysisSeverity: "medium",
+    analysisNote: null,
+    generatedInstructions: null,
+    generatedRationale: "",
+  };
+  const [proofLoopCtx, setProofLoopCtx] = useState<ProofLoopCtx>(initialProofLoopCtx);
+  // Destructure for use in JSX / handlers without touching call sites
+  const {
+    judgeOutputText,
+    analysisNoteText,
+    analysisFailureMode,
+    analysisSeverity,
+    analysisNote,
+    generatedInstructions,
+    generatedRationale,
+  } = proofLoopCtx;
+  // Busy-flag states stay separate (they are not phase data)
+  const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
+  const [isGeneratingFix, setIsGeneratingFix] = useState(false);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [reviewCorpora, setReviewCorpora] = useState<ReviewCorpus[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [reviewAnnotations, setReviewAnnotations] = useState<ReviewAnnotation[]>([]);
@@ -1804,15 +1834,15 @@ function App() {
   const [newFailureModeName, setNewFailureModeName] = useState("");
   const [newFailureModeDescription, setNewFailureModeDescription] = useState("");
   const [selectedFailureModeId, setSelectedFailureModeId] = useState("");
-  const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
-  const [generatedInstructions, setGeneratedInstructions] = useState<string | null>(null);
-  const [generatedRationale, setGeneratedRationale] = useState<string>("");
-  const [isGeneratingFix, setIsGeneratingFix] = useState(false);
-  const [judgeOutputText, setJudgeOutputText] = useState<string | null>(null);
-  const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [isDiscoveryBusy, setIsDiscoveryBusy] = useState(false);
   const [fixEditText, setFixEditText] = useState("");
   const [isSavingFix, setIsSavingFix] = useState(false);
+
+  /** Reset all proof-loop ephemeral context to initial values (single canonical reset). */
+  function resetProofLoopCtx() {
+    setProofLoopCtx(initialProofLoopCtx);
+  }
+
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const [scenarioEditorOpen, setScenarioEditorOpen] = useState(false);
   const [toolSearch, setToolSearch] = useState("");
@@ -2181,13 +2211,7 @@ function App() {
     }
     let isCurrent = true;
     setEddFlow({ failurePackets: [] });
-    setAnalysisNote(null);
-    setGeneratedInstructions(null);
-    setGeneratedRationale("");
-    setJudgeOutputText(null);
-    setAnalysisNoteText("");
-    setAnalysisFailureMode("");
-    setAnalysisSeverity("medium");
+    resetProofLoopCtx();
     setOpenCodeText("");
     setNewFailureModeName("");
     setNewFailureModeDescription("");
@@ -3030,13 +3054,7 @@ function App() {
         },
       );
       setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
-      setAnalysisNote(null);
-    setGeneratedInstructions(null);
-    setGeneratedRationale("");
-    setJudgeOutputText(null);
-      setAnalysisNoteText("");
-      setAnalysisFailureMode("");
-      setAnalysisSeverity("medium");
+      resetProofLoopCtx();
       setActivity("Test is ready. Run the current version next.");
       setScenarioEditorOpen(false);
       await refreshContext();
@@ -3106,10 +3124,13 @@ function App() {
     setActivity("Analyzing failure evidence...");
     try {
       const result = await diagnoseFailure(project.id, eddFlow.baselineEval.id);
-      setJudgeOutputText(result.judge_output);
-      if (result.failure_mode) setAnalysisFailureMode(result.failure_mode);
-      if (result.severity) setAnalysisSeverity(result.severity);
-      if (result.review_note) setAnalysisNoteText(result.review_note);
+      setProofLoopCtx((ctx) => ({
+        ...ctx,
+        judgeOutputText: result.judge_output,
+        ...(result.failure_mode ? { analysisFailureMode: result.failure_mode } : {}),
+        ...(result.severity ? { analysisSeverity: result.severity } : {}),
+        ...(result.review_note ? { analysisNoteText: result.review_note } : {}),
+      }));
       setActivity(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to diagnose failure.");
@@ -3142,7 +3163,7 @@ function App() {
           failed_check_ids: failedBaselineChecks.map((check) => check.check_id),
         },
       });
-      setAnalysisNote(note);
+      setProofLoopCtx((ctx) => ({ ...ctx, analysisNote: note }));
       setActivity("Failure analysis saved.");
       await refreshContext();
       await reviewFirstArtifact(note.artifact_ids);
@@ -3170,8 +3191,11 @@ function App() {
         currentFailurePackets,
         eddFlow.contract.id,
       );
-      setGeneratedInstructions(result.proposed_instructions);
-      setGeneratedRationale(result.rationale);
+      setProofLoopCtx((ctx) => ({
+        ...ctx,
+        generatedInstructions: result.proposed_instructions,
+        generatedRationale: result.rationale,
+      }));
       setActivity("Fix generated. Review and confirm to create v" +
         ((eddFlow.baselineVersion.version_label.match(/\d+/)?.[0] ?? 0) as number + 1) + ".");
     } catch (err) {
@@ -3334,13 +3358,7 @@ function App() {
       baselineEval: flow.candidateEval,
       failurePackets: nextFailurePackets,
     }));
-    setAnalysisNote(null);
-    setGeneratedInstructions(null);
-    setGeneratedRationale("");
-    setJudgeOutputText(null);
-    setAnalysisNoteText("");
-    setAnalysisFailureMode("");
-    setAnalysisSeverity("medium");
+    resetProofLoopCtx();
     setActivity(`Continuing from ${eddFlow.candidateVersion.version_label}.`);
     setReviewArtifact(null);
     setReviewLinks([]);
@@ -4198,7 +4216,7 @@ function App() {
                         <textarea
                           className="generated-fix-textarea"
                           value={generatedInstructions}
-                          onChange={(e) => setGeneratedInstructions(e.target.value)}
+                          onChange={(e) => setProofLoopCtx((ctx) => ({ ...ctx, generatedInstructions: e.target.value }))}
                           rows={10}
                         />
                       </label>
@@ -4343,7 +4361,7 @@ function App() {
                               <span>Failure mode</span>
                               <input
                                 value={analysisFailureMode}
-                                onChange={(event) => setAnalysisFailureMode(event.target.value)}
+                                onChange={(event) => setProofLoopCtx((ctx) => ({ ...ctx, analysisFailureMode: event.target.value }))}
                                 placeholder="e.g. missed rollback recommendation"
                                 disabled={!!analysisNote}
                               />
@@ -4352,7 +4370,7 @@ function App() {
                               <span>Severity</span>
                               <select
                                 value={analysisSeverity}
-                                onChange={(event) => setAnalysisSeverity(event.target.value)}
+                                onChange={(event) => setProofLoopCtx((ctx) => ({ ...ctx, analysisSeverity: event.target.value }))}
                                 disabled={!!analysisNote}
                               >
                                 <option value="low">Low</option>
@@ -4365,7 +4383,7 @@ function App() {
                             <span>Review note <span className="required-marker">*</span></span>
                             <textarea
                               value={analysisNoteText}
-                              onChange={(event) => setAnalysisNoteText(event.target.value)}
+                              onChange={(event) => setProofLoopCtx((ctx) => ({ ...ctx, analysisNoteText: event.target.value }))}
                               placeholder="The response did not satisfy the success criteria because…"
                               disabled={!!analysisNote}
                             />
