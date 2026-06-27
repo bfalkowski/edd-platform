@@ -5332,8 +5332,8 @@ def diagnose_failure(
     rubric = ""
     if contract:
         for check in contract.checks:
-            if check.check_type == "rubric_judge" and check.value:
-                rubric = check.value
+            if check.get("type") == "rubric_judge" and check.get("value"):
+                rubric = check["value"]
                 break
 
     run_output = run.output if run else ""
@@ -5528,8 +5528,8 @@ def generate_fix_proposal(
     rubric_text = ""
     if contract:
         for check in contract.checks:
-            if check.check_type == "rubric_judge" and check.value:
-                rubric_text = check.value
+            if check.get("type") == "rubric_judge" and check.get("value"):
+                rubric_text = check["value"]
                 break
 
     failure_lines = []
