@@ -24,3 +24,4 @@ playwright-report/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+TODO.md
