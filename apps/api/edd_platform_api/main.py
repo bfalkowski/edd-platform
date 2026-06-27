@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 import os
 import sys
+
+from dotenv import find_dotenv, load_dotenv
+load_dotenv(find_dotenv(raise_error_if_not_found=False))
+load_dotenv(find_dotenv(".env.local", raise_error_if_not_found=False), override=True)
 from base64 import b64encode
 from datetime import datetime, timezone
 from pathlib import Path

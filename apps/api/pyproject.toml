@@ -15,6 +15,7 @@ dependencies = [
   "langfuse>=4.7.1",
   "playwright>=1.56.0",
   "polars>=1.0.0",
+  "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
