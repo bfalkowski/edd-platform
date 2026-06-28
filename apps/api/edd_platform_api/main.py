@@ -2011,6 +2011,8 @@ def validate_json_schema_object(schema: Dict[str, object], field_name: str) -> N
             raise HTTPException(status_code=400, detail=f"{field_name}.required must be a list of strings.")
 
 
+_LIVE_JUDGE_CHECK_TYPES = {"outcome_rubric", "rubric_judge", "llm_judge"}
+
 def build_live_judge_prompt(
     *,
     contract: EvalContract,
@@ -2018,26 +2020,41 @@ def build_live_judge_prompt(
     checks: List[EvalCheckResult],
     template: Optional[JudgePromptTemplate],
 ) -> str:
+    # Only include deterministic checks in the prompt — rubric/LLM checks are
+    # evaluated by the live judge itself and their stub results ("live judge required")
+    # would pollute the evidence context.
+    deterministic_checks = [
+        c for c in checks if c.check_id not in _LIVE_JUDGE_CHECK_TYPES
+    ]
     check_lines = "\n".join(
         f"- {check.check_id}: {'pass' if check.passed else 'fail'}; "
         f"expected={check.expected}; observed={check.observed}; comment={check.comment}"
-        for check in checks
+        for check in deterministic_checks
     )
     template_text = (
         template.template
         if template is not None
         else "Explain whether the response satisfies the eval contract. Cite the provided evidence only."
     )
+    rubric_check = next(
+        (c for c in contract.checks if c.get("type") in ("rubric_judge", "llm_judge")), None
+    )
+    rubric = (rubric_check.get("value") or "" if rubric_check else "").strip()
+    rubric_section = f"Rubric:\n{rubric}\n\n" if rubric else ""
+    deterministic_section = (
+        f"Deterministic check results:\n{check_lines}\n\n" if check_lines else ""
+    )
     return (
         f"{template_text}\n\n"
         f"Eval contract: {contract.name}\n"
         f"Expected behavior:\n" + "\n".join(f"- {item}" for item in contract.expected_behavior)
         + "\n\n"
+        f"{rubric_section}"
         f"Run input:\n{run.input}\n\n"
         f"Run output:\n{run.output}\n\n"
-        f"Deterministic check results:\n{check_lines or 'No deterministic checks defined.'}\n\n"
-        "For rubric_judge checks, put PASS or FAIL as the first word of the response, "
-        "then give a concise judge explanation. Do not invent evidence not shown above."
+        f"{deterministic_section}"
+        "Put PASS or FAIL as the first word of your response, "
+        "then give a concise explanation citing only the evidence above."
     )
 
 
