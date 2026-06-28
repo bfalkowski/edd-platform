@@ -359,7 +359,7 @@ def anthropic_config_from_env() -> AnthropicRunnerConfig:
         raise RuntimeError("ANTHROPIC_API_KEY is required for live Anthropic runs.")
     return AnthropicRunnerConfig(
         api_key=api_key,
-        model=os.environ.get("EDD_ANTHROPIC_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6",
+        model=os.environ.get("EDD_ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip() or "claude-haiku-4-5-20251001",
     )
 
 
