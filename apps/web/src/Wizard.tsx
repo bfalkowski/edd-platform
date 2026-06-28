@@ -79,6 +79,9 @@ type WizardState = {
   candidateEval: EvalResult | null;
   comparison: Comparison | null;
   langfuseCandidateUrl: string | null;
+
+  // iteration tracking
+  iterationCount: number;
 };
 
 function initialState(projectId: string): WizardState {
@@ -100,6 +103,7 @@ function initialState(projectId: string): WizardState {
     candidateEval: null,
     comparison: null,
     langfuseCandidateUrl: null,
+    iterationCount: 0,
   };
 }
 
@@ -647,11 +651,13 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   }
 
   function renderFailure() {
-    const { baselineRun, baselineEval, langfuseBaselineUrl } = state;
+    const { baselineRun, baselineEval, langfuseBaselineUrl, iterationCount } = state;
     if (!baselineRun || !baselineEval) return null;
     return (
       <div className="wizard-body">
-        <p className="wizard-eyebrow">Step 3 of 5 — Name the failure</p>
+        <p className="wizard-eyebrow">
+          {iterationCount > 0 ? `Iteration ${iterationCount + 1} — Name the failure` : "Step 3 of 5 — Name the failure"}
+        </p>
         <h2 className="wizard-heading">What went wrong?</h2>
 
         <EvalSummary evalResult={baselineEval} />
@@ -763,48 +769,46 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
       baselineEval,
       langfuseBaselineUrl,
       langfuseCandidateUrl,
+      agent,
+      iterationCount,
     } = state;
     if (!baselineRun || !candidateRun || !candidateEval || !comparison) return null;
-    const improved = candidateEval.passed && !baselineEval?.passed;
     const stillFailing = !candidateEval.passed;
-    return (
-      <div className="wizard-body">
-        <p className="wizard-eyebrow">Step 5 of 5 — Compare</p>
-        <h2 className="wizard-heading">
-          {improved ? "Fixed." : stillFailing ? "Still failing — iterate?" : "Compared."}
-        </h2>
 
-        <div className="compare-grid">
-          <div>
-            <p className="output-label">v0 output</p>
-            <pre className="agent-output">{baselineRun.output || "(no output)"}</pre>
-            <TraceLink url={langfuseBaselineUrl} label="v0 trace in Langfuse →" />
-          </div>
-          <div>
-            <p className="output-label">v1 output</p>
-            <pre className="agent-output">{candidateRun.output || "(no output)"}</pre>
-            <TraceLink url={langfuseCandidateUrl} label="v1 trace in Langfuse →" />
-          </div>
-        </div>
+    if (stillFailing) {
+      return (
+        <div className="wizard-body">
+          <p className="wizard-eyebrow">Step 5 of 5 — Compare</p>
+          <h2 className="wizard-heading">Still failing.</h2>
 
-        <div className="compare-verdicts">
-          <div className={`verdict-badge ${baselineEval?.passed ? "pass" : "fail"}`}>
-            v0: {baselineEval?.passed ? "passed" : "failed"}
+          <div className="compare-grid">
+            <div>
+              <p className="output-label">v0 output</p>
+              <pre className="agent-output">{baselineRun.output || "(no output)"}</pre>
+              <TraceLink url={langfuseBaselineUrl} label="v0 trace →" />
+            </div>
+            <div>
+              <p className="output-label">v1 output</p>
+              <pre className="agent-output">{candidateRun.output || "(no output)"}</pre>
+              <TraceLink url={langfuseCandidateUrl} label="v1 trace →" />
+            </div>
           </div>
-          <div className={`verdict-badge ${candidateEval.passed ? "pass" : "fail"}`}>
-            v1: {candidateEval.passed ? "passed" : "failed"}
-          </div>
-        </div>
 
-        {comparison.summary ? (
-          <div className="compare-summary">
-            <p className="output-label">Comparison summary</p>
-            <p className="wizard-hint">{comparison.summary}</p>
+          <div className="compare-verdicts">
+            <div className={`verdict-badge ${baselineEval?.passed ? "pass" : "fail"}`}>
+              v0: {baselineEval?.passed ? "passed" : "failed"}
+            </div>
+            <div className="verdict-badge fail">v1: failed</div>
           </div>
-        ) : null}
 
-        <div className="wizard-actions">
-          {stillFailing ? (
+          {comparison.summary ? (
+            <div className="compare-summary">
+              <p className="output-label">What changed</p>
+              <p className="wizard-hint">{comparison.summary}</p>
+            </div>
+          ) : null}
+
+          <div className="wizard-actions">
             <button
               className="primary-button"
               type="button"
@@ -822,34 +826,144 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
                   whatShouldHappen: "",
                   fix: null,
                   fixEdited: "",
+                  iterationCount: iterationCount + 1,
                 })
               }
             >
-              Iterate — name the failure again →
+              Iterate again →
             </button>
-          ) : (
-            <button className="primary-button" type="button" onClick={() => onDone(agentId())}>
-              View evidence →
-            </button>
-          )}
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+
+    return renderEvidenceChain({
+      headline: iterationCount === 0 ? "Fixed." : `Fixed after ${iterationCount + 1} iterations.`,
+      agent,
+      baselineRun,
+      baselineEval,
+      langfuseBaselineUrl,
+      candidateRun,
+      candidateEval,
+      langfuseCandidateUrl,
+      comparisonSummary: comparison.summary,
+    });
   }
 
   function renderDone() {
-    const { baselineRun, baselineEval, langfuseBaselineUrl } = state;
+    const { baselineRun, baselineEval, langfuseBaselineUrl, agent } = state;
+    return renderEvidenceChain({
+      headline: "Passed on the first run.",
+      agent,
+      baselineRun,
+      baselineEval,
+      langfuseBaselineUrl,
+      candidateRun: null,
+      candidateEval: null,
+      langfuseCandidateUrl: null,
+      comparisonSummary: null,
+    });
+  }
+
+  function renderEvidenceChain({
+    headline,
+    agent,
+    baselineRun,
+    baselineEval,
+    langfuseBaselineUrl,
+    candidateRun,
+    candidateEval,
+    langfuseCandidateUrl,
+    comparisonSummary,
+  }: {
+    headline: string;
+    agent: OutcomeAgentResponse | null;
+    baselineRun: RunRecord | null;
+    baselineEval: EvalResult | null;
+    langfuseBaselineUrl: string | null;
+    candidateRun: RunRecord | null;
+    candidateEval: EvalResult | null;
+    langfuseCandidateUrl: string | null;
+    comparisonSummary: string | null;
+  }) {
+    const rubric = agent?.eval_contract.checks.find((c) => c.type === "rubric_judge")?.value ?? null;
     return (
       <div className="wizard-body">
         <p className="wizard-eyebrow">Done</p>
-        <h2 className="wizard-heading">Passed on the first run.</h2>
-        <p className="wizard-hint">No fix needed — the agent already satisfies the criterion.</p>
-        {baselineRun && <OutputBlock output={baselineRun.output} label="Agent output" />}
-        {baselineEval && <EvalSummary evalResult={baselineEval} />}
-        <TraceLink url={langfuseBaselineUrl} label="Open trace in Langfuse →" />
+        <h2 className="wizard-heading">{headline}</h2>
+
+        <div className="evidence-chain">
+          {/* Agent */}
+          <div className="evidence-row">
+            <span className="evidence-label">Agent</span>
+            <span className="evidence-value">{agent?.agent.name ?? "—"}</span>
+          </div>
+
+          {/* Test input */}
+          <div className="evidence-row">
+            <span className="evidence-label">Test input</span>
+            <span className="evidence-value">{agent?.scenario.input ?? "—"}</span>
+          </div>
+
+          {/* Rubric */}
+          {rubric ? (
+            <div className="evidence-row">
+              <span className="evidence-label">Success criterion</span>
+              <span className="evidence-value">{rubric}</span>
+            </div>
+          ) : null}
+
+          {/* Baseline output */}
+          {baselineRun ? (
+            <div className="evidence-section">
+              <div className="evidence-section-header">
+                <span className="evidence-label">v0 output</span>
+                {baselineEval ? (
+                  <span className={`verdict-badge ${baselineEval.passed ? "pass" : "fail"}`}>
+                    {baselineEval.passed ? "passed" : "failed"}
+                  </span>
+                ) : null}
+                <TraceLink url={langfuseBaselineUrl} label="trace →" />
+              </div>
+              <pre className="agent-output evidence-output">{baselineRun.output || "(no output)"}</pre>
+            </div>
+          ) : null}
+
+          {/* Candidate output */}
+          {candidateRun ? (
+            <div className="evidence-section">
+              <div className="evidence-section-header">
+                <span className="evidence-label">v1 output</span>
+                {candidateEval ? (
+                  <span className={`verdict-badge ${candidateEval.passed ? "pass" : "fail"}`}>
+                    {candidateEval.passed ? "passed" : "failed"}
+                  </span>
+                ) : null}
+                <TraceLink url={langfuseCandidateUrl} label="trace →" />
+              </div>
+              <pre className="agent-output evidence-output">{candidateRun.output || "(no output)"}</pre>
+            </div>
+          ) : null}
+
+          {/* Comparison summary */}
+          {comparisonSummary ? (
+            <div className="evidence-row">
+              <span className="evidence-label">What changed</span>
+              <span className="evidence-value">{comparisonSummary}</span>
+            </div>
+          ) : null}
+        </div>
+
         <div className="wizard-actions">
-          <button className="primary-button" type="button" onClick={() => onDone(agentId())}>
-            View evidence →
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => {
+              onAgentCreated(agentId()); // refresh sidebar
+              setState(initialState(projectId));
+            }}
+          >
+            Start new agent
           </button>
         </div>
       </div>
@@ -860,7 +974,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   // Render
   // ---------------------------------------------------------------------------
 
-  const showIndicator = state.step !== "describe" && state.step !== "done";
+  const showIndicator = !["describe", "done"].includes(state.step);
 
   return (
     <div className="wizard-shell" ref={topRef}>
