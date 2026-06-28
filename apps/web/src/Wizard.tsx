@@ -697,7 +697,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
           <textarea
             className="wizard-textarea"
             rows={2}
-            placeholder="The agent recommended rolling back immediately without asking for logs first."
+            placeholder="e.g. The agent gave a generic answer instead of using the specific data it fetched."
             value={state.whatWentWrong}
             onChange={(e) => update({ whatWentWrong: e.target.value })}
           />
@@ -709,7 +709,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
           <textarea
             className="wizard-textarea"
             rows={2}
-            placeholder="Ask for the deployment logs and error output before recommending any action."
+            placeholder="e.g. Return a concise, specific answer grounded in what the tool actually returned."
             value={state.whatShouldHappen}
             onChange={(e) => update({ whatShouldHappen: e.target.value })}
           />
