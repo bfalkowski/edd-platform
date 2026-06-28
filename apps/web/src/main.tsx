@@ -3779,10 +3779,6 @@ function App() {
           <header className="topbar">
             <div>
               <h1>New agent</h1>
-              <p>
-                {project?.description ??
-                  "Describe the outcome and persist the first platform design."}
-              </p>
             </div>
           </header>
         ) : null}
