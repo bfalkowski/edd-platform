@@ -82,6 +82,7 @@ type WizardState = {
 
   // iteration tracking
   iterationCount: number;
+  acceptedWithFailure: boolean;
 };
 
 function initialState(projectId: string): WizardState {
@@ -104,6 +105,7 @@ function initialState(projectId: string): WizardState {
     comparison: null,
     langfuseCandidateUrl: null,
     iterationCount: 0,
+    acceptedWithFailure: false,
   };
 }
 
@@ -832,6 +834,22 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
             >
               Iterate again →
             </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() =>
+                update({
+                  step: "done",
+                  acceptedWithFailure: true,
+                  // promote v1 as the final run shown in evidence
+                  baselineRun: candidateRun,
+                  baselineEval: candidateEval,
+                  langfuseBaselineUrl: langfuseCandidateUrl,
+                })
+              }
+            >
+              Accept as-is
+            </button>
           </div>
         </div>
       );
@@ -851,9 +869,12 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   }
 
   function renderDone() {
-    const { baselineRun, baselineEval, langfuseBaselineUrl, agent } = state;
+    const { baselineRun, baselineEval, langfuseBaselineUrl, agent, acceptedWithFailure, iterationCount } = state;
+    const headline = acceptedWithFailure
+      ? `Accepted with known failures after ${iterationCount + 1} iteration${iterationCount === 0 ? "" : "s"}.`
+      : "Passed on the first run.";
     return renderEvidenceChain({
-      headline: "Passed on the first run.",
+      headline,
       agent,
       baselineRun,
       baselineEval,
