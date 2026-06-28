@@ -424,7 +424,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   async function handleRun() {
     const { agent, runMode } = state;
     if (!agent) return;
-    const judgeMode = runMode === "live" ? "live" : "deterministic";
+    const judgeMode = "live";
     const baselineRun = await go("Run", () => runAgent(projectId, agent, runMode));
     if (!baselineRun) return;
     const baselineEval = await go("Evaluate", () =>
@@ -468,7 +468,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   async function handleApplyFix() {
     const { agent, fix, fixEdited, baselineRun, runMode } = state;
     if (!agent || !fix || !baselineRun) return;
-    const judgeMode = runMode === "live" ? "live" : "deterministic";
+    const judgeMode = "live";
 
     const packets = await go("Load failures", () =>
       listFailurePackets(projectId, agent.agent.id),
