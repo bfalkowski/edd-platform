@@ -634,10 +634,11 @@ def run_langchain_agent(
     except ImportError as exc:
         raise RuntimeError("LangChain agent execution requires langchain to be installed.") from exc
 
-    # Max tool calls for a single-turn agent. Each call costs 2 graph steps
-    # (agent node + tools node), plus 2 for the initial and final agent steps.
-    max_tool_calls = max(1, len(tools))
-    recursion_limit = 2 + (max_tool_calls * 2) + 2  # buffer of 2
+    # Allow up to 5 tool calls per unique tool available — enough for browsing
+    # agents that may need to paginate or follow a few links, without unlimited looping.
+    # Each call costs 2 graph steps; add 4 for initial + final agent steps.
+    max_tool_calls = max(5, len(tools) * 5)
+    recursion_limit = 4 + (max_tool_calls * 2)
 
     graph = create_agent(
         model=f"anthropic:{config.model}",
@@ -647,10 +648,10 @@ def run_langchain_agent(
             f"Agent name: {agent.name}\n"
             f"Design intent: {agent.intent}\n"
             f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}\n\n"
-            f"TOOL CALL BUDGET: You may call tools at most {max_tool_calls} time(s) total. "
-            "After receiving a tool result, you MUST write your final response to the user immediately. "
-            "Do NOT follow links, load additional pages, or make further tool calls. "
-            "If the first result is sufficient to answer, stop and respond now."
+            f"TOOL CALL BUDGET: You have a budget of up to {max_tool_calls} tool call(s). "
+            "Use only as many as needed to answer the user's question. "
+            "Once you have enough information, stop calling tools and write your final response. "
+            "Do not call a tool again if the result you already have is sufficient."
         ),
     )
     callbacks = build_langfuse_langchain_callbacks()
