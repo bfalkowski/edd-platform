@@ -641,11 +641,14 @@ def run_langchain_agent(
             f"{instructions}\n\n"
             f"Agent name: {agent.name}\n"
             f"Design intent: {agent.intent}\n"
-            f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}"
+            f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}\n\n"
+            "After you receive a tool result, respond directly to the user. "
+            "Do not call the same tool again unless the result was clearly incomplete. "
+            "One tool call per turn is usually enough."
         ),
     )
     callbacks = build_langfuse_langchain_callbacks()
-    invoke_config: dict = {"recursion_limit": 10}
+    invoke_config: dict = {"recursion_limit": 25}
     if callbacks:
         invoke_config["callbacks"] = callbacks
     result = graph.invoke(
