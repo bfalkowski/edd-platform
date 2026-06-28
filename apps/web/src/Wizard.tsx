@@ -66,9 +66,10 @@ type WizardState = {
   baselineEval: EvalResult | null;
   langfuseBaselineUrl: string | null;
 
-  // step 5 — failure naming
+  // step 5 — failure naming + eval check editing
   whatWentWrong: string;
   whatShouldHappen: string;
+  editedChecks: Array<{ id: string; type: string; value?: string }>;
 
   // step 6 — fix
   fix: FixGenerated | null;
@@ -100,6 +101,7 @@ function initialState(projectId: string): WizardState {
     langfuseBaselineUrl: null,
     whatWentWrong: "",
     whatShouldHappen: "",
+    editedChecks: [],
     fix: null,
     fixEdited: "",
     candidateRun: null,
@@ -278,6 +280,14 @@ async function createComparison(
   });
 }
 
+async function updateContractChecks(
+  projectId: string,
+  contractId: string,
+  checks: Array<{ id: string; type: string; value?: string }>,
+): Promise<void> {
+  await apiPost(`/projects/${projectId}/eval-contracts/${contractId}/checks`, { checks });
+}
+
 async function getLangfuseUrl(projectId: string, runId: string): Promise<string | null> {
   try {
     type TraceRef = { url?: string | null };
@@ -443,7 +453,13 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     if (baselineEval.passed) {
       update({ step: "done", baselineRun, baselineEval, langfuseBaselineUrl });
     } else {
-      update({ step: "failure", baselineRun, baselineEval, langfuseBaselineUrl });
+      update({
+        step: "failure",
+        baselineRun,
+        baselineEval,
+        langfuseBaselineUrl,
+        editedChecks: [...agent.eval_contract.checks],
+      });
     }
   }
 
@@ -453,8 +469,19 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
   // Step 4 → 5: generate fix from failure description
   async function handleGenerateFix() {
-    const { agent, baselineEval, whatWentWrong, whatShouldHappen, currentVersionId } = state;
+    const { agent, baselineEval, whatWentWrong, whatShouldHappen, currentVersionId, editedChecks } = state;
     if (!agent || !baselineEval) return;
+
+    // Persist any check edits the user made before generating the fix
+    const checksChanged =
+      JSON.stringify(editedChecks) !== JSON.stringify(agent.eval_contract.checks);
+    if (checksChanged && editedChecks.length > 0) {
+      const saved = await go("Save check edits", () =>
+        updateContractChecks(projectId, agent.eval_contract.id, editedChecks),
+      );
+      if (saved === null) return; // go() returns null on error
+    }
+
     const packets = await go("Load failures", () =>
       listFailurePackets(projectId, agent.agent.id),
     );
@@ -661,8 +688,16 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   }
 
   function renderFailure() {
-    const { baselineRun, baselineEval, langfuseBaselineUrl, iterationCount } = state;
+    const { baselineRun, baselineEval, langfuseBaselineUrl, iterationCount, editedChecks } = state;
     if (!baselineRun || !baselineEval) return null;
+
+    function updateCheck(idx: number, value: string) {
+      const next = editedChecks.map((c, i) => (i === idx ? { ...c, value } : c));
+      update({ editedChecks: next });
+    }
+
+    const deterministicChecks = editedChecks.filter((c) => c.type === "keyword_match" || c.type === "contains");
+
     return (
       <div className="wizard-body">
         <p className="wizard-eyebrow">
@@ -682,6 +717,27 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
           <p className="wizard-hint muted">
             Start Langfuse to see the full trace with tool calls and token counts.
           </p>
+        )}
+
+        {deterministicChecks.length > 0 && (
+          <div className="wizard-checks-editor">
+            <p className="output-label">Eval checks — edit if the criteria need updating</p>
+            {editedChecks.map((check, idx) => {
+              if (check.type !== "keyword_match" && check.type !== "contains") return null;
+              return (
+                <label key={check.id} className="wizard-label">
+                  <span className="wizard-check-id">{check.id}</span>
+                  <span className="wizard-label-sub">{check.type}</span>
+                  <input
+                    className="wizard-input"
+                    type="text"
+                    value={check.value ?? ""}
+                    onChange={(e) => updateCheck(idx, e.target.value)}
+                  />
+                </label>
+              );
+            })}
+          </div>
         )}
 
         <label className="wizard-label">
@@ -837,6 +893,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
                   fix: null,
                   fixEdited: "",
                   iterationCount: iterationCount + 1,
+                  editedChecks: state.agent ? [...state.agent.eval_contract.checks] : [],
                 })
               }
             >

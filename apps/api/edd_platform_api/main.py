@@ -67,6 +67,7 @@ from edd_platform_api.schemas import (
     Scenario,
     EvalContractCreate,
     EvalContract,
+    EvalContractChecksUpdate,
     EvalContractRubricUpdate,
     JudgePromptTemplateCreate,
     JudgePromptTemplate,
@@ -3883,6 +3884,22 @@ def update_eval_contract_rubric(
             updated_checks.append(check)
     updated = contract.model_copy(
         update={"checks": updated_checks, "updated_at": datetime.now(timezone.utc)}
+    )
+    _eval_contracts[contract_id] = updated
+    store.save_record("eval_contracts", contract_id, updated)
+    return updated
+
+
+@app.patch("/api/projects/{project_id}/eval-contracts/{contract_id}/checks")
+def update_eval_contract_checks(
+    project_id: str,
+    contract_id: str,
+    payload: EvalContractChecksUpdate,
+) -> EvalContract:
+    get_project_or_404(project_id)
+    contract = get_eval_contract_or_404(project_id, contract_id)
+    updated = contract.model_copy(
+        update={"checks": payload.checks, "updated_at": datetime.now(timezone.utc)}
     )
     _eval_contracts[contract_id] = updated
     store.save_record("eval_contracts", contract_id, updated)

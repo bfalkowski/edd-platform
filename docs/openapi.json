@@ -1632,6 +1632,23 @@
         "title": "EvalContract",
         "type": "object"
       },
+      "EvalContractChecksUpdate": {
+        "properties": {
+          "checks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Checks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "checks"
+        ],
+        "title": "EvalContractChecksUpdate",
+        "type": "object"
+      },
       "EvalContractCreate": {
         "properties": {
           "agent_design_id": {
@@ -7383,6 +7400,64 @@
           }
         },
         "summary": "Get Eval Contract"
+      }
+    },
+    "/api/projects/{project_id}/eval-contracts/{contract_id}/checks": {
+      "patch": {
+        "operationId": "update_eval_contract_checks_api_projects__project_id__eval_contracts__contract_id__checks_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contract_id",
+            "required": true,
+            "schema": {
+              "title": "Contract Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalContractChecksUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalContract"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Eval Contract Checks"
       }
     },
     "/api/projects/{project_id}/eval-contracts/{contract_id}/rubric": {

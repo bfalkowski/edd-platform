@@ -3522,3 +3522,20 @@ dd {
 .evidence-output {
   max-height: 200px;
 }
+
+
+.wizard-checks-editor {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.wizard-check-id {
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 600;
+}

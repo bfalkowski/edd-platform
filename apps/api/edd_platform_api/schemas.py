@@ -115,6 +115,10 @@ class EvalContractRubricUpdate(BaseModel):
     rubric: str = Field(min_length=1)
 
 
+class EvalContractChecksUpdate(BaseModel):
+    checks: List[Dict[str, object]]
+
+
 class JudgePromptTemplateCreate(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
