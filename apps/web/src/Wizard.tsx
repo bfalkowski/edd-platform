@@ -61,8 +61,6 @@ type WizardState = {
 
   // step 3 — confirmed agent
   agent: OutcomeAgentResponse | null;
-  runMode: "mock" | "live";
-
   // step 4 — baseline run + eval
   baselineRun: RunRecord | null;
   baselineEval: EvalResult | null;
@@ -91,7 +89,6 @@ function initialState(projectId: string): WizardState {
     preview: null,
     previewEdits: null,
     agent: null,
-    runMode: "live",
     baselineRun: null,
     baselineEval: null,
     langfuseBaselineUrl: null,
@@ -422,10 +419,10 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
   // Step 3: run baseline
   async function handleRun() {
-    const { agent, runMode } = state;
+    const { agent } = state;
     if (!agent) return;
     const judgeMode = "live";
-    const baselineRun = await go("Run", () => runAgent(projectId, agent, runMode));
+    const baselineRun = await go("Run", () => runAgent(projectId, agent, "live"));
     if (!baselineRun) return;
     const baselineEval = await go("Evaluate", () =>
       evaluateRun(projectId, baselineRun.id, agent.eval_contract.id, judgeMode),
@@ -466,7 +463,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
   // Step 5 → 6: apply fix and run v1
   async function handleApplyFix() {
-    const { agent, fix, fixEdited, baselineRun, runMode } = state;
+    const { agent, fix, fixEdited, baselineRun } = state;
     if (!agent || !fix || !baselineRun) return;
     const judgeMode = "live";
 
@@ -500,7 +497,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     if (!candidateVersion) return;
 
     const candidateRun = await go("Run v1", () =>
-      runCandidateVersion(projectId, agent, candidateVersion.id, runMode),
+      runCandidateVersion(projectId, agent, candidateVersion.id, "live"),
     );
     if (!candidateRun) return;
 
@@ -621,7 +618,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   }
 
   function renderRun() {
-    const { agent, runMode } = state;
+    const { agent } = state;
     if (!agent) return null;
     return (
       <div className="wizard-body">
@@ -633,27 +630,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
           <blockquote className="wizard-blockquote">{agent.scenario.input}</blockquote>
         </div>
 
-        <div className="wizard-run-mode">
-          <span className="wizard-label-sub">Run mode</span>
-          <div className="run-mode-control">
-            <button
-              className={runMode === "mock" ? "mode-option active" : "mode-option"}
-              type="button"
-              onClick={() => update({ runMode: "mock" })}
-            >
-              Mock
-            </button>
-            <button
-              className={runMode === "live" ? "mode-option active" : "mode-option"}
-              type="button"
-              onClick={() => update({ runMode: "live" })}
-            >
-              Live Anthropic
-            </button>
-          </div>
-        </div>
-
-        {busy ? <Spinner label={runMode === "live" ? "Running (this may take a minute)..." : "Running..."} /> : null}
+        {busy ? <Spinner label="Running (this may take a minute)..." /> : null}
 
         <div className="wizard-actions">
           <button
