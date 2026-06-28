@@ -5612,6 +5612,7 @@ def generate_fix_proposal(
             failure_lines.append(f"  Suggested fix direction: {p.recommended_fix}")
     failure_summary = "\n".join(failure_lines) or "No failure packets provided."
 
+    human_note = (payload.failure_description or "").strip()
     prompt = (
         f"You are improving an AI agent's instructions after a failed evaluation.\n\n"
         f"Agent name: {agent.name}\n"
@@ -5619,8 +5620,10 @@ def generate_fix_proposal(
         f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}\n\n"
         f"Current instructions ({version.version_label}):\n{version.instructions}\n\n"
         f"What failed:\n{failure_summary}\n\n"
-        f"Success criteria (rubric): {rubric_text or 'Not specified.'}\n\n"
+        + (f"Human diagnosis: {human_note}\n\n" if human_note else "")
+        + f"Success criteria (rubric): {rubric_text or 'Not specified.'}\n\n"
         f"Write improved instructions for the next version that directly address the failure. "
+        f"Prioritise the human diagnosis above all else if provided. "
         f"Keep everything that worked. Fix only what caused the failure. "
         f"If tools are available, be explicit about when and how to use them. "
         f"Return only the instructions text — no preamble, no explanation, no headers."

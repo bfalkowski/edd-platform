@@ -2779,6 +2779,17 @@
             "title": "Agent Design Id",
             "type": "string"
           },
+          "failure_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Description"
+          },
           "target_version_id": {
             "title": "Target Version Id",
             "type": "string"

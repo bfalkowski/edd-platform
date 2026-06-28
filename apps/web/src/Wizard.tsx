@@ -83,6 +83,8 @@ type WizardState = {
   // iteration tracking
   iterationCount: number;
   acceptedWithFailure: boolean;
+  // tracks the most recent version id so v2+ are parented correctly
+  currentVersionId: string | null;
 };
 
 function initialState(projectId: string): WizardState {
@@ -106,6 +108,7 @@ function initialState(projectId: string): WizardState {
     langfuseCandidateUrl: null,
     iterationCount: 0,
     acceptedWithFailure: false,
+    currentVersionId: null,
   };
 }
 
@@ -196,12 +199,14 @@ async function generateFix(
   versionId: string,
   packetIds: string[],
   contractId: string,
+  failureDescription: string,
 ): Promise<FixGenerated> {
   return apiPost(`/projects/${projectId}/fix-proposals/generate`, {
     agent_design_id: agentId,
     target_version_id: versionId,
     addressed_failure_packet_ids: packetIds,
     validation_contract_id: contractId,
+    failure_description: failureDescription || undefined,
   });
 }
 
@@ -419,7 +424,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
       commitAgent(projectId, state.description, edits),
     );
     if (!agent) return;
-    update({ step: "run", agent });
+    update({ step: "run", agent, currentVersionId: agent.version.id });
     onAgentCreated(agent.agent.id);
   }
 
@@ -448,19 +453,21 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
   // Step 4 → 5: generate fix from failure description
   async function handleGenerateFix() {
-    const { agent, baselineEval } = state;
+    const { agent, baselineEval, whatWentWrong, whatShouldHappen, currentVersionId } = state;
     if (!agent || !baselineEval) return;
     const packets = await go("Load failures", () =>
       listFailurePackets(projectId, agent.agent.id),
     );
     if (!packets) return;
+    const failureDescription = [whatWentWrong, whatShouldHappen].filter(Boolean).join(" — Instead: ");
     const fix = await go("Generate fix", () =>
       generateFix(
         projectId,
         agent.agent.id,
-        agent.version.id,
+        currentVersionId ?? agent.version.id,
         packets.map((p) => p.id),
         agent.eval_contract.id,
+        failureDescription,
       ),
     );
     if (!fix) return;
@@ -469,9 +476,10 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
   // Step 5 → 6: apply fix and run v1
   async function handleApplyFix() {
-    const { agent, fix, fixEdited, baselineRun } = state;
+    const { agent, fix, fixEdited, baselineRun, currentVersionId } = state;
     if (!agent || !fix || !baselineRun) return;
     const judgeMode = "live";
+    const parentVersionId = currentVersionId ?? agent.version.id;
 
     const packets = await go("Load failures", () =>
       listFailurePackets(projectId, agent.agent.id),
@@ -482,7 +490,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
       createFixProposal(
         projectId,
         agent.agent.id,
-        agent.version.id,
+        parentVersionId,
         packets.map((p) => p.id),
         agent.eval_contract.id,
         fixEdited,
@@ -491,11 +499,11 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     );
     if (!proposal) return;
 
-    const candidateVersion = await go("Create v1", () =>
+    const candidateVersion = await go("Create next version", () =>
       createCandidateVersion(
         projectId,
         agent.agent.id,
-        agent.version.id,
+        parentVersionId,
         fixEdited,
         proposal.id,
       ),
@@ -518,7 +526,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     if (!comparison) return;
 
     const langfuseCandidateUrl = await getLangfuseUrl(projectId, candidateRun.id);
-    update({ step: "compare", candidateRun, candidateEval, comparison, langfuseCandidateUrl });
+    update({ step: "compare", candidateRun, candidateEval, comparison, langfuseCandidateUrl, currentVersionId: candidateVersion.id });
   }
 
   // ---------------------------------------------------------------------------

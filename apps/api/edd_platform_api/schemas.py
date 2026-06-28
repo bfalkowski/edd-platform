@@ -918,6 +918,7 @@ class FixProposalGenerateRequest(BaseModel):
     target_version_id: str
     addressed_failure_packet_ids: List[str] = Field(default_factory=list)
     validation_contract_id: Optional[str] = None
+    failure_description: Optional[str] = None  # human's plain-language note on what went wrong
 
 
 class FixProposalGenerated(BaseModel):
