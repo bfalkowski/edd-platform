@@ -3792,8 +3792,15 @@ function App() {
             <Wizard
               projectId={project?.id ?? "project_default"}
               onAgentCreated={(agentId) => {
+                // refresh sidebar without closing wizard — wizard continues
+                if (project) {
+                  listAgentDesigns(project.id).then((updated) => {
+                    setAgents(updated);
+                  });
+                }
+              }}
+              onDone={(agentId) => {
                 setWizardOpen(false);
-                // reload agents and select the new one
                 if (project) {
                   listAgentDesigns(project.id).then((updated) => {
                     setAgents(updated);

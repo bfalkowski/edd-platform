@@ -368,9 +368,10 @@ function OutputBlock({ output, label }: { output: string; label: string }) {
 type Props = {
   projectId: string;
   onAgentCreated: (agentId: string) => void;
+  onDone: (agentId: string) => void;
 };
 
-export function Wizard({ projectId, onAgentCreated }: Props) {
+export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   const [state, setState] = useState<WizardState>(() => initialState(projectId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -436,6 +437,10 @@ export function Wizard({ projectId, onAgentCreated }: Props) {
     } else {
       update({ step: "failure", baselineRun, baselineEval, langfuseBaselineUrl });
     }
+  }
+
+  function agentId(): string {
+    return state.agent?.agent.id ?? "";
   }
 
   // Step 4 → 5: generate fix from failure description
@@ -821,8 +826,8 @@ export function Wizard({ projectId, onAgentCreated }: Props) {
           </div>
         ) : null}
 
-        {stillFailing ? (
-          <div className="wizard-actions">
+        <div className="wizard-actions">
+          {stillFailing ? (
             <button
               className="primary-button"
               type="button"
@@ -832,16 +837,6 @@ export function Wizard({ projectId, onAgentCreated }: Props) {
                   baselineRun: candidateRun,
                   baselineEval: candidateEval,
                   langfuseBaselineUrl: langfuseCandidateUrl,
-                  // promote v1 to become new baseline for next iteration
-                  agent: state.agent
-                    ? {
-                        ...state.agent,
-                        version: {
-                          ...state.agent.version,
-                          id: candidateRun.id, // will be replaced properly on next loop
-                        },
-                      }
-                    : state.agent,
                   candidateRun: null,
                   candidateEval: null,
                   comparison: null,
@@ -855,10 +850,12 @@ export function Wizard({ projectId, onAgentCreated }: Props) {
             >
               Iterate — name the failure again →
             </button>
-          </div>
-        ) : (
-          <p className="wizard-done-msg">Evidence saved. The proof chain is complete.</p>
-        )}
+          ) : (
+            <button className="primary-button" type="button" onClick={() => onDone(agentId())}>
+              View evidence →
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -873,6 +870,11 @@ export function Wizard({ projectId, onAgentCreated }: Props) {
         {baselineRun && <OutputBlock output={baselineRun.output} label="Agent output" />}
         {baselineEval && <EvalSummary evalResult={baselineEval} />}
         <TraceLink url={langfuseBaselineUrl} label="Open trace in Langfuse →" />
+        <div className="wizard-actions">
+          <button className="primary-button" type="button" onClick={() => onDone(agentId())}>
+            View evidence →
+          </button>
+        </div>
       </div>
     );
   }
