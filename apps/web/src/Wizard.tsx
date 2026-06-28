@@ -688,7 +688,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   }
 
   function renderFailure() {
-    const { baselineRun, baselineEval, langfuseBaselineUrl, iterationCount, editedChecks } = state;
+    const { baselineRun, baselineEval, langfuseBaselineUrl, iterationCount, editedChecks, candidateRun, candidateEval } = state;
     if (!baselineRun || !baselineEval) return null;
 
     function updateCheck(idx: number, value: string) {
@@ -705,8 +705,17 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
         </p>
         <h2 className="wizard-heading">What went wrong?</h2>
 
+        {iterationCount > 0 && (
+          <div className="wizard-iteration-context">
+            <p className="wizard-hint">
+              The previous fix didn't fully resolve the failure. The output below is from v{iterationCount}.
+              Describe what's still wrong so the next fix can address it specifically.
+            </p>
+          </div>
+        )}
+
         <EvalSummary evalResult={baselineEval} />
-        <OutputBlock output={baselineRun.output} label="Agent output" />
+        <OutputBlock output={baselineRun.output} label={iterationCount > 0 ? `v${iterationCount} output` : "Agent output"} />
 
         {langfuseBaselineUrl ? (
           <div className="trace-row">
@@ -849,22 +858,22 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
           <div className="compare-grid">
             <div>
-              <p className="output-label">v0 output</p>
+              <p className="output-label">v{iterationCount} output (before fix)</p>
               <pre className="agent-output">{baselineRun.output || "(no output)"}</pre>
-              <TraceLink url={langfuseBaselineUrl} label="v0 trace →" />
+              <TraceLink url={langfuseBaselineUrl} label={`v${iterationCount} trace →`} />
             </div>
             <div>
-              <p className="output-label">v1 output</p>
+              <p className="output-label">v{iterationCount + 1} output (after fix)</p>
               <pre className="agent-output">{candidateRun.output || "(no output)"}</pre>
-              <TraceLink url={langfuseCandidateUrl} label="v1 trace →" />
+              <TraceLink url={langfuseCandidateUrl} label={`v${iterationCount + 1} trace →`} />
             </div>
           </div>
 
           <div className="compare-verdicts">
             <div className={`verdict-badge ${baselineEval?.passed ? "pass" : "fail"}`}>
-              v0: {baselineEval?.passed ? "passed" : "failed"}
+              v{iterationCount}: {baselineEval?.passed ? "passed" : "failed"}
             </div>
-            <div className="verdict-badge fail">v1: failed</div>
+            <div className="verdict-badge fail">v{iterationCount + 1}: failed</div>
           </div>
 
           {comparison.summary ? (
