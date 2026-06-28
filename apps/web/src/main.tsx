@@ -12,6 +12,7 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { Wizard } from "./Wizard";
 
 type AgentDesign = {
   id: string;
@@ -1843,6 +1844,7 @@ function App() {
   const [isEditingRubric, setIsEditingRubric] = useState(false);
   const [rubricEditText, setRubricEditText] = useState("");
   const [isSavingRubric, setIsSavingRubric] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [reviewCorpora, setReviewCorpora] = useState<ReviewCorpus[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [reviewAnnotations, setReviewAnnotations] = useState<ReviewAnnotation[]>([]);
@@ -3622,7 +3624,7 @@ function App() {
 
         <nav className="primary-nav" aria-label="Primary">
           <button
-            className={!selectedAgent ? "nav-item active" : "nav-item"}
+            className={wizardOpen || !selectedAgent ? "nav-item active" : "nav-item"}
             type="button"
             onClick={() => {
               setSelectedId(null);
@@ -3633,6 +3635,7 @@ function App() {
               setScratchPanelOpen(false);
               setActivity(null);
               setWorkspaceTab("proof");
+              setWizardOpen(true);
             }}
           >
             <PencilLine size={22} />
@@ -3697,6 +3700,7 @@ function App() {
                   type="button"
                   onClick={() => {
                     setSelectedId(agent.id);
+                    setWizardOpen(false);
                     setGeneratedDesign((current) =>
                       current?.agentId === agent.id ? current : null,
                     );
@@ -3783,67 +3787,22 @@ function App() {
           </header>
         ) : null}
 
-        <section className={selectedAgent ? "canvas canvas-workspace" : "canvas"}>
-          {!selectedAgent ? (
-            <form className="intent-form" onSubmit={handleCreate}>
-              <p className="eyebrow">Start from outcome</p>
-              <h2>What result should the agent produce?</h2>
-              <label>
-                Agent name
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Anthropic Jobs Agent"
-                  required
-                />
-              </label>
-              <label>
-                Desired outcome
-                <textarea
-                  value={intent}
-                  onChange={(event) => setIntent(event.target.value)}
-                  placeholder="Determine where the next Formula 1 race is."
-                  required
-                />
-              </label>
-              <div className="intent-mode-row">
-                <span className="intent-mode-label">Run mode</span>
-                <div className="run-mode-control" aria-label="Run mode">
-                  <button
-                    className={runMode === "mock" ? "mode-option active" : "mode-option"}
-                    type="button"
-                    onClick={() => setRunMode("mock")}
-                  >
-                    Mock
-                  </button>
-                  <button
-                    className={runMode === "live" ? "mode-option active" : "mode-option"}
-                    type="button"
-                    onClick={() => setRunMode("live")}
-                  >
-                    Live Anthropic
-                  </button>
-                </div>
-              </div>
-              <div className="intent-actions">
-                <button
-                  className="primary-button"
-                  type="button"
-                  disabled={!name.trim() || !intent.trim() || isDraftingAgent}
-                  onClick={handleDraftFromOutcome}
-                >
-                  {isDraftingAgent ? "Drafting..." : "Draft from outcome"}
-                </button>
-                <button
-                  className="secondary-button"
-                  type="submit"
-                  disabled={!name.trim() || !intent.trim()}
-                >
-                  Save without drafting
-                </button>
-              </div>
-              {error ? <p className="error-text">{error}</p> : null}
-            </form>
+        <section className={selectedAgent && !wizardOpen ? "canvas canvas-workspace" : "canvas"}>
+          {wizardOpen || !selectedAgent ? (
+            <Wizard
+              projectId={project?.id ?? "project_default"}
+              onAgentCreated={(agentId) => {
+                setWizardOpen(false);
+                // reload agents and select the new one
+                if (project) {
+                  listAgentDesigns(project.id).then((updated) => {
+                    setAgents(updated);
+                    setSelectedId(agentId);
+                    setWorkspaceTab("proof");
+                  });
+                }
+              }}
+            />
           ) : null}
 
           {selectedAgent ? (
