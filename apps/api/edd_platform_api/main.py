@@ -139,6 +139,8 @@ from edd_platform_api.schemas import (
     AgentDesignCreated,
     OutcomeAgentCreate,
     OutcomeAgentCreated,
+    GuidedSetupRequest,
+    GuidedSetupPreview,
     ContextPackCreate,
     ContextPack,
     EvidenceSummaryCreate,
@@ -2225,6 +2227,36 @@ def _generate_rubric(outcome: str, output_focus: str, has_live_tools: bool = Fal
         return _FALLBACK_RUBRIC
 
 
+def _generate_test_input(outcome: str, intent: str) -> str:
+    """Generate a concrete test input sentence that exercises the agent's intent."""
+    _FALLBACK = outcome
+    try:
+        config = anthropic_config_from_env()
+        response = _anthropic_client(config).messages.create(
+            model=config.model,
+            max_tokens=100,
+            system=(
+                "You write realistic test inputs for AI agents. "
+                "Return ONLY one sentence a real user would type. No preamble. No quotes."
+            ),
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Agent purpose: {intent}\n"
+                    f"User goal: {outcome}\n"
+                    "Write one realistic user message that would trigger this agent:"
+                ),
+            }],
+        )
+        for block in response.content:
+            if hasattr(block, "text"):
+                text = block.text.strip().strip('"').strip("'")
+                return text if text else _FALLBACK
+        return _FALLBACK
+    except Exception:
+        return _FALLBACK
+
+
 def token_count(token_usage: Dict[str, object], key: str) -> int:
     value = token_usage.get(key, 0)
     return value if isinstance(value, int) else 0
@@ -3072,6 +3104,8 @@ def draft_agent_from_outcome(
     project_id: str,
     outcome: str,
     agent_name: Optional[str] = None,
+    rubric_override: Optional[str] = None,
+    test_input_override: Optional[str] = None,
 ) -> OutcomeAgentCreated:
     normalized = " ".join(outcome.strip().split())
 
@@ -3238,7 +3272,7 @@ def draft_agent_from_outcome(
 
     live_tool_keys = {"call_http_api", "browse_webpage", "open_meteo_weather"}
     has_live_tools = bool(set(allowed_tools) & live_tool_keys)
-    rubric = _generate_rubric(normalized, output_focus, has_live_tools=has_live_tools)
+    rubric = rubric_override.strip() if rubric_override and rubric_override.strip() else _generate_rubric(normalized, output_focus, has_live_tools=has_live_tools)
 
     created = create_agent_design(
         project_id,
@@ -3280,7 +3314,7 @@ def draft_agent_from_outcome(
         ScenarioCreate(
             agent_design_id=created.agent.id,
             name="Outcome request",
-            input=normalized,
+            input=test_input_override.strip() if test_input_override and test_input_override.strip() else normalized,
             setup_context="test_shape:single_turn\norigin:outcome_draft",
             status="active",
         ),
@@ -3346,7 +3380,44 @@ def create_agent_design_from_outcome(
     payload: OutcomeAgentCreate,
 ) -> OutcomeAgentCreated:
     get_project_or_404(project_id)
-    return draft_agent_from_outcome(project_id, payload.outcome, agent_name=payload.name)
+    return draft_agent_from_outcome(
+        project_id,
+        payload.outcome,
+        agent_name=payload.name,
+        rubric_override=payload.rubric,
+        test_input_override=payload.test_input,
+    )
+
+
+@app.post("/api/projects/{project_id}/guided/setup")
+def guided_setup_preview(
+    project_id: str,
+    payload: GuidedSetupRequest,
+) -> GuidedSetupPreview:
+    """Preview-only: generate agent name, test input, and rubric from a description.
+    No data is persisted. The client uses the result to populate the wizard Step 1
+    review screen, then calls from-outcome with overrides to commit."""
+    get_project_or_404(project_id)
+    normalized = " ".join(payload.description.strip().split())
+
+    all_project_tools = [
+        t for t in _tool_definitions.values()
+        if t.project_id == project_id and t.status == "approved"
+    ]
+    available_tool_names = [t.name for t in all_project_tools]
+
+    plan = _draft_agent_plan_from_llm(normalized, available_tool_names)
+
+    live_tool_keys = {"call_http_api", "browse_webpage", "open_meteo_weather"}
+    has_live_tools = bool(set(plan["allowed_tools"]) & live_tool_keys)
+    rubric = _generate_rubric(normalized, plan["output_focus"], has_live_tools=has_live_tools)
+    test_input = _generate_test_input(normalized, plan["intent"])
+
+    return GuidedSetupPreview(
+        agent_name=plan["name"],
+        test_input=test_input,
+        rubric=rubric,
+    )
 
 
 @app.get("/api/projects/{project_id}/agent-designs/{agent_id}")

@@ -928,6 +928,18 @@ class FixProposalGenerated(BaseModel):
 class OutcomeAgentCreate(BaseModel):
     outcome: str = Field(min_length=1)
     name: Optional[str] = None
+    rubric: Optional[str] = None
+    test_input: Optional[str] = None
+
+
+class GuidedSetupRequest(BaseModel):
+    description: str = Field(min_length=1)
+
+
+class GuidedSetupPreview(BaseModel):
+    agent_name: str
+    test_input: str
+    rubric: str
 
 
 class OutcomeAgentCreated(BaseModel):

@@ -3173,6 +3173,43 @@
         "title": "GateDefinitionCreate",
         "type": "object"
       },
+      "GuidedSetupPreview": {
+        "properties": {
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "rubric": {
+            "title": "Rubric",
+            "type": "string"
+          },
+          "test_input": {
+            "title": "Test Input",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_name",
+          "test_input",
+          "rubric"
+        ],
+        "title": "GuidedSetupPreview",
+        "type": "object"
+      },
+      "GuidedSetupRequest": {
+        "properties": {
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "GuidedSetupRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3803,6 +3840,28 @@
             "minLength": 1,
             "title": "Outcome",
             "type": "string"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "test_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Input"
           }
         },
         "required": [
@@ -8622,6 +8681,56 @@
           }
         },
         "summary": "Create Gate Decision"
+      }
+    },
+    "/api/projects/{project_id}/guided/setup": {
+      "post": {
+        "description": "Preview-only: generate agent name, test input, and rubric from a description.\nNo data is persisted. The client uses the result to populate the wizard Step 1\nreview screen, then calls from-outcome with overrides to commit.",
+        "operationId": "guided_setup_preview_api_projects__project_id__guided_setup_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuidedSetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidedSetupPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Guided Setup Preview"
       }
     },
     "/api/projects/{project_id}/judge-outputs": {
