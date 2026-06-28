@@ -3263,12 +3263,33 @@ dd {
 }
 
 .wizard-error {
-  background: color-mix(in srgb, var(--error, #ef4444) 12%, transparent);
-  border: 1px solid var(--error, #ef4444);
+  align-items: center;
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  border: 1px solid var(--error);
   border-radius: 6px;
-  padding: 10px 14px;
+  color: var(--error);
+  display: flex;
   font-size: 13px;
-  color: var(--error, #ef4444);
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+
+.wizard-retry-button {
+  background: transparent;
+  border: 1px solid var(--error);
+  border-radius: 4px;
+  color: var(--error);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  transition: background 150ms ease;
+}
+
+.wizard-retry-button:hover {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
 }
 
 .wizard-busy {

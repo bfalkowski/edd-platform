@@ -393,6 +393,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   const [state, setState] = useState<WizardState>(() => initialState(projectId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const retryRef = useRef<(() => void) | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -406,18 +407,26 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   async function go<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
     setBusy(true);
     setError(null);
+    retryRef.current = null;
     try {
       return await fn();
     } catch (err) {
-      setError(err instanceof Error ? err.message : label + " failed.");
+      setError(err instanceof Error ? err.message : `${label} failed.`);
       return null;
     } finally {
       setBusy(false);
     }
   }
 
+  // Call at the start of any top-level handler so the error block can retry it.
+  function withRetry(fn: () => void) {
+    retryRef.current = fn;
+    return fn();
+  }
+
   // Step 1 → 2: generate preview
   async function handleGenerate() {
+    withRetry(handleGenerate);
     if (!state.description.trim()) return;
     const preview = await go("Generate", () =>
       previewSetup(projectId, state.description),
@@ -428,6 +437,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
   // Step 2 → 3: commit agent with reviewed values
   async function handleConfirm() {
+    withRetry(handleConfirm);
     const edits = state.previewEdits;
     if (!edits) return;
     const agent = await go("Confirm", () =>
@@ -440,6 +450,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
   // Step 3: run baseline
   async function handleRun() {
+    withRetry(handleRun);
     const { agent } = state;
     if (!agent) return;
     const judgeMode = "live";
@@ -469,6 +480,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
 
   // Step 4 → 5: generate fix from failure description
   async function handleGenerateFix() {
+    withRetry(handleGenerateFix);
     const { agent, baselineEval, whatWentWrong, whatShouldHappen, currentVersionId, editedChecks } = state;
     if (!agent || !baselineEval) return;
 
@@ -501,8 +513,9 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     update({ step: "fix", fix, fixEdited: fix.proposed_instructions });
   }
 
-  // Step 5 → 6: apply fix and run v1
+  // Step 5 → 6: apply fix and run candidate
   async function handleApplyFix() {
+    withRetry(handleApplyFix);
     const { agent, fix, fixEdited, baselineRun, currentVersionId } = state;
     if (!agent || !fix || !baselineRun) return;
     const judgeMode = "live";
@@ -1075,7 +1088,23 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     <div className="wizard-shell" ref={topRef}>
       {showIndicator ? <StepIndicator step={state.step} /> : null}
 
-      {error ? <div className="wizard-error">{error}</div> : null}
+      {error ? (
+        <div className="wizard-error">
+          <span>{error}</span>
+          {retryRef.current ? (
+            <button
+              className="wizard-retry-button"
+              type="button"
+              onClick={() => {
+                setError(null);
+                retryRef.current?.();
+              }}
+            >
+              Try again
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {state.step === "describe" && renderDescribe()}
       {state.step === "review" && renderReview()}
