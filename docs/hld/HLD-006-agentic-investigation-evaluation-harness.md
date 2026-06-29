@@ -6,11 +6,11 @@ Draft
 
 ## Goal
 
-Extend EDD Platform with a flagship example vertical: an **Agentic Investigation Evaluation Harness**. The purpose is to demonstrate how EDD Platform evaluates a long-horizon AI agent that investigates cases, gathers evidence, uses tools, classifies risk, and recommends an action.
+Extend EDD Platform with a flagship example vertical: an **Agentic Investigation Evaluation Harness**. The purpose is to exercise how EDD Platform evaluates a long-horizon AI agent that investigates cases, gathers evidence, uses tools, classifies risk, and recommends an action.
 
-This vertical should make EDD Platform feel directly relevant to real-world agent evaluation problems: long-horizon behavior, tool use, investigation quality, coverage gaps, regression gates, human review, and policy-expert authoring.
+This vertical makes EDD Platform directly applicable to real-world agent evaluation problems: long-horizon behavior, tool use, investigation quality, coverage gaps, regression gates, human review, and policy-expert authoring.
 
-This is a **safe, synthetic, portfolio-friendly demo**. It does not include real abuse data, operational misuse instructions, real security incidents, or sensitive policy-enforcement data.
+All cases are **safe and synthetic**. No real abuse data, operational misuse instructions, real security incidents, or sensitive policy-enforcement data.
 
 ---
 
@@ -37,16 +37,16 @@ Case data / synthetic review item
         -> release gate
 ```
 
-**Central question this demo answers:**
+**Central question this vertical answers:**
 > How do we know an agentic investigation system catches what it should, avoids over-enforcement, gathers the right evidence, and stays reliable as prompts, tools, models, and cases change?
 
 ---
 
-## Demo Scenario
+## Example Vertical: Policy Investigation Agent
 
 A synthetic **Policy Investigation Agent** receives a case that may require review. It must inspect evidence, use approved tools, decide whether the case is benign, suspicious, violating, or ambiguous, and recommend a next action.
 
-**Safe, generic case categories:**
+**Synthetic case categories:**
 - account abuse
 - spam-like behavior
 - phishing-like behavior
@@ -76,7 +76,7 @@ the case is benign, suspicious, violating, or ambiguous, and recommend the next 
 
 ---
 
-## Tools for the Demo Agent
+## Tools
 
 Synthetic platform-owned tools with mock responses. Fit the existing tool governance model (`implementation_kind = mock`, `status = approved`).
 
@@ -143,7 +143,7 @@ expected_classification, expected_action, required_evidence, rubric_notes, known
 
 ## Coverage Analysis
 
-Core differentiator. Shows whether the eval suite covers the right areas and where measurement gaps exist.
+Shows whether the eval suite covers the right areas and where measurement gaps exist.
 
 **Example coverage report:**
 
@@ -225,7 +225,7 @@ Do not replace the spine — extend it.
 
 ## Implementation Phases
 
-### Phase 1 — Seeded investigation demo
+### Phase 1 — Seeded investigation example
 
 ```
 examples/agentic-investigation-evals/
@@ -235,7 +235,7 @@ examples/agentic-investigation-evals/
   seed_demo.py
 ```
 
-Seed script creates: agent design, baseline agent version, approved investigation tools, eval cases as scenarios, eval contracts/rubrics, gate definition, demo artifacts.
+Seed script creates: agent design, baseline agent version, approved investigation tools, eval cases as scenarios, eval contracts/rubrics, gate definition, example artifacts.
 
 ### Phase 2 — Run and evaluate investigation cases
 
@@ -257,15 +257,15 @@ New endpoint + UI panel. Simple deterministic implementation acceptable for firs
 
 Seed a gate that blocks promotion when the investigation agent regresses. Demonstrate: baseline vs candidate comparison, open critical failure packet blocks promotion, missing coverage blocks promotion, candidate improvement passes when evidence supports it.
 
-### Phase 5 — Reviewer-facing docs
+### Phase 5 — Docs
 
-Update README and `docs/HAPPY_PATH_WALKTHROUGH.md` with investigation demo section. Update `ARCHITECTURE.md` and `PRODUCT_SPINE.md` only where necessary.
+Update README and `docs/HAPPY_PATH_WALKTHROUGH.md` with investigation vertical section. Update `ARCHITECTURE.md` and `PRODUCT_SPINE.md` only where necessary.
 
 ---
 
 ## Acceptance Criteria
 
-A reviewer can:
+A user can:
 
 1. Start the local platform
 2. Run `seed_demo.py`
@@ -292,12 +292,3 @@ A reviewer can:
 - Auth / multi-tenancy
 - Large-scale distributed eval processing
 - Full RL training infrastructure
-
----
-
-## Portfolio Message
-
-> EDD Platform can evaluate complex agentic systems by combining realistic cases, human-defined rubrics, trajectory evidence, failure analysis, coverage reports, and release gates.
-
-A reviewer should walk away thinking:
-> This platform shows how to turn messy long-horizon agent behavior into measurable, repeatable, evidence-backed evaluation workflows.
