@@ -426,10 +426,10 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     }
   }
 
-  // Call at the start of any top-level handler so the error block can retry it.
+  // Register the current handler as the retry target — call this at the top
+  // of each handler. Does NOT invoke fn; the handler is already running.
   function withRetry(fn: () => void) {
     retryRef.current = fn;
-    return fn();
   }
 
   // Step 1 → 2: generate preview
