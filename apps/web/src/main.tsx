@@ -1909,7 +1909,11 @@ function App() {
         }
         return listAgentDesigns(activeProject.id).then((items) => {
           setAgents(items);
-          setSelectedId(items[0]?.id ?? null);
+          if (items.length === 0) {
+            setWizardOpen(true);
+          } else {
+            setSelectedId(items[0]?.id ?? null);
+          }
         });
       })
       .catch((err: Error) => setError(err.message))
