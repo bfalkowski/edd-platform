@@ -12,7 +12,7 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-import { Wizard } from "./Wizard";
+import { Wizard, WizardState, fetchAgentWizardState } from "./Wizard";
 
 type AgentDesign = {
   id: string;
@@ -1778,6 +1778,45 @@ async function hydrateEddFlow(projectId: string, agent: AgentDesign): Promise<Ed
   };
 }
 
+function wizardStateFromFlow(
+  projectId: string,
+  agentState: Awaited<ReturnType<typeof fetchAgentWizardState>>,
+  flow: EddFlowState,
+): Partial<WizardState> {
+  const { baselineRun, baselineEval, candidateRun, candidateEval, comparison,
+          failurePackets, fixProposal, baselineVersion, candidateVersion } = flow;
+
+  const base = { projectId, agent: agentState, currentVersionId: baselineVersion?.id ?? null };
+
+  if (comparison && candidateRun && candidateEval) {
+    return {
+      ...base, step: "compare",
+      baselineRun: baselineRun ?? null, baselineEval: baselineEval ?? null,
+      candidateRun, candidateEval, comparison,
+      currentVersionId: candidateVersion?.id ?? null,
+      iterationCount: 1,
+    };
+  }
+  if (fixProposal) {
+    const instructions = typeof fixProposal.proposed_changes[0]?.change === "string"
+      ? fixProposal.proposed_changes[0].change as string
+      : "";
+    return {
+      ...base, step: "fix",
+      baselineRun: baselineRun ?? null, baselineEval: baselineEval ?? null,
+      fix: { proposed_instructions: instructions, rationale: fixProposal.rationale ?? "" },
+      fixEdited: instructions,
+    };
+  }
+  if (baselineRun && baselineEval && (failurePackets?.length ?? 0) > 0) {
+    return { ...base, step: "failure", baselineRun, baselineEval };
+  }
+  if (baselineRun && baselineEval) {
+    return { ...base, step: "done", baselineRun, baselineEval };
+  }
+  return { ...base, step: "run" };
+}
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -1845,6 +1884,7 @@ function App() {
   const [rubricEditText, setRubricEditText] = useState("");
   const [isSavingRubric, setIsSavingRubric] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardResumeState, setWizardResumeState] = useState<Partial<WizardState> | undefined>(undefined);
   const [reviewCorpora, setReviewCorpora] = useState<ReviewCorpus[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [reviewAnnotations, setReviewAnnotations] = useState<ReviewAnnotation[]>([]);
@@ -3639,6 +3679,7 @@ function App() {
               setScratchPanelOpen(false);
               setActivity(null);
               setWorkspaceTab("proof");
+              setWizardResumeState(undefined);
               setWizardOpen(true);
             }}
           >
@@ -3704,10 +3745,6 @@ function App() {
                   type="button"
                   onClick={() => {
                     setSelectedId(agent.id);
-                    setWizardOpen(false);
-                    setGeneratedDesign((current) =>
-                      current?.agentId === agent.id ? current : null,
-                    );
                     setOpenAgentMenuId(null);
                     setReviewArtifact(null);
                     setReviewLinks([]);
@@ -3717,7 +3754,19 @@ function App() {
                     setScratchError(null);
                     setScratchArtifact(null);
                     setScratchTraceUrl(null);
-                    setWorkspaceTab("proof");
+                    if (project) {
+                      Promise.all([
+                        fetchAgentWizardState(project.id, agent.id),
+                        hydrateEddFlow(project.id, agent),
+                      ]).then(([agentState, flow]) => {
+                        setWizardResumeState(wizardStateFromFlow(project.id, agentState, flow));
+                        setWizardOpen(true);
+                      }).catch(() => {
+                        // agent has no baseline version yet — open wizard at run step
+                        setWizardResumeState({ step: "run", projectId: project.id });
+                        setWizardOpen(true);
+                      });
+                    }
                   }}
                 >
                   <span>{agent.name}</span>
@@ -3791,6 +3840,7 @@ function App() {
           {wizardOpen || !selectedAgent ? (
             <Wizard
               projectId={project?.id ?? "project_default"}
+              resumeState={wizardResumeState}
               onAgentCreated={(agentId) => {
                 // refresh sidebar without closing wizard — wizard continues
                 if (project) {

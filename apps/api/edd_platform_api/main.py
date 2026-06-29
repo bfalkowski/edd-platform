@@ -3448,6 +3448,44 @@ def get_agent_design(project_id: str, agent_id: str) -> AgentDesign:
     return get_agent_design_or_404(project_id, agent_id)
 
 
+@app.get("/api/projects/{project_id}/agent-designs/{agent_id}/wizard-state")
+def get_agent_wizard_state(project_id: str, agent_id: str) -> OutcomeAgentCreated:
+    """Return the agent in OutcomeAgentCreated shape so the wizard can resume."""
+    get_project_or_404(project_id)
+    agent = get_agent_design_or_404(project_id, agent_id)
+
+    versions = sorted(
+        [v for v in _agent_versions.values() if v.agent_design_id == agent_id],
+        key=lambda v: v.created_at,
+    )
+    version = next((v for v in versions if v.status == "baseline"), None) or (versions[0] if versions else None)
+
+    contracts = sorted(
+        [c for c in _eval_contracts.values() if c.agent_design_id == agent_id],
+        key=lambda c: c.created_at,
+    )
+    contract = contracts[0] if contracts else None
+
+    scenario = _scenarios.get(contract.scenario_id) if contract and contract.scenario_id else None
+
+    if not version or not contract or not scenario:
+        raise HTTPException(status_code=404, detail="Agent has no baseline version, scenario, or eval contract yet.")
+
+    artifact = next(
+        (a for a in _artifacts.values() if a.artifact_type == "agent_design" and a.project_id == project_id),
+        ArtifactRecord(id="", project_id=project_id, artifact_type="agent_design", content={}, created_at=agent.created_at),
+    )
+
+    return OutcomeAgentCreated(
+        agent=agent,
+        artifact=artifact,
+        version=version,
+        scenario=scenario,
+        eval_contract=contract,
+        draft_tools=[],
+    )
+
+
 @app.patch("/api/projects/{project_id}/agent-designs/{agent_id}")
 def update_agent_design(
     project_id: str,

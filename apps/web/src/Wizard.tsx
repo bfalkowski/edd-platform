@@ -11,7 +11,7 @@ const apiBase = "/api";
 // Types
 // ---------------------------------------------------------------------------
 
-type WizardStep = "describe" | "review" | "run" | "failure" | "fix" | "compare" | "done";
+export type WizardStep = "describe" | "review" | "run" | "failure" | "fix" | "compare" | "done";
 
 type GuidedSetupPreview = {
   agent_name: string;
@@ -48,7 +48,7 @@ type FailurePacket = { id: string };
 
 type Comparison = { id: string; summary: string };
 
-type WizardState = {
+export type WizardState = {
   step: WizardStep;
   projectId: string;
 
@@ -146,6 +146,10 @@ async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${apiBase}${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
+}
+
+export async function fetchAgentWizardState(projectId: string, agentId: string): Promise<OutcomeAgentResponse> {
+  return apiGet(`/projects/${projectId}/agent-designs/${agentId}/wizard-state`);
 }
 
 async function previewSetup(projectId: string, description: string): Promise<GuidedSetupPreview> {
@@ -395,10 +399,14 @@ type Props = {
   projectId: string;
   onAgentCreated: (agentId: string) => void;
   onDone: (agentId: string) => void;
+  resumeState?: Partial<WizardState>;
 };
 
-export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
-  const [state, setState] = useState<WizardState>(() => initialState(projectId));
+export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props) {
+  const [state, setState] = useState<WizardState>(() => ({
+    ...initialState(projectId),
+    ...resumeState,
+  }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const retryRef = useRef<(() => void) | null>(null);
@@ -415,7 +423,6 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
   async function go<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
     setBusy(true);
     setError(null);
-    retryRef.current = null;
     try {
       return await fn();
     } catch (err) {
