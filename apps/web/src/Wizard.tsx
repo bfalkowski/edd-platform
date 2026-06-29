@@ -625,7 +625,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     return (
       <div className="wizard-body">
         <p className="wizard-eyebrow">Step 1 of 5 — Review the generated setup</p>
-        <h2 className="wizard-heading">Does this look right?</h2>
+        <h2 className="wizard-heading">Review the generated setup</h2>
         <p className="wizard-hint">Edit any field before confirming.</p>
 
         <label className="wizard-label">
