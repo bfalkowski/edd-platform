@@ -3571,3 +3571,19 @@ dd {
 .wizard-iteration-context .wizard-hint {
   margin: 0;
 }
+
+.wizard-model-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.wizard-model-row select {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 7px 10px;
+}

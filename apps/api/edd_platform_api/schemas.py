@@ -320,6 +320,7 @@ class RunCreate(BaseModel):
     scenario_id: str = Field(min_length=1)
     eval_contract_id: Optional[str] = None
     mode: Literal["mock", "live"] = "mock"
+    model: Optional[str] = None
 
 
 class RunRecord(BaseModel):

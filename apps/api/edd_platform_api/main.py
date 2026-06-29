@@ -2356,6 +2356,7 @@ def run_agent_with_runner(
     scenario_input: str,
     mode: Literal["mock", "live"],
     prompt_refs: Optional[List[ExternalArtifactRef]] = None,
+    model_override: Optional[str] = None,
 ) -> tuple[object, ArtifactRecord, List[ArtifactRecord]]:
     runner_agent = RunnerAgentDesign(
         id=agent.id,
@@ -2366,10 +2367,13 @@ def run_agent_with_runner(
     runner_scenario = RunnerScenario(input=scenario_input.strip())
     if mode == "live":
         try:
+            config = anthropic_config_from_env()
+            if model_override:
+                config = config.__class__(**{**config.__dict__, "model": model_override})
             runner_result = run_anthropic_agent(
                 runner_agent,
                 runner_scenario,
-                anthropic_config_from_env(),
+                config,
                 approved_tools_for_agent(project_id, agent),
             )
         except RuntimeError as exc:
@@ -4082,6 +4086,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         scenario_input=scenario.input,
         mode=payload.mode,
         prompt_refs=prompt_refs,
+        model_override=payload.model or None,
     )
     run = RunRecord(
         id=runner_result.id,

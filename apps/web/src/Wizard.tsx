@@ -59,6 +59,9 @@ type WizardState = {
   preview: GuidedSetupPreview | null;
   previewEdits: GuidedSetupPreview | null; // user-edited version
 
+  // model override (set in review step, used for all runs)
+  model: string;
+
   // step 3 — confirmed agent
   agent: OutcomeAgentResponse | null;
   // step 4 — baseline run + eval
@@ -95,6 +98,7 @@ function initialState(projectId: string): WizardState {
     description: "",
     preview: null,
     previewEdits: null,
+    model: "claude-haiku-4-5-20251001",
     agent: null,
     baselineRun: null,
     baselineEval: null,
@@ -165,6 +169,7 @@ async function runAgent(
   projectId: string,
   agent: OutcomeAgentResponse,
   mode: "mock" | "live",
+  model?: string,
 ): Promise<RunRecord> {
   return apiPost(
     `/projects/${projectId}/runs`,
@@ -174,6 +179,7 @@ async function runAgent(
       scenario_id: agent.scenario.id,
       eval_contract_id: agent.eval_contract.id,
       mode,
+      model: model || undefined,
     },
     180000,
   );
@@ -253,6 +259,7 @@ async function runCandidateVersion(
   agent: OutcomeAgentResponse,
   candidateVersionId: string,
   mode: "mock" | "live",
+  model?: string,
 ): Promise<RunRecord> {
   return apiPost(
     `/projects/${projectId}/runs`,
@@ -262,6 +269,7 @@ async function runCandidateVersion(
       scenario_id: agent.scenario.id,
       eval_contract_id: agent.eval_contract.id,
       mode,
+      model: model || undefined,
     },
     180000,
   );
@@ -454,7 +462,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     const { agent } = state;
     if (!agent) return;
     const judgeMode = "live";
-    const baselineRun = await go("Run", () => runAgent(projectId, agent, "live"));
+    const baselineRun = await go("Run", () => runAgent(projectId, agent, "live", state.model));
     if (!baselineRun) return;
     const baselineEval = await go("Evaluate", () =>
       evaluateRun(projectId, baselineRun.id, agent.eval_contract.id, judgeMode),
@@ -551,7 +559,7 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
     if (!candidateVersion) return;
 
     const candidateRun = await go("Run v1", () =>
-      runCandidateVersion(projectId, agent, candidateVersion.id, "live"),
+      runCandidateVersion(projectId, agent, candidateVersion.id, "live", state.model),
     );
     if (!candidateRun) return;
 
@@ -643,6 +651,22 @@ export function Wizard({ projectId, onAgentCreated, onDone }: Props) {
             onChange={(e) => update({ previewEdits: { ...edits, rubric: e.target.value } })}
           />
         </label>
+
+        <div className="wizard-model-row">
+          <label className="wizard-label" style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <span style={{ whiteSpace: "nowrap" }}>Model</span>
+            <select
+              className="wizard-input"
+              style={{ width: "auto" }}
+              value={state.model}
+              onChange={(e) => update({ model: e.target.value })}
+            >
+              <option value="claude-haiku-4-5-20251001">Haiku (fast, cheap)</option>
+              <option value="claude-sonnet-4-6">Sonnet (balanced)</option>
+              <option value="claude-opus-4-8">Opus (most capable)</option>
+            </select>
+          </label>
+        </div>
 
         <div className="wizard-actions">
           <button
