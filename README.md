@@ -1,79 +1,96 @@
 # EDD Platform
 
-EDD Platform is a product workspace for designing, running, evaluating, fixing,
-comparing, and promoting AI agents with durable evidence.
+EDD Platform is a product workspace for designing, running, evaluating, and
+improving AI agents with durable evidence.
 
-The platform is not a generic chat UI and not a trace browser. It is an evidence
-system for improving agent behavior. Users define explicit scenarios and eval
-contracts, run agent versions against them, inspect failures, propose bounded
-fixes, compare candidates, and make promotion decisions from linked artifacts.
-
-The platform starts from a simple belief: reliable AI products improve when
-teams study real behavior, name recurring failure modes, measure those failures,
-and make design changes from evidence instead of vibes.
+The platform is not a generic chat UI and not a trace browser. It is an
+evidence system for improving agent behavior. Teams define explicit test cases
+and eval contracts, run agent versions against them, review traces for failure
+patterns, name recurring failure modes, and make promotion decisions from linked
+artifacts — not from intuition.
 
 EDD Platform turns agent traces into failure modes, failure modes into evals,
 evals into bounded fixes, and fixes into evidence-backed promotion decisions.
 
-![EDD Platform showing the seeded Sentiment Observer agent](./docs/assets/sentiment-observer-agent.png)
+## The workspace
 
-## Demo Flow
+Each agent gets five tabs: **Agent**, **Proof loop**, **Error analysis**,
+**Evidence**, and **Readiness**.
 
-The seeded Sentiment Observer demo shows more than an agent designer. It walks
-through the EDD loop: select a conversation test, run the current agent version,
-judge the output, and keep every decision tied to durable evidence.
+### Agent tab
 
-![EDD Platform Proof loop showing a Sentiment Observer conversation test](./docs/assets/sentiment-observer-proof-loop.png)
+Define the agent's name, core instruction, and enabled tools. The warm card
+layout keeps the design surface clean against the sidebar.
 
-The Evidence tab collects the proof artifacts for the selected agent: trace
-refs, success criteria, agent versions, and agent designs. This keeps the
-platform decision visible even when the raw trace lives in Langfuse.
+![EDD Platform Agent tab showing the Sentiment Observer agent design](./docs/assets/sentiment-observer-agent.png)
 
-![EDD Platform Evidence tab showing linked proof artifacts for Sentiment Observer](./docs/assets/sentiment-observer-evidence.png)
+### Proof loop tab
 
-The live demo also links platform evidence to Langfuse observability. Agent
-runs, tool spans, and live judge calls appear on the same trace so a reviewer
-can see both the product decision and the model evidence behind it.
+Select a saved test, run the agent live against Anthropic, evaluate the output,
+and iterate. The proof loop shows the selected test (scenario input, judge
+method, latest result) and a next-action card that guides the evaluator toward
+the right step — run, fix, compare, or done.
 
-![Langfuse trace showing the live judge generation for a Sentiment Observer eval](./docs/assets/langfuse-live-judge-trace.png)
+![EDD Platform Proof loop showing a passed Sentiment Observer test](./docs/assets/sentiment-observer-proof-loop.png)
+
+### Error analysis tab — 4-step wizard
+
+Error analysis is a guided 4-step wizard for turning raw traces into a named
+failure mode taxonomy:
+
+1. **Build review set** — pull in live runs as a corpus of traces to review.
+   A data table shows each item with its source, status, and note count.
+2. **Review & code** — open each trace in Langfuse, add comments there, then
+   sync those comments back into the platform with one click. Synced comments
+   appear inline per trace with an "Assign failure mode" dropdown.
+3. **Confirm modes** — promote recurring annotations to named failure modes.
+4. **Done** — the taxonomy is ready to inform test cases and fix proposals in
+   the Proof loop.
+
+![EDD Platform Error analysis step 1 — build review set table](./docs/assets/error-analysis-build-corpus.png)
+
+![EDD Platform Error analysis step 2 — synced Langfuse comments with failure mode assignment](./docs/assets/error-analysis-review-code.png)
+
+### Langfuse as the review surface
+
+Reviewers annotate traces directly in Langfuse — not in a shallow copy inside
+the platform. The platform's job is to aggregate those comments, deduplicate
+them, and let evaluators assign failure modes.
+
+![Langfuse trace with live judge span and tool calls for Sentiment Observer](./docs/assets/langfuse-live-judge-trace.png)
+
+The "Sync Langfuse comments" button in step 2 pulls all trace comments into
+`ReviewAnnotation` records. Each comment is stored once (deduped by
+`langfuse_comment_id`) and linked back to the trace via "Open trace ↗".
 
 ## Evaluation-Driven Design Loop
-
-EDD Platform operationalizes an evidence loop for improving AI agents:
 
 ```text
 Observe -> Analyze -> Measure -> Improve -> Compare -> Gate
 ```
 
-Observe: produce or import traces from agent runs, local runners, Langfuse, or
-other observability systems.
+**Observe** — produce or import traces from live agent runs linked to Langfuse.
 
-Analyze: inspect representative runs and traces to understand how the agent
-fails. Human review notes, failure packets, and emerging failure modes capture
-the first evidence of what needs to improve.
+**Analyze** — review traces in Langfuse, add comments, sync them into the
+platform, and name recurring failure modes through the Error analysis wizard.
 
-Measure: turn recurring failure modes into eval contracts, deterministic
-checks, rubric dimensions, or LLM-as-judge prompts. The goal is to quantify
-failure rates, severity, and regression risk.
+**Measure** — turn failure modes into eval contracts: deterministic checks,
+rubric dimensions, or LLM-as-judge prompts. The Proof loop runs these against
+live Anthropic and stores `RUN_RESULT`, `EVAL_RESULT`, and `JUDGE_OUTPUT`
+evidence.
 
-Improve: propose bounded prompt, tool, retrieval, or workflow changes linked to
-specific failures.
+**Improve** — propose bounded prompt, tool, or workflow changes linked to
+specific failure packets.
 
-Compare: rerun baseline and candidate versions against the same scenarios and
-eval contracts, then compare scores, fixed failures, remaining failures, and
-new regressions.
+**Compare** — rerun baseline and candidate versions against the same scenarios
+and compare scores, fixed failures, and new regressions.
 
-Gate: promote only when the evidence supports the decision.
-
-In short: traces reveal failure modes; failure modes become evals; evals drive
-fixes; fixes are promoted only when comparison and gate evidence support them.
+**Gate** — promote only when the evidence supports the decision.
 
 ## Product Thesis
 
-Most AI eval tooling starts with scores. EDD starts one step earlier. Before a
+Most AI eval tooling starts with scores. EDD starts one step earlier: before a
 team can know what to measure, it needs to understand how the agent fails.
-EDD Platform helps teams move from qualitative evidence to quantitative
-evaluation:
 
 ```text
 review traces
@@ -102,79 +119,75 @@ Project
   -> FixProposal
   -> Comparison
   -> GateDecision
+  -> ReviewCorpus -> ReviewItem -> ReviewAnnotation -> FailureMode
   -> EvidenceContext
 ```
 
 The canonical product language is in
 [`docs/PRODUCT_SPINE.md`](docs/PRODUCT_SPINE.md).
 
-Public-facing documentation should be published from
-[bfalkowski/edd-platform-docs](https://github.com/bfalkowski/edd-platform-docs).
-The initial migration checklist is tracked in
-[`docs/PUBLIC_DOCS_REPO.md`](docs/PUBLIC_DOCS_REPO.md).
-
 ## Repository Shape
 
 ```text
 apps/web
-  React product console
+  React product console (main.tsx, Wizard.tsx, styles.css)
 
 apps/api
-  FastAPI platform API for state, evidence, judges, gates, and promotion
+  FastAPI platform API — state, evidence, judges, gates, promotion,
+  Langfuse comment sync
 
 packages/runner
-  Deterministic and live runner layer for agent execution
+  Live runner layer for agent execution against Anthropic
 
 packages/domain
   Shared product language and domain package scaffold
 
 packages/langfuse-adapter
-  Optional Langfuse trace reference helpers
+  Langfuse trace reference helpers
 ```
 
 ## What Works Now
 
-The current app supports the full eval-driven proof loop:
+**Agent design**
+- Create and edit agent designs with name, core instruction, and enabled tools.
+- Platform-owned tool definitions with approval status and agent allowlists.
 
-1. Create an agent design.
-2. Define a test case backed by a scenario and eval contract.
-3. Run a baseline version against live Anthropic.
-4. Evaluate the run with deterministic checks or an optional live judge.
-5. Store `RUN_RESULT`, `EVAL_RESULT`, and `JUDGE_OUTPUT` evidence.
-6. Create failure packets when checks fail.
-7. Add review notes that open-code failure modes before proposing fixes.
-8. Propose bounded fixes linked to failures.
-9. Create candidate agent versions.
-10. Run and evaluate candidates against the same contract.
-11. Compare baseline and candidate evidence.
-12. Create gate definitions and gate decisions.
-13. Assemble evidence context packs for the proof loop.
+**Proof loop**
+- Define test cases backed by scenarios and eval contracts.
+- Run agent versions live against Anthropic (all runs are live — no mock mode).
+- Evaluate with deterministic checks (tool use, exact text, forbidden behavior)
+  or a live rubric judge.
+- Store `RUN_RESULT`, `EVAL_RESULT`, and `JUDGE_OUTPUT` evidence per run.
+- Wizard guides: Describe → Review → Run → Name failure → Fix → Compare → Done.
+- Eval check labels are human-readable (e.g. "Rubric judge", not
+  `requires_output_1`).
+- "Output looks fine — approve anyway" button skips the fix flow on close calls.
 
-The platform also supports:
+**Error analysis**
+- 4-step wizard: Build review set → Review & code → Confirm modes → Done.
+- Review set filters to live runs only (TRACE_REF, RUN_RESULT, EVAL_RESULT,
+  JUDGE_OUTPUT artifact types; no `:mock` sources).
+- Langfuse comment sync: `POST .../sync-langfuse-comments` pulls trace comments
+  into `ReviewAnnotation` records, deduped by `langfuse_comment_id`.
+- Inline failure mode assignment per synced comment in step 2.
+- Dismissible intro card explains the wizard purpose (persisted via
+  localStorage).
 
-- project-scoped persistence through Postgres;
-- platform-owned tool definitions, approval status, and agent allowlists;
-- built-in and mock tool execution through the runner;
-- first-class tool call and tool result evidence;
-- single-turn, conversation, and trace-replay test case shapes;
-- optional OpenAI live agent runs and live judge calls;
-- optional evidence summaries through the API;
-- optional Langfuse trace refs, generation observations, scenario dataset refs,
-  and eval score refs;
-- optional Langfuse comment mirroring for review notes on linked traces or
-  prompts;
-- deterministic seeded demo data for public and local walkthroughs,
-  including a ready-to-run Sentiment Observer agent with its monitoring tools
-  enabled.
+**Evidence**
+- Evidence tab collects all proof artifacts: trace refs, success criteria,
+  agent versions, run outputs, eval results.
+- Trace references include "Open trace" links into Langfuse when a URL exists.
 
-Langfuse remains observability and experiment infrastructure. Platform artifacts
-remain the source of truth.
+**Langfuse integration**
+- Live runs create linked `TRACE_REF` artifacts with Langfuse URLs.
+- Judge calls appear as generation observations inside the agent run span.
+- Comment sync: Langfuse comments on traces flow back into the platform as
+  ReviewAnnotations.
+- Optional: dataset sync, score sync, comment mirror (opt-in via env flags).
 
-The current proof loop is strongest in the Measure -> Improve -> Compare ->
-Gate portion of the workflow. The planned error-analysis workflow strengthens
-the front of the loop by making human trace review, open-coded notes,
-failure-mode taxonomy, and failure-mode regression first-class platform
-concepts.
+**Persistence**
+- Project-scoped state through Postgres.
+- Seeded demo data for local walkthroughs (Sentiment Observer, Customer Triage).
 
 ## Local Development
 
@@ -192,31 +205,20 @@ docker compose up -d postgres
 ./scripts/dev.sh
 ```
 
-The API runs on:
+The API runs on `http://127.0.0.1:8001`. The React console runs on Vite's
+reported local URL, usually `http://localhost:5173`.
 
-```text
-http://127.0.0.1:8001
-```
-
-The React console runs on Vite's reported local URL, usually:
-
-```text
-http://localhost:5173
-```
-
-By default, the API connects to:
+Default database:
 
 ```text
 postgresql://edd_platform:edd_platform@127.0.0.1:15432/edd_platform
 ```
 
-Set `EDD_PLATFORM_DATABASE_URL` to use a different Postgres database. Tests use
-memory storage, so CI and local verification do not require a database service.
+Set `EDD_PLATFORM_DATABASE_URL` to use a different Postgres database.
 
-## Live Mode
+## Live Anthropic Runs
 
-Live agent runs and live judge calls are opt-in. Put secrets in `.env.local` or
-`.env`, not in committed files:
+All agent runs use live Anthropic. Put your API key in `.env.local`:
 
 ```bash
 cp .env.example .env.local
@@ -225,8 +227,7 @@ cp .env.example .env.local
 Set:
 
 ```text
-OPENAI_API_KEY=...
-EDD_OPENAI_MODEL=gpt-5-nano
+ANTHROPIC_API_KEY=...
 ```
 
 Then start:
@@ -235,42 +236,18 @@ Then start:
 ./scripts/dev.sh
 ```
 
+The default model is Claude Haiku. Override with `EDD_ANTHROPIC_MODEL`.
+
 ## Langfuse
 
-Local Langfuse is optional. If it is already running on
-`http://localhost:3001`, `./scripts/dev.sh` uses the seeded local keys.
-
-### Langfuse Boundary
-
-Langfuse is treated as observability and experiment infrastructure. It can
-provide traces, spans, datasets, scores, and deep links into raw execution
-detail.
-
-EDD Platform owns the evaluation-driven workflow:
-
-```text
-trace evidence
-  -> failure packets
-  -> failure modes
-  -> eval contracts
-  -> fix proposals
-  -> comparisons
-  -> gate decisions
-  -> evidence context
-```
-
-The normal workflow should keep users in the EDD Platform UI. Langfuse is a
-source of evidence and a deep-link target when raw trace detail is needed, not
-the primary workspace for error analysis, fix proposals, comparisons, or
-promotion decisions.
-
-To start Langfuse and the app together:
+Local Langfuse is optional but recommended for the full error analysis workflow.
+Start Langfuse and the app together:
 
 ```bash
 ./scripts/dev_langfuse.sh
 ```
 
-Langfuse runs at `http://localhost:3001` with seeded local credentials:
+Langfuse runs at `http://localhost:3001`:
 
 ```text
 admin@local.dev / local-demo-password
@@ -278,23 +255,30 @@ LANGFUSE_PUBLIC_KEY=pk-lf-local-demo
 LANGFUSE_SECRET_KEY=sk-lf-local-demo
 ```
 
+### Langfuse Boundary
+
+Langfuse is the review surface for traces. EDD Platform is the workflow layer:
+
+```text
+Langfuse trace comments
+  -> ReviewAnnotations (synced by platform)
+  -> FailureModes (named by evaluator)
+  -> EvalContracts (encoded from modes)
+  -> FixProposals (linked to failure packets)
+  -> GateDecisions (backed by comparison evidence)
+```
+
+Langfuse is a source of evidence and a deep-link target. It is not the primary
+workspace for failure mode taxonomy, fix proposals, comparisons, or promotion.
+
 When Langfuse credentials are configured:
 
-- live project runs can create linked `TRACE_REF` artifacts;
-- scenario creation keeps planned dataset refs by default;
-- `EDD_PLATFORM_LANGFUSE_DATASET_SYNC=live` creates Langfuse datasets and
-  dataset items for scenarios;
-- `EDD_PLATFORM_LANGFUSE_SCORE_SYNC=live` writes eval pass-rate scores for
-  live run evaluations and stores score refs on eval and judge artifacts.
+- live runs create linked `TRACE_REF` artifacts with trace URLs;
+- `EDD_PLATFORM_LANGFUSE_DATASET_SYNC=live` creates Langfuse datasets for
+  scenarios;
+- `EDD_PLATFORM_LANGFUSE_SCORE_SYNC=live` writes eval pass-rate scores;
 - `EDD_PLATFORM_LANGFUSE_COMMENT_SYNC=live` mirrors platform review notes to
-  Langfuse comments on linked traces or prompts.
-
-Langfuse dataset, score, and comment writes are explicit opt-in paths.
-Deterministic local and CI behavior do not require Langfuse credentials.
-
-Langfuse comments are lightweight trace or prompt notes. Annotation queues are
-separate structured human-evaluation workflows and are not part of the default
-comment sync path.
+  Langfuse comments.
 
 ## Verification
 
@@ -304,69 +288,43 @@ Run all local checks:
 ./scripts/test.sh
 ```
 
-This runs:
+This runs: secret scan, API tests, Langfuse adapter tests, OpenAPI contract
+lint, and React build.
 
-- secret scan;
-- API tests;
-- Langfuse adapter tests;
-- OpenAPI contract lint;
-- React build.
-
-Seed deterministic demo data after the app is running:
-
-```bash
-python scripts/seed_customer_triage_demo.py
-```
-
-Seed the Sentiment Observer conversation-monitoring example:
+Seed demo data after the app is running:
 
 ```bash
 python scripts/seed_sentiment_observer_demo.py
+python scripts/seed_customer_triage_demo.py
 ```
 
-See `examples/customer-triage` and `examples/sentiment-observer` for the demo
-walkthroughs.
-
-Run the live OpenAI plus local Langfuse smoke script after
-`./scripts/dev_langfuse.sh` is running. If you use `.env.local`, load it into
-your shell first:
+Run the live Anthropic + Langfuse smoke test:
 
 ```bash
 set -a; source .env.local; set +a
 python scripts/live_langfuse_e2e.py
 ```
 
-The script prints the platform run id, eval result id, score, Langfuse trace id,
-and Langfuse trace URL.
-For raw OpenAI Responses calls, the linked Langfuse trace should include an
-`openai.responses` generation observation under the agent run observation.
-
 ## Canonical Docs
 
-- [`docs/HAPPY_PATH_WALKTHROUGH.md`](docs/HAPPY_PATH_WALKTHROUGH.md) is the
-  manual proof-loop smoke script.
-- [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) explains the generated OpenAPI
-  contract and contract-first rules.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) contains architecture diagrams.
-- [`docs/WORK_PLAN.md`](docs/WORK_PLAN.md) tracks active implementation
-  milestones.
-- [`docs/HLD_COVERAGE_MATRIX.md`](docs/HLD_COVERAGE_MATRIX.md) tracks HLD
-  coverage and gaps.
-- [`docs/hld/`](docs/hld) contains high-level design docs.
-- [`docs/design/FRONTEND_GUIDE.md`](docs/design/FRONTEND_GUIDE.md) defines
-  frontend conventions.
+- [`docs/HAPPY_PATH_WALKTHROUGH.md`](docs/HAPPY_PATH_WALKTHROUGH.md) — manual
+  proof-loop smoke script
+- [`docs/design/FRONTEND_GUIDE.md`](docs/design/FRONTEND_GUIDE.md) — UI
+  patterns, color tokens, wizard rules, Langfuse boundary
+- [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — generated OpenAPI contract
+  and contract-first rules
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture diagrams
+- [`docs/PRODUCT_SPINE.md`](docs/PRODUCT_SPINE.md) — canonical product language
+- [`docs/hld/`](docs/hld) — high-level design docs
 - [`docs/engineering/AI_AGENT_DEVELOPMENT.md`](docs/engineering/AI_AGENT_DEVELOPMENT.md)
-  defines AI-assisted development guardrails.
+  — AI-assisted development guardrails
 
 ## Current Limits
 
-- Tool definitions exist, but adapters for `http`, `mcp`, and `python`
-  implementation kinds are still planned.
-- Evidence summaries are available through the API, but UI display is still
-  planned.
-- Error analysis is currently represented through failure packets, review
-  notes, evidence artifacts, and an Error analysis tab placeholder. A dedicated
-  trace review queue, open-coded human notes, failure-mode taxonomy, and
-  failure-mode regression views are planned.
-- Langfuse trace references, dataset refs, score refs, and comment refs exist
-  as integration points. Production-grade trace import is still planned.
+- Tool adapters for `http`, `mcp`, and `python` implementation kinds are
+  planned but not yet wired.
+- Evidence summaries are available through the API; UI display is planned.
+- Multiple test cases per agent (regression across N scenarios) is planned.
+- Score delta / trend across iterations (beyond pass/fail) is planned.
+- `main.tsx` and `main.py` are large single files; component and router
+  extraction is planned.
