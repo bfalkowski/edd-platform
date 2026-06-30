@@ -4,245 +4,207 @@ This guide defines the visual and interaction direction for EDD Platform.
 
 The UI should feel like a focused developer/research workspace: quiet, legible,
 fast to scan, and built around evidence. It should not feel like a marketing
-site, a generic dashboard template, or a wizard that hides the system model.
+site, a generic dashboard template, or a passive log viewer.
 
 ## Product Principles
 
 - The React console is the only product UI.
-- The UI should make the EDD workflow understandable through artifacts,
-  context packs, runs, gates, and evidence.
-- The interface should be simple enough to demo in minutes and deep enough to
-  support real evaluation work.
+- The interface should make the EDD workflow understandable at a glance and
+  executable step by step.
 - Evidence should be visible and inspectable. Do not bury core value in logs or
   backend-only behavior.
-- Avoid old product language such as Lab UI, draft, Streamlit, and publish
-  unless discussing history.
+- Avoid old product language such as Lab UI, draft, Streamlit, or publish unless
+  discussing history.
+- Mock runs are removed. All runs are live (Live Anthropic). Do not add a
+  mock/live toggle.
 
 ## Layout
 
-The default product layout is:
-
 ```text
-left rail     main workspace               right review panel
-navigation    selected workflow/evidence    artifact detail/edit
+left sidebar      main workspace (tabs)
+dark warm rail    agent · proof loop · error analysis · evidence · readiness
 ```
 
-### Left Rail
+### Left Sidebar
 
-Use the left rail for:
-
-- product/project identity
-- new agent action
-- search
-- runs
-- agent list
-- future evidence/project sections
-
-Rules:
-
-- The rail must be collapsible.
-- The collapse control must stay inside the rail in both open and collapsed
-  states.
-- Collapsed mode should keep a narrow icon rail visible, not hide navigation
-  completely.
-- The product/project name appears at the top when expanded.
-- The product mark remains visible when collapsed.
-- Agent rows should be quiet list items, not heavy cards.
-- Row actions should use an ellipsis menu when there are multiple actions.
+- Dark warm background (`--bg-sidebar: #1c1917`), warm text (`--text-sidebar`).
+- Contains: product wordmark, new agent button, agent list, service status dots.
+- Agent rows are quiet list items. Clicking a complete agent opens the workspace
+  tabs. Clicking a mid-flow agent re-enters the wizard at the correct step.
+- Service status dots (Langfuse, Anthropic) live at the bottom of the rail.
 
 ### Main Workspace
 
-Use the main workspace for the current task:
+The main workspace uses five tabs per agent:
 
-- creating an agent design
-- reviewing evidence context
-- running or evaluating a version
-- comparing versions
-- inspecting gates and failures
+| Tab | Purpose |
+|---|---|
+| Agent | View and edit agent name and core instruction |
+| Proof loop | Run the agent against a test, evaluate, iterate |
+| Error analysis | Guided wizard: build review set → sync Langfuse comments → assign failure modes |
+| Evidence | Inspect all evidence artifacts for this agent |
+| Readiness | Gate decisions and promotion status |
 
 Rules:
 
-- Avoid duplicate headings. If the top bar names the selected agent, do not
-  repeat the same title in a large card below.
-- Avoid passive breadcrumb/status blocks that cannot be clicked.
-- Avoid placeholder companion panels. If a panel has no real object, evidence,
-  or action yet, do not render it.
+- Each tab is a self-contained view. Do not bleed state or navigation across tabs.
+- Avoid duplicate headings. If the sidebar names the selected agent, do not
+  repeat the full title in a large card below.
 - Show the current object and available action clearly.
-- Prefer artifact/evidence sections over wizard progress strips.
-- Do not show all future workflow steps at once unless they are useful and
-  actionable.
+- Do not add explanatory copy beside controls when the control label is
+  already clear.
 
-### Right Review Panel
+## Wizard Pattern
 
-Use a right-side panel for artifact review, structured editing, and evidence
-detail.
+Two wizards exist in the product:
 
-Rules:
+**Agent creation wizard** (`Wizard.tsx`) — triggered by "New agent". Steps:
+`Describe → Review → Run → Name the failure → Fix → Compare → Done`
 
-- The panel should dock to the right edge. It should not float awkwardly over
-  unrelated content.
-- The panel toggle belongs near the review context, and the close control
-  belongs inside the panel.
-- Header copy should be concise: artifact title first, minimal labels.
-- Use `Edit`, `Save`, and icon-only close/delete controls where meaning is
-  obvious.
-- Delete should require confirmation for destructive persisted data.
-- Diff is only useful when the user is reviewing source/text changes. Do not
-  show a disabled or meaningless diff control.
+**Error analysis wizard** (inline in `main.tsx`) — triggered by Error analysis
+tab. Steps: `Build corpus → Review & code → Confirm modes → Done`
+
+Rules for wizards:
+
+- Show a step indicator at the top. Mark completed steps with a checkmark.
+- Each step renders only the UI needed for that step. Do not dump all panels
+  on one screen.
+- Back/Next navigation lives at the top of each step panel.
+- Primary action button (Next, Continue) lives top-right. Back lives top-left.
+- A step that is already complete (done state for agent wizard) skips the wizard
+  and goes directly to the workspace tabs.
 
 ## Visual Style
 
-The visual direction is restrained and app-like:
+Color tokens (defined in `:root`):
 
-- light background
-- soft neutral left rail
-- black/near-black primary text
-- muted gray secondary text
-- subtle borders
-- compact rounded controls
-- limited accent color
-- no dark table blocks in the main experience
-- no oversized hero sections
-- no decorative gradients, orbs, or marketing-style panels
-
-Cards are allowed for repeated artifacts, review panels, and bounded tools.
-Avoid cards inside cards.
-
-## Typography
-
-- Use strong headings only for true object names or primary task titles.
-- Use compact headings inside panels and artifact cards.
-- Do not scale font sizes with viewport width.
-- Avoid negative letter spacing.
-- Use uppercase eyebrow text sparingly for stable categories such as Evidence
-  Context or Start From Intent.
-- Truncate long nav labels cleanly.
-
-## Controls
-
-Use familiar controls:
-
-- icon buttons for navigation, collapse, close, delete, run, download, and
-  review-panel toggles
-- text buttons for clear commands such as Create agent, Edit, Save
-- segmented controls for mode choices
-- menus for grouped row actions
-- toggles or checkboxes for binary settings
-- inputs/textareas for editable fields
+| Token | Value | Use |
+|---|---|---|
+| `--bg` | `#fafaf8` | Page background |
+| `--bg-sidebar` | `#1c1917` | Sidebar |
+| `--surface` | `#f2ede6` | Cards, tab content areas, agent panel |
+| `--surface2` | `#e8e2d9` | Secondary surfaces, table headers, expanded rows |
+| `--surface3` | `#ffffff` | Input fields, textareas, inline editors |
+| `--text` | `#1c1917` | Primary text |
+| `--text-muted` | `#78716c` | Labels, hints, secondary text |
+| `--text-sidebar` | `#e7e5e4` | Sidebar text |
+| `--border` | `#e2dbd1` | Warm neutral borders |
+| `--accent` | `#cf4a1a` | Primary buttons, active step indicators |
+| `--success` | `#15803d` | Pass badges, reviewed status |
+| `--error` | `#b91c1c` | Failure indicators |
 
 Rules:
 
-- Prefer lucide icons when an icon exists.
-- Do not invent custom SVG icons for common actions.
-- Do not use generic button rows disconnected from the selected object.
+- Cards use `--surface`, not `--surface3` (white). White is reserved for inputs.
+- The agent designer panel uses `--surface` to match other tabs.
+- No dark table blocks in the main experience.
+- No decorative gradients or marketing-style panels.
+- Avoid cards inside cards. Nested boxes indicate a specificity bug in CSS.
+- Consistent border-radius: 14–18px for cards, 6px for inputs/badges, 999px for pills.
+
+## Typography
+
+- Headings use Source Serif 4 (imported from Google Fonts).
+- Body and UI text: `system-ui, -apple-system, sans-serif`.
+- Strong headings only for true object names or primary task titles.
+- Uppercase eyebrow labels (`ARTIFACT TYPE`, `REVIEW ITEM`) use
+  `font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase`.
+- Do not scale font sizes with viewport width.
+
+## Controls
+
+- **Primary button**: accent fill (`--accent`), white text. Used for the single
+  most important action per step.
+- **Secondary button**: transparent with `--border`, no fill. Used for
+  supplementary actions.
+- **Icon buttons**: lucide icons for close, delete, external link. No custom SVG.
+- **Segmented controls** (`mode-option`): for mutually exclusive choices. Not
+  used for mock/live (mock removed).
+- **Dropdowns**: for assigning failure modes inline. Keep the select element
+  styled with `--surface`, `--border`.
+
+Rules:
+
 - Put actions where their output appears.
-- Do not add explanatory copy beside controls when the control label and local
-  service status already make the behavior clear.
-- Disable controls only when the reason is obvious; otherwise hide unavailable
-  actions until they are meaningful.
+- Disable controls only when the reason is obvious from context.
+- Do not add generic button rows disconnected from the selected object.
+
+## Data Tables
+
+Used in: Error analysis step 1 (review set), Error analysis step 2 (review items).
+
+Pattern:
+
+- Header row: `--surface2` background, uppercase 11px labels.
+- Data rows: `--bg` or transparent, 1px `--border` bottom.
+- Status badges: pill shape, green for reviewed/passed, muted for open/pending.
+- Expandable rows: clicking a row title expands inline content (annotations,
+  mode assignment). Expanded row background uses `--surface2`.
+- Last row has no bottom border.
+
+CSS classes: `.discovery-corpus-table`, `.discovery-corpus-row`,
+`.discovery-corpus-head`, `.discovery-status-badge`.
+
+## Langfuse Integration Pattern
+
+Error analysis depends on Langfuse as the source of truth for trace comments:
+
+1. User reviews a trace in Langfuse and adds comments there.
+2. Platform syncs those comments via "Sync Langfuse comments" button →
+   `POST /projects/{id}/review-corpora/{corpus_id}/sync-langfuse-comments`.
+3. Synced comments appear as `ReviewAnnotation` records (status: accepted,
+   metadata includes `langfuse_comment_id` for deduplication).
+4. User assigns each annotation to a failure mode using the inline dropdown.
+5. Failure modes are promoted to the confirmed taxonomy in step 3.
+
+The platform does **not** duplicate Langfuse's note-writing UI. The "Reviewer
+notes" free-text form has been removed. Writing happens in Langfuse; categorization
+happens in the platform.
 
 ## Evidence UI
 
 Evidence is the center of the product.
 
-Use evidence views for:
-
-- agent design artifacts
-- behavior rules
-- judge prompts
-- gates
-- run evidence
-- eval results
-- failure packets
-- fix proposals
-- trace references
-- design decisions
-- context packs
-
 Rules:
 
 - Show evidence as named artifacts with short descriptions.
-- Context packs should explain why a set of artifacts is being shown.
-- Artifact cards should have a clear type, title, body/summary, and source.
-- Related artifacts should be shown as clickable evidence rows. If the row
-  remains visible, it must open the related artifact or perform a clear action.
-- Do not expose raw relationship names such as `GENERATED_FROM`, `OBSERVES`,
-  or `SUPPORTS` in the UI. Translate them into user-facing labels such as
-  Agent design, Run output, Success criteria, or Trace for this run.
-- Do not show unresolved related artifacts as fallback cards like Saved
-  evidence. If the UI cannot resolve what a linked artifact is, omit it until
-  it can be loaded and named.
-- Trace references must provide an explicit Open trace link when a URL exists.
-  The trace id alone is not a useful UI affordance.
-- Evidence summaries should be compact. Avoid giant sentence-lists of every
-  completed workflow stage; progress belongs in the workflow controls, while
-  the evidence section should show a count and inspectable artifacts.
-- Do not expose raw file names as the main UI unless the user is explicitly in a
-  source/code review mode.
-- Do not call the feature generic memory in the UI. Prefer Evidence, Artifacts,
-  or Evidence Context.
+- Artifact cards have a clear type, title, body/summary, and source.
+- Trace references must provide an explicit "Open trace" link when a URL exists.
+  The trace ID alone is not a useful affordance.
+- Do not expose raw relationship names such as `GENERATED_FROM` or `SUPPORTS`.
+  Translate to user-facing labels.
+- Do not show unresolved artifacts as fallback cards. Omit until they can be
+  named.
+- Evidence summaries should be compact. Progress belongs in workflow controls.
 
 ## Service Status
 
-Dependency status belongs in the left rail as compact operational context.
-
-Rules:
-
-- Show configured/reachable services such as Storage, OpenAI, and Langfuse in a
-  small Services section.
-- Service rows may link to their external/local UI when a URL exists.
-- Do not duplicate this state in top-bar pills such as Platform: local.
-- Do not expose secret values. Show only configured, online, offline, or not
-  configured state.
-- Live-mode trace behavior should be discoverable through Langfuse service
-  status and explicit trace links, not long explanatory text beside the run mode
-  control.
-
-## Streaming And Activity
-
-Long-running work should show activity locally where the work is happening.
-
-Rules:
-
-- Activity belongs in the active step/panel, not as a permanent global column.
-- Once the user moves to a new section, old ephemeral activity can disappear.
-- Persist meaningful results as artifacts, not as activity logs.
-- For live LLM or runner work, show clear phases such as preparing context,
-  running scenario, judging output, storing evidence.
-
-## Responsive Behavior
-
-- The left rail should remain recoverable at narrow widths.
-- Text must not overflow buttons, nav rows, or artifact cards.
-- Main workspace sections may stack on narrow screens.
-- Fixed-format controls should have stable dimensions to avoid layout jumps.
+- Langfuse and Anthropic status dots live in the sidebar.
+- Do not duplicate service state in top-bar pills.
+- Do not expose secret values. Show only configured / online / offline / not
+  configured.
 
 ## Empty States
 
-Empty states should be brief and actionable.
+Brief and actionable:
 
-Good:
+> Run a live agent before adding evidence to the review set — mock runs aren't
+> reviewed.
 
-> Create an agent design to begin collecting targets, judge prompts, gates,
-> runs, and evidence.
-
-Avoid:
-
-- long instructional paragraphs
-- explaining visual design inside the app
-- placeholder language that looks unfinished
-- empty right-side cards that only say the app is ready
+Avoid long instructional paragraphs or placeholder language that looks unfinished.
 
 ## Current Canonical Patterns
 
-The first implemented patterns are:
+| Pattern | Location |
+|---|---|
+| Agent creation wizard | `Wizard.tsx` |
+| Error analysis wizard | `main.tsx` (inline, discoveryStep state) |
+| Workspace tab panel | `main.tsx` (workspaceTab state, 5 tabs) |
+| Proof loop test card | `main.tsx` (selectedGeneratedDesign, scenario-test-summary) |
+| Langfuse comment sync | `POST .../sync-langfuse-comments` + handleSyncLangfuseComments |
+| Review set data table | `.discovery-corpus-table` pattern |
+| Dismissible intro card | `showDiscoveryIntro` + localStorage key `edd.discoveryIntroDismissed` |
+| Failure mode taxonomy | Confirm modes step → axial-code-panel |
+| Right-side edit panel | Edit test, Manage tools (right-panel overlay) |
 
-- collapsible left rail with project identity and agent list
-- intent form for creating an agent design
-- project-scoped API calls
-- automatic `AGENT_DESIGN` artifact creation
-- deterministic `AGENT_PROMPT_REVIEW` context pack
-- evidence panel backed by context-pack artifacts
-
-Future components should extend these patterns rather than introducing a new
-layout model.
+New components should extend these patterns rather than introducing a new layout model.

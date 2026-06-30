@@ -1220,6 +1220,24 @@ async function promoteReviewAnnotation(
   return response.json();
 }
 
+async function updateReviewAnnotation(
+  projectId: string,
+  annotationId: string,
+  payload: { failure_mode_id?: string | null },
+): Promise<void> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/review-annotations/${annotationId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update annotation.");
+  }
+}
+
 async function listAgentSuggestions(
   projectId: string,
   corpusId: string,
@@ -1229,6 +1247,20 @@ async function listAgentSuggestions(
   );
   if (!response.ok) {
     throw await responseError(response, "Unable to load agent suggestions.");
+  }
+  return response.json();
+}
+
+async function syncLangfuseComments(
+  projectId: string,
+  corpusId: string,
+): Promise<{ imported_count: number; skipped_count: number }> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/review-corpora/${corpusId}/sync-langfuse-comments`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to sync Langfuse comments.");
   }
   return response.json();
 }
@@ -1833,7 +1865,7 @@ function App() {
   const [evalMethod, setEvalMethod] = useState<EvalMethod>("rubric");
   const [rubricText, setRubricText] = useState(defaultRubricText);
   const [requiredToolName, setRequiredToolName] = useState("");
-  const [runMode, setRunMode] = useState<"mock" | "live">("mock");
+  const runMode = "live" as const;
   const [scratchTarget, setScratchTarget] = useState<"agent" | "url">("agent");
   const [scratchUrl, setScratchUrl] = useState("https://example.com");
   const [workspaceTab, setWorkspaceTab] = useState<
@@ -1880,9 +1912,6 @@ function App() {
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
-  const [isEditingRubric, setIsEditingRubric] = useState(false);
-  const [rubricEditText, setRubricEditText] = useState("");
-  const [isSavingRubric, setIsSavingRubric] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardResumeState, setWizardResumeState] = useState<Partial<WizardState> | undefined>(undefined);
   const [reviewCorpora, setReviewCorpora] = useState<ReviewCorpus[]>([]);
@@ -1897,6 +1926,20 @@ function App() {
   const [newFailureModeDescription, setNewFailureModeDescription] = useState("");
   const [selectedFailureModeId, setSelectedFailureModeId] = useState("");
   const [isDiscoveryBusy, setIsDiscoveryBusy] = useState(false);
+  const [discoveryStep, setDiscoveryStep] = useState<
+    "corpus" | "review" | "confirm" | "done"
+  >("corpus");
+  const [showDiscoveryIntro, setShowDiscoveryIntro] = useState(
+    () => typeof window !== "undefined" && !window.localStorage.getItem("edd.discoveryIntroDismissed"),
+  );
+  function dismissDiscoveryIntro() {
+    setShowDiscoveryIntro(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("edd.discoveryIntroDismissed", "1");
+    }
+  }
+  const [samplingPlanExpanded, setSamplingPlanExpanded] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ imported: number } | null>(null);
   const [fixEditText, setFixEditText] = useState("");
   const [isSavingFix, setIsSavingFix] = useState(false);
 
@@ -2830,11 +2873,15 @@ function App() {
     if (!project || !selectedAgent) {
       return;
     }
+    const reviewableArtifactTypes = new Set(["RUN_RESULT", "TRACE_REF", "EVAL_RESULT", "JUDGE_OUTPUT"]);
     const reviewableArtifacts = evidenceArtifacts.filter(
-      (artifact) => artifact.agent_design_id === selectedAgent.id,
+      (artifact) =>
+        artifact.agent_design_id === selectedAgent.id &&
+        reviewableArtifactTypes.has(artifact.artifact_type) &&
+        !artifact.source.includes(":mock"),
     );
     if (reviewableArtifacts.length === 0) {
-      setError("Run or evaluate the agent before adding evidence to the review corpus.");
+      setError("Run a live agent before adding evidence to the review corpus — mock runs aren't reviewed.");
       return;
     }
     setError(null);
@@ -2979,6 +3026,22 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create suggestion.");
       setActivity(null);
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleSyncLangfuseComments() {
+    if (!project || !activeReviewCorpus) return;
+    setError(null);
+    setSyncResult(null);
+    setIsDiscoveryBusy(true);
+    try {
+      const result = await syncLangfuseComments(project.id, activeReviewCorpus.id);
+      await refreshDiscoveryState();
+      setSyncResult({ imported: result.imported_count });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sync Langfuse comments.");
     } finally {
       setIsDiscoveryBusy(false);
     }
@@ -3203,20 +3266,6 @@ function App() {
       setActivity(null);
     } finally {
       setIsDiagnosing(false);
-    }
-  }
-
-  async function handleSaveRubric() {
-    if (!project || !eddFlow.contract) return;
-    setIsSavingRubric(true);
-    try {
-      const updated = await updateContractRubric(project.id, eddFlow.contract.id, rubricEditText);
-      setEddFlow((f) => ({ ...f, contract: updated }));
-      setIsEditingRubric(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save rubric.");
-    } finally {
-      setIsSavingRubric(false);
     }
   }
 
@@ -3921,22 +3970,6 @@ function App() {
                     Readiness
                   </button>
                 </div>
-                <div className="run-mode-control workspace-run-mode" aria-label="Run mode">
-                  <button
-                    className={runMode === "mock" ? "mode-option active" : "mode-option"}
-                    type="button"
-                    onClick={() => setRunMode("mock")}
-                  >
-                    Mock
-                  </button>
-                  <button
-                    className={runMode === "live" ? "mode-option active" : "mode-option"}
-                    type="button"
-                    onClick={() => setRunMode("live")}
-                  >
-                    Live Anthropic
-                  </button>
-                </div>
               </div>
 
               {workspaceTab === "agent" ? (
@@ -4189,47 +4222,7 @@ function App() {
                           </div>
                           <div>
                             <dt>Criterion</dt>
-                            <dd>
-                              {savedContractUsesRubric && isEditingRubric ? (
-                                <div className="rubric-inline-editor">
-                                  <textarea
-                                    className="rubric-inline-textarea"
-                                    value={rubricEditText}
-                                    onChange={(e) => setRubricEditText(e.target.value)}
-                                    rows={4}
-                                  />
-                                  <div className="rubric-inline-actions">
-                                    <button
-                                      className="primary-button"
-                                      type="button"
-                                      onClick={handleSaveRubric}
-                                      disabled={isSavingRubric || !rubricEditText.trim()}
-                                    >
-                                      {isSavingRubric ? "Saving..." : "Save"}
-                                    </button>
-                                    <button
-                                      className="secondary-button"
-                                      type="button"
-                                      onClick={() => setIsEditingRubric(false)}
-                                      disabled={isSavingRubric}
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <span
-                                  className={savedContractUsesRubric ? "rubric-summary-editable" : undefined}
-                                  title={savedContractUsesRubric ? "Click to edit rubric" : undefined}
-                                  onClick={savedContractUsesRubric ? () => {
-                                    setRubricEditText(savedEvalSummary);
-                                    setIsEditingRubric(true);
-                                  } : undefined}
-                                >
-                                  {savedEvalSummary}
-                                </span>
-                              )}
-                            </dd>
+                            <dd>{savedEvalSummary}</dd>
                           </div>
                           <div>
                             <dt>Latest result</dt>
@@ -4279,7 +4272,7 @@ function App() {
                         <h4>{currentLoopAction.title}</h4>
                         <p>{currentLoopAction.detail}</p>
                         <div className="proof-mode-summary" aria-label="Run and judge modes">
-                          <span>Run: {displayedRunMode === "live" ? "Live Anthropic" : "Mock"}</span>
+                          <span>Run: Live Anthropic</span>
                           <span>
                             Judge:{" "}
                             {displayedJudgeMode === "live" ? "Live rubric" : "Deterministic checks"}
@@ -4531,15 +4524,19 @@ function App() {
               ) : null}
 
               {workspaceTab === "error-analysis" ? (
-                <section className="error-analysis-workspace workspace-tab-panel">
+                <section className="error-analysis-workspace workspace-tab-panel discovery-wizard">
                   <div className="error-analysis-intro">
                     <div>
                       <p className="artifact-type">Error analysis</p>
                       <h3>{activeReviewCorpus?.name ?? "Discovery review"}</h3>
                       <p>
-                        Review traces, runs, and evidence as a corpus. Save free-text notes,
-                        organize confirmed failure modes, and keep agent suggestions separate
-                        until they are accepted.
+                        {discoveryStep === "corpus"
+                          ? "Start by building a corpus of traces and evidence to review."
+                          : discoveryStep === "review"
+                            ? "Step through each item, write a note on what you observe, and tag it with a failure mode."
+                            : discoveryStep === "confirm"
+                              ? "Confirm or dismiss the failure modes that came out of this review."
+                              : "Review complete. Here's what you found."}
                       </p>
                     </div>
                     <div className="analysis-scope-card">
@@ -4553,354 +4550,409 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="analysis-flow-lanes">
-                    <section className="analysis-lane-card">
-                      <div>
-                        <span>Review corpus</span>
-                        <strong>{reviewItems.length} items</strong>
-                        <small>
-                          {reviewedItemCount} reviewed · {reviewItems.length - reviewedItemCount} open
-                        </small>
-                      </div>
-                      <div className="analysis-run-actions">
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          onClick={handleCreateReviewCorpus}
-                          disabled={isDiscoveryBusy || !selectedAgent || Boolean(activeReviewCorpus)}
+                  {showDiscoveryIntro ? (
+                    <div className="discovery-intro-card">
+                      <button
+                        className="discovery-intro-dismiss"
+                        type="button"
+                        onClick={dismissDiscoveryIntro}
+                        aria-label="Dismiss"
+                      >
+                        ×
+                      </button>
+                      <h4>What this does</h4>
+                      <ol>
+                        <li>
+                          <strong>Build a review set.</strong> Gather the traces and runs you want to
+                          read through.
+                        </li>
+                        <li>
+                          <strong>Review &amp; code.</strong> Read what your agent actually did, item by
+                          item, and write a note on anything that looks wrong.
+                        </li>
+                        <li>
+                          <strong>Confirm modes.</strong> Turn recurring notes into named failure modes
+                          — accept the ones that are real, dismiss the ones that aren't.
+                        </li>
+                        <li>
+                          <strong>Done.</strong> Confirmed failure modes become evidence you can use to
+                          write a fix in the Proof loop tab.
+                        </li>
+                      </ol>
+                    </div>
+                  ) : null}
+
+                  <div className="discovery-steps">
+                    {(
+                      [
+                        ["corpus", "Build corpus"],
+                        ["review", "Review & code"],
+                        ["confirm", "Confirm modes"],
+                        ["done", "Done"],
+                      ] as const
+                    ).map(([key, label], i, arr) => {
+                      const currentIdx = arr.findIndex(([k]) => k === discoveryStep);
+                      return (
+                        <div
+                          key={key}
+                          className={[
+                            "discovery-step",
+                            i < currentIdx ? "done" : "",
+                            i === currentIdx ? "active" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
                         >
-                          Create corpus
-                        </button>
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          onClick={handleAddCurrentEvidenceToCorpus}
-                          disabled={isDiscoveryBusy || !selectedAgent}
-                        >
-                          Add evidence
-                        </button>
+                          <span className="discovery-step-dot">{i < currentIdx ? "✓" : i + 1}</span>
+                          <span className="discovery-step-label">{label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {discoveryStep === "corpus" ? (
+                    <section className="discovery-step-panel">
+                      <div className="analysis-lane-card">
+                        <div>
+                          <span>Review set</span>
+                          <strong>{reviewItems.length} items</strong>
+                          <small>
+                            {reviewedItemCount} reviewed · {reviewItems.length - reviewedItemCount} open
+                          </small>
+                        </div>
+                        <div className="analysis-run-actions">
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={handleCreateReviewCorpus}
+                            disabled={isDiscoveryBusy || !selectedAgent || Boolean(activeReviewCorpus)}
+                          >
+                            Create review set
+                          </button>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={handleAddCurrentEvidenceToCorpus}
+                            disabled={isDiscoveryBusy || !selectedAgent}
+                          >
+                            Pull in new runs
+                          </button>
+                        </div>
                       </div>
-                    </section>
-                    <section className="analysis-lane-card">
-                      <div>
-                        <span>Failure modes</span>
-                        <strong>{failureModes.length} modes</strong>
-                        <small>
-                          {acceptedAnnotationCount} accepted notes ·{" "}
-                          {agentSuggestions.filter((suggestion) => suggestion.status === "pending").length} pending suggestions
-                        </small>
-                      </div>
-                      <div className="analysis-run-actions">
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          onClick={handleCreateSuggestion}
-                          disabled={isDiscoveryBusy || !selectedReviewItem}
-                        >
-                          Suggest
-                        </button>
+
+                      {reviewItems.length > 0 ? (
+                        <div className="discovery-corpus-table" role="table" aria-label="Review set items">
+                          <div className="discovery-corpus-row discovery-corpus-head" role="row">
+                            <span role="columnheader">Item</span>
+                            <span role="columnheader">Source</span>
+                            <span role="columnheader">Status</span>
+                            <span role="columnheader">Notes</span>
+                          </div>
+                          {reviewItems.map((item) => (
+                            <div className="discovery-corpus-row" role="row" key={item.id}>
+                              <span role="cell">{item.title}</span>
+                              <span role="cell">{item.source_kind}</span>
+                              <span role="cell">
+                                <span
+                                  className={
+                                    item.status === "reviewed"
+                                      ? "discovery-status-badge reviewed"
+                                      : "discovery-status-badge open"
+                                  }
+                                >
+                                  {item.status}
+                                </span>
+                              </span>
+                              <span role="cell">
+                                {
+                                  reviewAnnotations.filter(
+                                    (annotation) => annotation.review_item_id === item.id,
+                                  ).length
+                                }
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="muted-copy">
+                          No items yet. Create a review set or pull in evidence from past runs to begin.
+                        </p>
+                      )}
+
+                      <div className="discovery-step-actions">
                         <button
                           className="primary-button"
                           type="button"
-                          onClick={handleSaveOpenCodeAnnotation}
-                          disabled={isDiscoveryBusy || !selectedReviewItem || !openCodeText.trim()}
+                          onClick={() => setDiscoveryStep("review")}
+                          disabled={!activeReviewCorpus || reviewItems.length === 0}
                         >
-                          Save note
+                          Start reviewing
                         </button>
-                      </div>
-                    </section>
-                  </div>
-
-                  <div className="analysis-stats">
-                    <span>
-                      <strong>{reviewItems.length}</strong>
-                      items
-                    </span>
-                    <span>
-                      <strong>{acceptedAnnotationCount}</strong>
-                      notes
-                    </span>
-                    <span>
-                      <strong>{failureModes.length}</strong>
-                      modes
-                    </span>
-                  </div>
-
-                  {samplingPlan ? (
-                    <section className="sampling-plan-panel">
-                      <div className="section-title-row">
-                        <div>
-                          <p className="artifact-type">Sampling plan</p>
-                          <h4>What to review next</h4>
-                        </div>
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          onClick={handleGenerateSamplingSuggestions}
-                          disabled={
-                            isDiscoveryBusy ||
-                            !activeReviewCorpus ||
-                            (samplingPlan.depth_candidates.length === 0 &&
-                              samplingPlan.recoding_prompts.length === 0)
-                          }
-                        >
-                          Generate suggestions
-                        </button>
-                      </div>
-                      <p className="mode-table-note">{samplingPlan.rationale}</p>
-                      <div className="sampling-plan-grid">
-                        {[
-                          ["Breadth", samplingPlan.breadth_candidates],
-                          ["Depth", samplingPlan.depth_candidates],
-                          ["Recoding", samplingPlan.recoding_prompts],
-                        ].map(([label, candidates]) => (
-                          <div className="sampling-column" key={label as string}>
-                            <span>{label as string}</span>
-                            {(candidates as ReviewSamplingCandidate[]).length === 0 ? (
-                              <p className="muted-copy">No candidates.</p>
-                            ) : (
-                              (candidates as ReviewSamplingCandidate[]).map((candidate) => (
-                                <button
-                                  className="sampling-candidate"
-                                  key={`${label}-${candidate.review_item_id}-${candidate.failure_mode_id ?? "none"}`}
-                                  type="button"
-                                  onClick={() => setSelectedReviewItemId(candidate.review_item_id)}
-                                >
-                                  <strong>{candidate.title}</strong>
-                                  <small>{candidate.reason}</small>
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        ))}
                       </div>
                     </section>
                   ) : null}
 
-                  <div className="trace-review-layout">
-                    <div className="trace-packet-list" aria-label="Trace review queue">
-                      {reviewItems.length === 0 ? (
-                        <p className="muted-copy">No review items yet.</p>
-                      ) : null}
-                      {reviewItems.map((item) => (
-                        <button
-                          className={
-                            selectedReviewItem?.id === item.id
-                              ? "trace-packet-item active"
-                              : "trace-packet-item"
-                          }
-                          key={item.id}
-                          type="button"
-                          onClick={() => setSelectedReviewItemId(item.id)}
-                        >
-                          <span>{item.status}</span>
-                          <strong>{item.title}</strong>
-                          <small>
-                            {item.source_kind} ·{" "}
-                            {reviewAnnotations.filter((annotation) => annotation.review_item_id === item.id).length} notes
-                          </small>
+                  {discoveryStep === "review" ? (
+                    <section className="discovery-step-panel">
+                      <div className="discovery-step-actions discovery-step-actions-top">
+                        <button className="secondary-button" type="button" onClick={() => setDiscoveryStep("corpus")}>
+                          Back
                         </button>
-                      ))}
-                    </div>
-
-                    <article className="trace-review-packet">
-                      {selectedReviewItem ? (
-                        <>
-                          <div className="trace-packet-header">
-                            <div>
-                              <p className="artifact-type">Review item</p>
-                              <h4>{selectedReviewItem.title}</h4>
-                            </div>
-                            {selectedReviewTraceUrl ? (
-                              <a href={selectedReviewTraceUrl} target="_blank" rel="noreferrer">
-                                Open trace
-                              </a>
-                            ) : null}
-                          </div>
-
-                          <div className="trace-packet-grid">
-                            <section>
-                              <h5>Evidence</h5>
-                              <p>{selectedReviewItem.content || "No content saved for this item."}</p>
-                            </section>
-                            <section>
-                              <h5>Source</h5>
-                              <p>
-                                {selectedReviewItem.source_kind} · {selectedReviewItem.source_id}
-                              </p>
-                              {selectedReviewItem.langfuse_ref?.observation_id ? (
-                                <p>Observation · {selectedReviewItem.langfuse_ref.observation_id}</p>
-                              ) : null}
-                            </section>
-                            <section>
-                              <h5>Accepted notes</h5>
-                              <div className="trace-comment-list">
-                                {selectedReviewAnnotations.length === 0 ? (
-                                  <p>No notes saved yet.</p>
-                                ) : (
-                                  selectedReviewAnnotations.map((annotation) => (
-                                    <div className="suggestion-row" key={annotation.id}>
-                                      <p>
-                                        <strong>{annotation.author}:</strong> {annotation.body}
-                                      </p>
-                                      {annotation.status === "accepted" ? (
-                                        <div className="analysis-run-actions">
-                                          <button
-                                            className="secondary-button compact-button"
-                                            type="button"
-                                            onClick={() => handlePromoteAnnotation(annotation)}
-                                            disabled={isDiscoveryBusy}
-                                          >
-                                            Promote
-                                          </button>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </section>
-                            <section>
-                              <h5>Suggestions</h5>
-                              <div className="trace-comment-list">
-                                {pendingSuggestions.length === 0 ? (
-                                  <p>No pending suggestions.</p>
-                                ) : (
-                                  pendingSuggestions.map((suggestion) => (
-                                    <div className="suggestion-row" key={suggestion.id}>
-                                      <p>
-                                        <strong>EDD:</strong> {suggestion.body}
-                                      </p>
-                                      <div className="analysis-run-actions">
-                                        <button
-                                          className="secondary-button compact-button"
-                                          type="button"
-                                          onClick={() => handleResolveSuggestion(suggestion, "dismissed")}
-                                          disabled={isDiscoveryBusy}
-                                        >
-                                          Dismiss
-                                        </button>
-                                        <button
-                                          className="secondary-button compact-button"
-                                          type="button"
-                                          onClick={() => handleResolveSuggestion(suggestion, "accepted")}
-                                          disabled={isDiscoveryBusy}
-                                        >
-                                          Accept
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </section>
-                          </div>
-                        </>
-                      ) : (
-                        <p className="muted-copy">Select or add a review item to begin open coding.</p>
-                      )}
-                    </article>
-                  </div>
-
-                  <div className="coding-workspace">
-                    <section className="open-code-panel">
-                      <div className="section-title-row">
-                        <div>
-                          <p className="artifact-type">Open coding</p>
-                          <h4>Reviewer notes</h4>
-                        </div>
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          onClick={handleSaveOpenCodeAnnotation}
-                          disabled={isDiscoveryBusy || !selectedReviewItem || !openCodeText.trim()}
-                        >
-                          Save note
-                        </button>
-                      </div>
-                      <label className="compact-label">
-                        <span>Note</span>
-                        <textarea
-                          value={openCodeText}
-                          onChange={(event) => setOpenCodeText(event.target.value)}
-                          placeholder="Describe the behavior you observe in this item."
-                        />
-                      </label>
-                      <div className="analysis-field-row">
-                        <label className="compact-label">
-                          <span>Existing mode</span>
-                          <select
-                            value={selectedFailureModeId}
-                            onChange={(event) => setSelectedFailureModeId(event.target.value)}
+                        <div style={{ display: "flex", gap: "10px" }}>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={handleSyncLangfuseComments}
+                            disabled={isDiscoveryBusy || !activeReviewCorpus}
                           >
-                            <option value="">No mode</option>
-                            {failureModes.map((mode) => (
-                              <option key={mode.id} value={mode.id}>
-                                {mode.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="compact-label">
-                          <span>New mode</span>
-                          <input
-                            value={newFailureModeName}
-                            onChange={(event) => setNewFailureModeName(event.target.value)}
-                            placeholder="missing policy lookup"
-                          />
-                        </label>
-                      </div>
-                      <label className="compact-label">
-                        <span>Mode definition</span>
-                        <input
-                          value={newFailureModeDescription}
-                          onChange={(event) => setNewFailureModeDescription(event.target.value)}
-                          placeholder="The agent answered without checking required evidence."
-                        />
-                      </label>
-                    </section>
-
-                    <section className="axial-code-panel">
-                      <div className="section-title-row">
-                        <div>
-                          <p className="artifact-type">Failure modes</p>
-                          <h4>Confirmed taxonomy</h4>
+                            Sync Langfuse comments
+                          </button>
+                          <button
+                            className="primary-button"
+                            type="button"
+                            onClick={() => setDiscoveryStep("confirm")}
+                          >
+                            Continue to confirm modes
+                          </button>
                         </div>
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          onClick={handleCreateSuggestion}
-                          disabled={isDiscoveryBusy || !selectedReviewItem}
-                        >
-                          Suggest
+                      </div>
+
+                      {syncResult !== null ? (
+                        <p className={syncResult.imported > 0 ? "activity-text" : "muted-copy"}>
+                          {syncResult.imported > 0
+                            ? `Pulled in ${syncResult.imported} comment${syncResult.imported === 1 ? "" : "s"} from Langfuse.`
+                            : "No new comments found. Make sure review items have a linked Langfuse trace and that Langfuse is running."}
+                        </p>
+                      ) : null}
+                      {error ? <p className="error-text">{error}</p> : null}
+
+                      <div className="discovery-corpus-table" role="table" aria-label="Review items">
+                        <div className="discovery-corpus-row discovery-corpus-head" role="row">
+                          <span role="columnheader">Trace</span>
+                          <span role="columnheader">Status</span>
+                          <span role="columnheader">Comments</span>
+                          <span role="columnheader"></span>
+                        </div>
+                        {reviewItems.length === 0 ? (
+                          <p className="muted-copy" style={{ padding: "12px 16px" }}>
+                            No items yet — sync Langfuse comments to populate.
+                          </p>
+                        ) : null}
+                        {reviewItems.map((item) => {
+                          const itemAnnotations = reviewAnnotations.filter(
+                            (a) => a.review_item_id === item.id,
+                          );
+                          const traceUrl = item.langfuse_ref?.url ?? null;
+                          const isExpanded = selectedReviewItemId === item.id;
+                          return (
+                            <div key={item.id}>
+                              <div
+                                className={`discovery-corpus-row discovery-review-row${isExpanded ? " expanded" : ""}`}
+                                role="row"
+                              >
+                                <button
+                                  className="discovery-row-title"
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedReviewItemId(isExpanded ? null : item.id)
+                                  }
+                                >
+                                  {item.title}
+                                </button>
+                                <span role="cell">
+                                  <span
+                                    className={
+                                      item.status === "reviewed"
+                                        ? "discovery-status-badge reviewed"
+                                        : "discovery-status-badge open"
+                                    }
+                                  >
+                                    {item.status}
+                                  </span>
+                                </span>
+                                <span role="cell">{itemAnnotations.length}</span>
+                                <span role="cell">
+                                  {traceUrl ? (
+                                    <a
+                                      href={traceUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="discovery-trace-link"
+                                    >
+                                      Open trace ↗
+                                    </a>
+                                  ) : null}
+                                </span>
+                              </div>
+                              {isExpanded ? (
+                                <div className="discovery-annotation-rows">
+                                  {itemAnnotations.length === 0 ? (
+                                    <p className="muted-copy">
+                                      No comments synced yet — add a comment in Langfuse then sync.
+                                    </p>
+                                  ) : (
+                                    itemAnnotations.map((annotation) => (
+                                      <div className="discovery-annotation-row" key={annotation.id}>
+                                        <p className="discovery-annotation-body">{annotation.body}</p>
+                                        <select
+                                          className="discovery-mode-select"
+                                          value={annotation.failure_mode_id ?? ""}
+                                          onChange={async (e) => {
+                                            await updateReviewAnnotation(project!.id, annotation.id, {
+                                              failure_mode_id: e.target.value || null,
+                                            });
+                                            await refreshDiscoveryState();
+                                          }}
+                                        >
+                                          <option value="">Assign failure mode…</option>
+                                          {failureModes.map((mode) => (
+                                            <option key={mode.id} value={mode.id}>
+                                              {mode.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {discoveryStep === "confirm" ? (
+                    <section className="discovery-step-panel">
+                      <div className="discovery-step-actions discovery-step-actions-top">
+                        <button className="secondary-button" type="button" onClick={() => setDiscoveryStep("review")}>
+                          Back
                         </button>
+                        <button className="primary-button" type="button" onClick={() => setDiscoveryStep("done")}>
+                          Finish review
+                        </button>
+                      </div>
+
+                      <section className="axial-code-panel">
+                        <div className="section-title-row">
+                          <div>
+                            <p className="artifact-type">Failure modes</p>
+                            <h4>Confirmed taxonomy</h4>
+                          </div>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={handleCreateSuggestion}
+                            disabled={isDiscoveryBusy || !selectedReviewItem}
+                          >
+                            Suggest
+                          </button>
+                        </div>
+                        <p className="mode-table-note">
+                          Modes are first-class EDD records. Suggestions stay pending until accepted.
+                        </p>
+                        <div className="failure-mode-table">
+                          {failureModes.length === 0 ? (
+                            <p className="muted-copy">No failure modes yet.</p>
+                          ) : null}
+                          {failureModes.map((mode) => (
+                            <div className="failure-mode-row" key={mode.id}>
+                              <strong>{mode.name}</strong>
+                              <span>{mode.status}</span>
+                              <span>{mode.severity}</span>
+                              <em>
+                                {
+                                  reviewAnnotations.filter(
+                                    (annotation) => annotation.failure_mode_id === mode.id,
+                                  ).length
+                                }{" "}
+                                notes
+                              </em>
+                              <small>{mode.langfuse_score_name ?? "EDD"}</small>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      <section className="axial-code-panel">
+                        <div className="section-title-row">
+                          <div>
+                            <p className="artifact-type">Suggestions</p>
+                            <h4>Agent-proposed modes</h4>
+                          </div>
+                        </div>
+                        <div className="trace-comment-list">
+                          {agentSuggestions.filter((suggestion) => suggestion.status === "pending").length === 0 ? (
+                            <p className="muted-copy">No pending suggestions.</p>
+                          ) : (
+                            agentSuggestions
+                              .filter((suggestion) => suggestion.status === "pending")
+                              .map((suggestion) => (
+                                <div className="suggestion-row" key={suggestion.id}>
+                                  <p>
+                                    <strong>EDD:</strong> {suggestion.body}
+                                  </p>
+                                  <div className="analysis-run-actions">
+                                    <button
+                                      className="secondary-button compact-button"
+                                      type="button"
+                                      onClick={() => handleResolveSuggestion(suggestion, "dismissed")}
+                                      disabled={isDiscoveryBusy}
+                                    >
+                                      Dismiss
+                                    </button>
+                                    <button
+                                      className="secondary-button compact-button"
+                                      type="button"
+                                      onClick={() => handleResolveSuggestion(suggestion, "accepted")}
+                                      disabled={isDiscoveryBusy}
+                                    >
+                                      Accept
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                          )}
+                        </div>
+                      </section>
+                    </section>
+                  ) : null}
+
+                  {discoveryStep === "done" ? (
+                    <section className="discovery-step-panel discovery-done-panel">
+                      <div className="analysis-stats">
+                        <span>
+                          <strong>{reviewItems.length}</strong>
+                          items reviewed
+                        </span>
+                        <span>
+                          <strong>{acceptedAnnotationCount}</strong>
+                          notes
+                        </span>
+                        <span>
+                          <strong>{failureModes.length}</strong>
+                          modes confirmed
+                        </span>
                       </div>
                       <p className="mode-table-note">
-                        Modes are first-class EDD records. Suggestions stay pending until accepted.
+                        Confirmed failure modes are ready to use as evidence for fix proposals in the
+                        Proof loop tab.
                       </p>
-                      <div className="failure-mode-table">
-                        {failureModes.length === 0 ? (
-                          <p className="muted-copy">No failure modes yet.</p>
-                        ) : null}
-                        {failureModes.map((mode) => (
-                          <div className="failure-mode-row" key={mode.id}>
-                            <strong>{mode.name}</strong>
-                            <span>{mode.status}</span>
-                            <span>{mode.severity}</span>
-                            <em>
-                              {
-                                reviewAnnotations.filter(
-                                  (annotation) => annotation.failure_mode_id === mode.id,
-                                ).length
-                              }{" "}
-                              notes
-                            </em>
-                            <small>{mode.langfuse_score_name ?? "EDD"}</small>
-                          </div>
-                        ))}
+                      <div className="discovery-step-actions">
+                        <button className="secondary-button" type="button" onClick={() => setDiscoveryStep("confirm")}>
+                          Back
+                        </button>
+                        <button
+                          className="primary-button"
+                          type="button"
+                          onClick={() => setDiscoveryStep("review")}
+                        >
+                          Review more items
+                        </button>
                       </div>
                     </section>
-                  </div>
+                  ) : null}
                 </section>
               ) : null}
 

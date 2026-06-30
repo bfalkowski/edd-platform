@@ -468,7 +468,7 @@ textarea {
 }
 
 .agent-designer-panel {
-  background: var(--surface3);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 18px;
   display: grid;
@@ -753,7 +753,16 @@ textarea {
 .trace-review-layout {
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(220px, 0.36fr) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, 0.28fr) minmax(0, 0.92fr) minmax(260px, 0.5fr);
+}
+
+.evidence-scroll {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.sampling-plan-toggle {
+  margin-bottom: 14px;
 }
 
 .trace-packet-list,
@@ -1824,7 +1833,7 @@ dd {
   align-items: start;
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
+  grid-template-columns: minmax(0, 0.85fr) minmax(280px, 1fr);
 }
 
 .scenario-test-summary h4 {
@@ -1879,7 +1888,9 @@ dd {
 }
 
 .scenario-test-summary dl div {
+  background: transparent;
   border-bottom: 1px solid var(--border);
+  border-radius: 0;
   display: grid;
   gap: 2px;
   padding: 9px 0;
@@ -1897,7 +1908,8 @@ dd {
 
 .scenario-test-summary dd {
   color: var(--text);
-  font-weight: 700;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .scenario-empty-state {
@@ -3072,41 +3084,6 @@ dd {
   }
 }
 
-.rubric-summary-editable {
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
-}
-
-.rubric-summary-editable:hover {
-  opacity: 0.75;
-}
-
-.rubric-inline-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-
-.rubric-inline-textarea {
-  width: 100%;
-  font-size: 13px;
-  font-family: inherit;
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  resize: vertical;
-  box-sizing: border-box;
-}
-
-.rubric-inline-actions {
-  display: flex;
-  gap: 8px;
-}
-
 /* =========================================================
    Wizard
    ========================================================= */
@@ -3586,4 +3563,251 @@ dd {
   cursor: pointer;
   font-size: 14px;
   padding: 7px 10px;
+}
+
+.discovery-steps {
+  display: flex;
+  gap: 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+}
+
+.discovery-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  opacity: 0.35;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.discovery-step.active {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.discovery-step.done {
+  opacity: 0.6;
+}
+
+.discovery-step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.discovery-step.active .discovery-step-dot {
+  background: var(--accent);
+  color: #fff;
+}
+
+.discovery-step.done .discovery-step-dot {
+  background: var(--success, #22c55e);
+  color: #fff;
+}
+
+.discovery-step-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discovery-step-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.discovery-step-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.discovery-step-actions-top {
+  justify-content: space-between;
+}
+
+.discovery-done-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.discovery-corpus-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.discovery-corpus-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.6fr);
+  gap: 12px;
+  padding: 10px 16px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.discovery-corpus-row:last-child {
+  border-bottom: none;
+}
+
+.discovery-corpus-head {
+  background: var(--surface2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.discovery-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.discovery-status-badge.open {
+  background: var(--surface2);
+  color: var(--text-muted);
+}
+
+.discovery-status-badge.reviewed {
+  background: var(--success, #22c55e);
+  color: #fff;
+}
+
+.discovery-review-row {
+  cursor: default;
+}
+
+.discovery-review-row.expanded {
+  background: var(--surface2);
+}
+
+.discovery-row-title {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0;
+  text-align: left;
+}
+
+.discovery-row-title:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--text-muted);
+}
+
+.discovery-trace-link {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.discovery-trace-link:hover {
+  color: var(--accent);
+}
+
+.discovery-annotation-rows {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 16px 12px;
+}
+
+.discovery-annotation-row {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.5fr);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.discovery-annotation-row:last-child {
+  border-bottom: none;
+}
+
+.discovery-annotation-body {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.discovery-mode-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 10px;
+  width: 100%;
+}
+
+.discovery-intro-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 44px 20px 20px;
+  margin-bottom: 20px;
+}
+
+.discovery-intro-card h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.discovery-intro-card ol {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.discovery-intro-card ol strong {
+  color: var(--text);
+}
+
+.discovery-intro-dismiss {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px;
+}
+
+.discovery-intro-dismiss:hover {
+  color: var(--text);
 }

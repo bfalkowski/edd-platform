@@ -1054,6 +1054,26 @@ def langfuse_comment_object_type(ref: ExternalArtifactRef) -> str:
     return ref.ref_type.upper()
 
 
+def get_langfuse_comments(object_type: str, object_id: str) -> List[Dict[str, object]]:
+    url = (
+        f"{langfuse_base_url()}/api/public/comments"
+        f"?objectType={object_type}&objectId={object_id}"
+    )
+    request = Request(
+        url,
+        headers={"Authorization": langfuse_basic_auth_header()},
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError):
+        return []
+    data = payload.get("data") if isinstance(payload, dict) else payload
+    if not isinstance(data, list):
+        return []
+    return data
+
+
 def create_langfuse_comment(
     *,
     object_type: str,
@@ -4406,6 +4426,82 @@ def get_review_corpus_analysis(
     get_project_or_404(project_id)
     corpus = get_review_corpus_or_404(project_id, corpus_id)
     return review_corpus_analysis_for_corpus(project_id=project_id, corpus=corpus)
+
+
+@app.post("/api/projects/{project_id}/review-corpora/{corpus_id}/sync-langfuse-comments")
+def sync_langfuse_comments_to_corpus(
+    project_id: str,
+    corpus_id: str,
+) -> LangfuseAnnotationsImportResult:
+    if not langfuse_credentials_configured():
+        raise HTTPException(status_code=400, detail="Langfuse credentials not configured.")
+    get_project_or_404(project_id)
+    corpus = get_review_corpus_or_404(project_id, corpus_id)
+    items = [
+        item
+        for item in _review_items.values()
+        if item.project_id == project_id and item.corpus_id == corpus_id
+    ]
+    existing_comment_ids: set[str] = set()
+    for annotation in _review_annotations.values():
+        if annotation.corpus_id == corpus_id:
+            cid = annotation.metadata.get("langfuse_comment_id")
+            if isinstance(cid, str):
+                existing_comment_ids.add(cid)
+    imported_annotations: List[ReviewAnnotation] = []
+    skipped_count = 0
+    now = datetime.now(timezone.utc)
+    for item in items:
+        ref = item.langfuse_ref
+        if not ref or not ref.trace_id:
+            skipped_count += 1
+            continue
+        comments = get_langfuse_comments("TRACE", ref.trace_id)
+        for comment in comments:
+            comment_id = str(comment.get("id") or "")
+            if not comment_id or comment_id in existing_comment_ids:
+                skipped_count += 1
+                continue
+            body = str(comment.get("content") or "").strip()
+            if not body:
+                skipped_count += 1
+                continue
+            author = str(comment.get("authorUserId") or "langfuse")
+            annotation = ReviewAnnotation(
+                id=f"review_annotation_{uuid4().hex[:12]}",
+                project_id=project_id,
+                agent_design_id=corpus.agent_design_id,
+                corpus_id=corpus_id,
+                review_item_id=item.id,
+                body=body,
+                quote="",
+                span_start=None,
+                span_end=None,
+                author=author,
+                failure_mode_id=None,
+                suggestion_id=None,
+                langfuse_score_id=None,
+                status="accepted",
+                metadata={
+                    "langfuse_comment_id": comment_id,
+                    "import_source": "langfuse_comment_sync",
+                },
+                created_at=now,
+                updated_at=now,
+            )
+            _review_annotations[annotation.id] = annotation
+            store.save_record("review_annotations", annotation.id, annotation)
+            existing_comment_ids.add(comment_id)
+            imported_annotations.append(annotation)
+            updated_item = item.model_copy(update={"status": "reviewed", "updated_at": now})
+            _review_items[updated_item.id] = updated_item
+            store.save_record("review_items", updated_item.id, updated_item)
+    return LangfuseAnnotationsImportResult(
+        annotations=imported_annotations,
+        failure_modes=[],
+        imported_count=len(imported_annotations),
+        skipped_count=skipped_count,
+    )
 
 
 @app.get("/api/projects/{project_id}/review-items")

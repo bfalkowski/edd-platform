@@ -138,7 +138,7 @@ The current app supports the full eval-driven proof loop:
 
 1. Create an agent design.
 2. Define a test case backed by a scenario and eval contract.
-3. Run a baseline version in mock or live mode.
+3. Run a baseline version against live Anthropic.
 4. Evaluate the run with deterministic checks or an optional live judge.
 5. Store `RUN_RESULT`, `EVAL_RESULT`, and `JUDGE_OUTPUT` evidence.
 6. Create failure packets when checks fail.

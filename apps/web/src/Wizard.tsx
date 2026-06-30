@@ -23,7 +23,7 @@ type OutcomeAgentResponse = {
   agent: { id: string; name: string; intent: string; allowed_tool_names: string[] };
   version: { id: string; version_label: string; instructions: string };
   scenario: { id: string; input: string };
-  eval_contract: { id: string; checks: Array<{ id: string; type: string; value?: string }> };
+  eval_contract: { id: string; output_requirements: string[]; checks: Array<{ id: string; type: string; value?: string }> };
 };
 
 type RunRecord = {
@@ -366,14 +366,39 @@ function Spinner({ label }: { label: string }) {
   );
 }
 
-function EvalSummary({ evalResult }: { evalResult: EvalResult }) {
+function checkLabel(checkId: string, outputRequirements: string[]): string {
+  const outputMatch = /^requires_output_(\d+)$/.exec(checkId);
+  if (outputMatch) {
+    const idx = parseInt(outputMatch[1], 10) - 1;
+    if (outputRequirements[idx]) return outputRequirements[idx];
+  }
+  const labelMap: Record<string, string> = {
+    outcome_rubric: "Rubric judge",
+    requires_tool: "Required tool used",
+    forbidden_tool: "Forbidden tool not used",
+    forbidden_behavior: "Forbidden behavior absent",
+    requires_evidence: "Required evidence present",
+  };
+  for (const [prefix, label] of Object.entries(labelMap)) {
+    if (checkId.startsWith(prefix)) return label;
+  }
+  return checkId;
+}
+
+function EvalSummary({
+  evalResult,
+  outputRequirements = [],
+}: {
+  evalResult: EvalResult;
+  outputRequirements?: string[];
+}) {
   return (
     <div className={`eval-summary ${evalResult.passed ? "passed" : "failed"}`}>
       <strong>{evalResult.passed ? "Passed" : "Failed"}</strong>
       <ul>
         {evalResult.checks.map((c) => (
           <li key={c.check_id} className={c.passed ? "check-pass" : "check-fail"}>
-            {c.passed ? "✓" : "✗"} {c.check_id}
+            {c.passed ? "✓" : "✗"} {checkLabel(c.check_id, outputRequirements)}
             {c.notes ? <span className="check-notes"> — {c.notes}</span> : null}
           </li>
         ))}
@@ -732,8 +757,9 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
   }
 
   function renderFailure() {
-    const { baselineRun, baselineEval, langfuseBaselineUrl, iterationCount, editedChecks, candidateRun, candidateEval } = state;
+    const { baselineRun, baselineEval, langfuseBaselineUrl, iterationCount, editedChecks, candidateRun, candidateEval, agent } = state;
     if (!baselineRun || !baselineEval) return null;
+    const outputRequirements = agent?.eval_contract.output_requirements ?? [];
 
     function updateCheck(idx: number, value: string) {
       const next = editedChecks.map((c, i) => (i === idx ? { ...c, value } : c));
@@ -758,7 +784,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
           </div>
         )}
 
-        <EvalSummary evalResult={baselineEval} />
+        <EvalSummary evalResult={baselineEval} outputRequirements={outputRequirements} />
         <OutputBlock output={baselineRun.output} label={iterationCount > 0 ? `v${iterationCount} output` : "Agent output"} />
 
         {langfuseBaselineUrl ? (
@@ -827,6 +853,14 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
             onClick={handleGenerateFix}
           >
             {busy ? "Generating..." : "Generate a fix →"}
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={busy}
+            onClick={() => update({ step: "done", acceptedWithFailure: true })}
+          >
+            Output looks fine — approve anyway
           </button>
         </div>
       </div>
