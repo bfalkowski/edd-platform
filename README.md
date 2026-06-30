@@ -235,8 +235,7 @@ The default model is Claude Haiku. Override with `EDD_ANTHROPIC_MODEL`.
 
 ## Langfuse
 
-Local Langfuse is optional but recommended for the full error analysis workflow.
-Start Langfuse and the app together:
+Langfuse is required for error analysis. Start Langfuse and the app together:
 
 ```bash
 ./scripts/dev_langfuse.sh
