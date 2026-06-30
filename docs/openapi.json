@@ -6457,6 +6457,55 @@
         "summary": "Get Agent Version"
       }
     },
+    "/api/projects/{project_id}/agent-designs/{agent_id}/wizard-state": {
+      "get": {
+        "description": "Return the agent in OutcomeAgentCreated shape so the wizard can resume.",
+        "operationId": "get_agent_wizard_state_api_projects__project_id__agent_designs__agent_id__wizard_state_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeAgentCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Wizard State"
+      }
+    },
     "/api/projects/{project_id}/agent-suggestions": {
       "get": {
         "operationId": "list_agent_suggestions_api_projects__project_id__agent_suggestions_get",
