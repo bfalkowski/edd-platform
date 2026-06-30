@@ -6036,7 +6036,7 @@ def update_tool_definition(
     return updated
 
 
-@app.delete("/api/projects/{project_id}/tools/{tool_id}", status_code=204)
+@app.delete("/api/projects/{project_id}/tools/{tool_id}", status_code=204, response_model=None)
 def delete_tool_definition(project_id: str, tool_id: str) -> None:
     get_project_or_404(project_id)
     existing = _tool_definitions.get(tool_id)

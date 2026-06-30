@@ -1,12 +1,10 @@
 # Happy Path Walkthrough
 
-This is the canonical manual walkthrough for proving the EDD Platform happy path.
+This is the canonical manual walkthrough for the EDD Platform guided flow.
 It should stay aligned with the UI and API as the product changes.
 
-The walkthrough has two modes:
-
-- **Mock mode:** deterministic, no provider key required, suitable for local checks and CI-adjacent validation.
-- **Live mode:** uses OpenAI for agent or judge calls and local Langfuse for trace visibility when configured.
+Langfuse is a first-class dependency. Every live run links to a Langfuse trace.
+The wizard will prompt you to start Langfuse if it is not running.
 
 ## Preconditions
 
@@ -16,355 +14,195 @@ Start the local platform:
 ./scripts/dev.sh
 ```
 
+Start Langfuse:
+
+```bash
+./scripts/dev_langfuse.sh
+```
+
 Open:
 
 ```text
 http://localhost:5173
 ```
 
-Optional live tracing setup:
+Credentials required in `.env.local` (not committed):
 
-```bash
-./scripts/dev_langfuse.sh
+```text
+ANTHROPIC_API_KEY=...
+LANGFUSE_PUBLIC_KEY=...
+LANGFUSE_SECRET_KEY=...
 ```
 
-Then restart `./scripts/dev.sh` so the API loads the Langfuse environment.
+---
 
 ## Happy Path: Prove One Agent Improvement
 
-### 1. Create The Agent
+The guided wizard walks through five steps. Each step shows exactly one thing
+to look at and one action to take.
 
-In the left navigation, choose **New agent**.
+### Step 1 — Describe your agent
 
-Use a simple initial behavior that is likely to fail the target contract:
+Click **New agent** or open the guided flow.
 
-```text
-Agent name: Customer Support Escalation Agent
-Agent intent: Help support engineers understand an escalation and recommend a safe next action.
-```
-
-Expected result:
-
-- The agent appears in the left navigation.
-- The main workspace shows the created agent.
-- An `AGENT_DESIGN` evidence artifact exists.
-
-### 2. Set The Run Mode
-
-Use the top run mode control.
-
-For the default walkthrough, choose:
+Enter one sentence:
 
 ```text
-Mock
+What should this agent do?
 ```
 
-Expected result:
-
-- Mock mode is selected in the run mode control.
-- Runs use deterministic local behavior until **Live OpenAI** is selected.
-
-### 3. Define The Test
-
-In **Proof loop**, click **New test**.
-
-The right panel opens the test case editor. Use:
+Example:
 
 ```text
-Test shape: Single turn
-Judge method: Rubric judge
+Help a support engineer understand a failed deployment and recommend a safe next action.
 ```
 
-Example prompt:
+Click **Generate**.
+
+Expected result:
+
+- The platform generates an agent name, a test input, and a rubric.
+- All three are shown in editable fields.
+- Review and adjust any of them.
+
+*Human decision: Does the rubric capture what you actually care about?*
+
+Click **Looks right — run it**.
+
+Expected result:
+
+- Agent, version, scenario, and eval contract are created.
+- The wizard advances to Step 2.
+
+---
+
+### Step 2 — Run
+
+The agent runs live against the generated test input.
+
+Expected result:
+
+- The agent's output appears.
+- A **"Open trace in Langfuse →"** link appears.
+- A pass / fail verdict appears with a one-line judge summary.
+
+Open the Langfuse trace to see what the agent actually did — tool calls,
+message sequence, token counts, latency.
+
+- If the answer **passed** → the wizard shows a done state. No fix needed.
+- If the answer **failed** → the wizard advances to Step 3.
+
+---
+
+### Step 3 — Name the failure
+
+The judge verdict and failed checks are shown.
+
+A **"Open trace in Langfuse →"** link is shown again.
+
+Open the trace. Find the moment it went wrong. Come back and answer:
 
 ```text
-A customer reports that a production deployment failed after a permissions migration.
-The customer is blocked and asks what to do next.
+What went wrong? (one sentence)
+What should it have done instead? (optional)
 ```
 
-Example rubric:
+Example:
 
 ```text
-A good answer should acknowledge the deployment failure, avoid claiming the
-deployment is fixed, ask for missing evidence if needed, and recommend a safe
-next diagnostic or rollback action.
+What went wrong: The agent recommended redeploying immediately without checking logs.
+What should it have done: Ask for the error logs before recommending any action.
 ```
 
-Click **Save test**.
+*Human decision: Name the failure. One sentence. That's the only required input.*
+
+Click **Generate a fix**.
 
 Expected result:
 
-- A scenario is stored.
-- An eval contract is stored.
-- The scenario records the selected test shape in `setup_context`.
-- Evidence artifacts appear for the scenario and contract.
-- The next action advances to running the original agent.
+- The platform reads your failure description, the rubric, the run output,
+  and the original instructions.
+- A fix proposal is generated.
+- The wizard advances to Step 4.
 
-Other supported test shapes:
+---
 
-- **Conversation:** prior messages plus the next user turn.
-- **Trace replay:** a replay seed for selected prior spans, messages, or
-  evidence. Full trace-span picking is planned; today the replay seed is stored
-  as scenario input.
+### Step 4 — Review the fix
 
-### 4. Run The Original Agent
+A diff of the old instructions vs the proposed new instructions is shown.
 
-Click **Run current**.
+Review the changes. Edit inline if needed.
 
-Expected result:
-
-- A baseline agent version is created if one does not already exist.
-- A baseline run is created.
-- A `RUN_RESULT` evidence artifact appears.
-- The next action advances to checking the original run.
-
-### 5. Check The Original Run
-
-Click **Check answer**.
-
-Expected result:
-
-- An eval result is created against the contract.
-- A judge output is created.
-- If the original answer passes, the proof loop is complete and no fix is
-  required.
-- If the original answer fails, a failure packet is created and the next action
-  advances to proposing a fix.
-- In live mode, the saved evidence should show an **Open trace** link for the
-  run when Langfuse is configured. This should be true whether the check passes
-  or fails.
-- In live mode, the linked Langfuse trace should contain the agent run
-  observation and a child `openai.responses` generation for raw OpenAI model
-  calls.
-
-The remaining improvement steps are only required when the original answer
-fails the contract.
-
-### 6. Propose One Fix
-
-Click **Propose fix**.
-
-Expected result:
-
-- A bounded fix proposal appears.
-- The fix proposal is linked to the failure packet.
-- The next action advances to creating the candidate.
-
-### 7. Create The Candidate
-
-Click **Create v1**.
-
-Expected result:
-
-- A candidate agent version is created.
-- The candidate references the fix proposal.
-- The next action advances to running the candidate.
-
-### 8. Run The Candidate
+*Human decision: Does this fix address what you named in Step 3?*
 
 Click **Run v1**.
 
 Expected result:
 
-- The same scenario is run against the candidate version.
-- A second run artifact appears.
-- The next action advances to checking the candidate.
+- A candidate version is created from the new instructions.
+- The candidate runs against the same test input.
+- The wizard advances to Step 5.
 
-### 9. Check The Candidate
+---
 
-Click **Check answer**.
+### Step 5 — Compare
 
-Expected result:
+The v0 and v1 outputs are shown side by side.
 
-- A candidate eval result is created against the same contract.
-- A judge output is created.
-- The next action advances to comparing original vs candidate.
+The before / after verdict is shown.
 
-### 10. Compare Improvement
+A **"Open v1 trace in Langfuse →"** link is shown.
 
-Click **Compare**.
+- If v1 **passed** → "Fixed. Evidence saved." The full evidence chain is
+  available: scenario, eval contract, baseline run, failure description,
+  fix proposal, candidate run, comparison.
+- If v1 **still fails** → "Still failing — what's different now?" The wizard
+  returns to Step 3 with the new run's context.
 
-Expected result:
-
-- A comparison artifact is created.
-- The comparison shows whether the candidate improved, regressed, or stayed flat.
-- The workspace shows the evidence chain:
-  - scenario
-  - eval contract
-  - baseline version
-  - baseline run
-  - baseline eval
-  - failure packet
-  - fix proposal
-  - candidate version
-  - candidate run
-  - candidate eval
-  - comparison
-
-## Tool Registry Happy Path
-
-Tools are platform-owned. Draft tools are not assignable until approved.
-
-### 1. Open Tool Management
-
-In the agent workspace, click **Manage tools**.
-
-Expected result:
-
-- The right panel opens to the tool manager.
-- Draft tools can be created or approved.
-- Approved tools can be searched, filtered, and assigned to the selected agent.
-
-### 2. Create A Draft Tool
-
-Use the **Define tool schema** form.
-
-Example:
-
-```text
-Tool name: lookup_ticket
-Description: Look up a support ticket by id.
-Output description: Ticket status and summary.
-Mock response: Ticket is open and awaiting customer logs.
-```
-
-The default schemas include examples for strings, dates, integers, numbers,
-booleans, enums, and arrays.
-
-Click **Create draft**.
-
-Expected result:
-
-- The tool appears under **Draft tools**.
-- A `TOOL_DEFINITION` artifact is created.
-- The tool is not yet assigned to the agent.
-
-### 3. Approve And Assign The Tool
-
-Click the draft row action:
-
-```text
-Approve and assign
-```
-
-Expected result:
-
-- The tool status changes to `approved`.
-- The tool moves into the approved/assigned area.
-- The selected agent allowlist includes the tool.
-
-Current limitation:
-
-- Built-in and mock tools can execute through the runner.
-- The runner still needs adapters for other implementation kinds, such as
-  `http`, `mcp`, or `python`.
-
-## Ad Hoc Run Happy Path
-
-Use ad hoc runs to try an agent without advancing the proof loop.
-
-### 1. Open The Agent Menu
-
-In the left navigation, open the agent row menu.
-
-Choose:
-
-```text
-Try scenario
-```
-
-Expected result:
-
-- The right panel opens an **Ad hoc run** surface.
-
-### 2. Run A Scenario
-
-Enter scenario text and click:
-
-```text
-Run ad hoc
-```
-
-Expected result:
-
-- The run is stored as evidence.
-- In live mode, a trace link appears when Langfuse is configured.
-- The result can be opened from the right panel.
-
-## Live Mode Happy Path
-
-Live mode requires:
-
-```bash
-OPENAI_API_KEY=...
-```
-
-The key should be stored in `.env.local`, not committed.
-
-Run:
-
-```bash
-./scripts/dev_langfuse.sh
-./scripts/dev.sh
-```
-
-Then choose **Live OpenAI** in the UI.
-
-Expected result:
-
-- Agent runs use OpenAI.
-- Local Langfuse traces are linked when Langfuse is running.
-- Platform evidence remains the source of truth.
-
-## Automated Smoke
-
-The live Langfuse smoke script exercises agent creation, live run, live eval,
-and trace lookup:
-
-```bash
-python scripts/live_langfuse_e2e.py
-```
-
-Expected result:
-
-- The script creates a live E2E agent.
-- The platform stores run and eval evidence.
-- The run has a trace reference when local Langfuse is available.
-
-The deterministic Error Analysis smoke script exercises trace import,
-open-coding annotations, failure-mode discovery, sampling suggestions, Polars
-corpus analytics, and promotion into proof-loop evidence:
-
-```bash
-python scripts/error_analysis_e2e.py
-```
-
-Expected result:
-
-- The script creates a temporary Error Analysis agent and review corpus.
-- Langfuse-shaped trace and score rows become platform-owned review records.
-- An accepted finding promotes into a scenario, eval contract, and failure
-  packet.
+---
 
 ## Pass Criteria
 
 The happy path is healthy when a user can:
 
-1. Create an agent.
-2. Define a test case with a shape and judge method.
-3. Run the original behavior.
-4. Evaluate the original behavior.
-5. Complete the loop when the original answer passes.
-6. Produce a failure packet when the original answer fails.
-7. Produce one bounded fix for a failing original answer.
-8. Create a candidate version.
-9. Run and evaluate the candidate.
-10. Compare original vs candidate.
-11. Inspect all generated evidence artifacts.
-12. Create a draft tool.
-13. Approve and assign the tool to the selected agent.
-14. Run an ad hoc scenario.
-15. In live mode, open a linked Langfuse trace.
+1. Describe an agent in one sentence.
+2. Review and confirm a generated rubric and test input.
+3. Run the agent and open its Langfuse trace.
+4. See a clear pass or fail verdict.
+5. Name the failure in one sentence after reviewing the trace.
+6. Review a generated fix as a before/after diff.
+7. Run v1 and see a side-by-side comparison.
+8. See the full evidence chain when v1 passes.
+9. Return to Step 3 and iterate when v1 still fails.
 
-If any step fails, update this document or the product. Do not let the
-walkthrough drift from the actual UI.
+If any step fails or requires the user to navigate outside the wizard,
+update this document and the product. Do not let the walkthrough drift
+from the actual UI.
+
+---
+
+## Automated Smoke
+
+The full proof loop E2E exercises the backend plumbing for all wizard steps:
+
+```bash
+uv run scripts/outcome_agent_lifecycle_e2e.py
+```
+
+Expected result:
+
+- All cases pass through: draft → baseline run → evaluate → diagnose →
+  generate fix → create v1 → run v1 → compare.
+- 5 passed, 0 failed.
+
+The Anthropic jobs E2E exercises live browsing and single-call discipline:
+
+```bash
+uv run scripts/anthropic_jobs_e2e.py
+```
+
+Expected result:
+
+- Agent finds relevant Anthropic jobs in one browse_webpage call.
+- Judge confirms specific titles, grounded in page content.
+- PASS.

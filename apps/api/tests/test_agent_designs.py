@@ -2,6 +2,7 @@ import json
 import sys
 import types
 from datetime import datetime, timezone
+from typing import List, Optional
 
 from fastapi.testclient import TestClient
 
@@ -1063,8 +1064,8 @@ def test_langfuse_trace_url_failure_does_not_fail_live_run(monkeypatch) -> None:
 
 
 def test_anthropic_messages_core_records_langfuse_generation(monkeypatch) -> None:
-    generation_updates: list[dict] = []
-    generation_starts: list[dict] = []
+    generation_updates: List[dict] = []
+    generation_starts: List[dict] = []
 
     class FakeGeneration:
         def __enter__(self):
@@ -1126,9 +1127,9 @@ def test_anthropic_messages_core_records_langfuse_generation(monkeypatch) -> Non
 
 
 def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> None:
-    generation_starts: list[dict] = []
-    generation_updates: list[dict] = []
-    generation_events: list[str] = []
+    generation_starts: List[dict] = []
+    generation_updates: List[dict] = []
+    generation_events: List[str] = []
 
     class FakeGeneration:
         def __enter__(self):
@@ -2537,7 +2538,7 @@ def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
     monkeypatch.setenv("EDD_ANTHROPIC_INPUT_COST_PER_1M", "1.00")
     monkeypatch.setenv("EDD_ANTHROPIC_OUTPUT_COST_PER_1M", "2.00")
 
-    def fake_live_judge(prompt: str, trace_id: str | None = None):
+    def fake_live_judge(prompt: str, trace_id: Optional[str] = None):
         seen_prompt["value"] = prompt
         seen_prompt["trace_id"] = trace_id
         return "Live judge explanation cites the provided evidence.", "test-judge-model", {
@@ -2615,7 +2616,7 @@ def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
 def test_live_judge_requires_openai_api_key(monkeypatch) -> None:
     client = TestClient(app)
 
-    def fake_live_judge(prompt: str, trace_id: str | None = None):
+    def fake_live_judge(prompt: str, trace_id: Optional[str] = None):
         raise RuntimeError("ANTHROPIC_API_KEY is required for live Anthropic runs.")
 
     monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)

@@ -7,7 +7,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -36,12 +36,12 @@ class RunnerToolCall(BaseModel):
 class RunnerToolDefinition(BaseModel):
     name: str
     description: str
-    input_schema: dict[str, Any]
-    output_schema: Optional[dict[str, Any]] = None
+    input_schema: Dict[str, Any]
+    output_schema: Optional[Dict[str, Any]] = None
     output_description: str
     implementation_kind: str = "builtin"
     implementation_key: str
-    config_schema: dict[str, Any] = Field(default_factory=dict)
+    config_schema: Dict[str, Any] = Field(default_factory=dict)
     mock_response: Optional[str] = None
     status: str
 
@@ -100,7 +100,7 @@ def run_mock_agent(agent: RunnerAgentDesign, scenario: RunnerScenario) -> Runner
     )
 
 
-def weather_code_label(code: int | None) -> str:
+def weather_code_label(code: Optional[int]) -> str:
     labels = {
         0: "clear sky",
         1: "mainly clear",
@@ -125,7 +125,7 @@ def weather_code_label(code: int | None) -> str:
     return labels.get(code, "unknown conditions")
 
 
-def get_zip_location(zip_code: str) -> tuple[str, str, str, str]:
+def get_zip_location(zip_code: str) -> "tuple[str, str, str, str]":
     normalized = zip_code.strip()
     if not normalized:
         raise RuntimeError("ZIP code is required.")
@@ -396,11 +396,11 @@ def describe_empty_response(payload: dict) -> str:
     return "Anthropic response did not include output text."
 
 
-def usage_details_from_anthropic_payload(payload: dict) -> dict[str, Any]:
+def usage_details_from_anthropic_payload(payload: dict) -> Dict[str, Any]:
     usage = payload.get("usage")
     if not isinstance(usage, dict):
         return {}
-    details: dict[str, Any] = {}
+    details: Dict[str, Any] = {}
     for key in ("input_tokens", "output_tokens"):
         value = usage.get(key)
         if isinstance(value, int):
