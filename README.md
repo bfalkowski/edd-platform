@@ -40,28 +40,23 @@ failure mode taxonomy:
 
 1. **Build review set** — pull in live runs as a corpus of traces to review.
    A data table shows each item with its source, status, and note count.
-2. **Review & code** — open each trace in Langfuse, add comments there, then
-   sync those comments back into the platform with one click. Synced comments
-   appear inline per trace with an "Assign failure mode" dropdown.
-3. **Confirm modes** — promote recurring annotations to named failure modes.
-4. **Done** — the taxonomy is ready to inform test cases and fix proposals in
-   the Proof loop.
 
 ![EDD Platform Error analysis step 1 — build review set table](./docs/assets/error-analysis-build-corpus.webp)
 
-![EDD Platform Error analysis step 2 — synced Langfuse comments with failure mode assignment](./docs/assets/error-analysis-review-code.webp)
-
-### Langfuse as the review surface
-
-Reviewers annotate traces directly in Langfuse — not in a shallow copy inside
-the platform. The platform's job is to aggregate those comments, deduplicate
-them, and let evaluators assign failure modes.
+2. **Review & code** — open each trace in Langfuse and add comments there.
+   Reviewers annotate directly in Langfuse — not in a shallow copy inside the
+   platform.
 
 ![Langfuse trace with live judge span and tool calls for Sentiment Observer](./docs/assets/langfuse-live-judge-trace.webp)
 
-The "Sync Langfuse comments" button in step 2 pulls all trace comments into
-`ReviewAnnotation` records. Each comment is stored once (deduped by
-`langfuse_comment_id`) and linked back to the trace via "Open trace ↗".
+   Then sync those comments back into the platform with one click. Synced
+   comments appear inline per trace with an "Assign failure mode" dropdown.
+
+![EDD Platform Error analysis step 2 — synced Langfuse comments with failure mode assignment](./docs/assets/error-analysis-review-code.webp)
+
+3. **Confirm modes** — promote recurring annotations to named failure modes.
+4. **Done** — the taxonomy is ready to inform test cases and fix proposals in
+   the Proof loop.
 
 ## Evaluation-Driven Design Loop
 
