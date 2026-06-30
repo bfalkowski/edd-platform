@@ -3759,12 +3759,18 @@ function App() {
                         fetchAgentWizardState(project.id, agent.id),
                         hydrateEddFlow(project.id, agent),
                       ]).then(([agentState, flow]) => {
-                        setWizardResumeState(wizardStateFromFlow(project.id, agentState, flow));
-                        setWizardOpen(true);
+                        const resumeState = wizardStateFromFlow(project.id, agentState, flow);
+                        if (resumeState.step === "done") {
+                          // Agent passed — show workspace, not wizard
+                          setWizardOpen(false);
+                        } else {
+                          // Mid-flow — reopen wizard at the right step
+                          setWizardResumeState(resumeState);
+                          setWizardOpen(true);
+                        }
                       }).catch(() => {
-                        // agent has no baseline version yet — open wizard at run step
-                        setWizardResumeState({ step: "run", projectId: project.id });
-                        setWizardOpen(true);
+                        // Agent exists but has no wizard state yet — show workspace
+                        setWizardOpen(false);
                       });
                     }
                   }}
