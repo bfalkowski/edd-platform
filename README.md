@@ -22,7 +22,7 @@ Each agent gets five tabs: **Agent**, **Proof loop**, **Error analysis**,
 Define the agent's name, core instruction, and enabled tools. The warm card
 layout keeps the design surface clean against the sidebar.
 
-![EDD Platform Agent tab showing the Sentiment Observer agent design](./docs/assets/sentiment-observer-agent.png)
+![EDD Platform Agent tab showing the Sentiment Observer agent design](./docs/assets/sentiment-observer-agent.webp)
 
 ### Proof loop tab
 
@@ -31,7 +31,7 @@ and iterate. The proof loop shows the selected test (scenario input, judge
 method, latest result) and a next-action card that guides the evaluator toward
 the right step — run, fix, compare, or done.
 
-![EDD Platform Proof loop showing a passed Sentiment Observer test](./docs/assets/sentiment-observer-proof-loop.png)
+![EDD Platform Proof loop showing a passed Sentiment Observer test](./docs/assets/sentiment-observer-proof-loop.webp)
 
 ### Error analysis tab — 4-step wizard
 
@@ -47,9 +47,9 @@ failure mode taxonomy:
 4. **Done** — the taxonomy is ready to inform test cases and fix proposals in
    the Proof loop.
 
-![EDD Platform Error analysis step 1 — build review set table](./docs/assets/error-analysis-build-corpus.png)
+![EDD Platform Error analysis step 1 — build review set table](./docs/assets/error-analysis-build-corpus.webp)
 
-![EDD Platform Error analysis step 2 — synced Langfuse comments with failure mode assignment](./docs/assets/error-analysis-review-code.png)
+![EDD Platform Error analysis step 2 — synced Langfuse comments with failure mode assignment](./docs/assets/error-analysis-review-code.webp)
 
 ### Langfuse as the review surface
 
@@ -57,7 +57,7 @@ Reviewers annotate traces directly in Langfuse — not in a shallow copy inside
 the platform. The platform's job is to aggregate those comments, deduplicate
 them, and let evaluators assign failure modes.
 
-![Langfuse trace with live judge span and tool calls for Sentiment Observer](./docs/assets/langfuse-live-judge-trace.png)
+![Langfuse trace with live judge span and tool calls for Sentiment Observer](./docs/assets/langfuse-live-judge-trace.webp)
 
 The "Sync Langfuse comments" button in step 2 pulls all trace comments into
 `ReviewAnnotation` records. Each comment is stored once (deduped by
