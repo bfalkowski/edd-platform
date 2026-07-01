@@ -7,10 +7,16 @@ Beads is the operational task tracker. Use Beads for active ownership,
 dependencies, blockers, resume state, and verification notes. Update this file
 only when milestone state, product direction, or public planning anchors change.
 
-Last Beads reconciliation: 2026-06-26.
+Last Beads reconciliation: 2026-07-01.
 
-At reconciliation time, Beads reported 30 total issues: 30 closed, 0 in
-progress, and 0 open.
+At reconciliation time, Beads reported 41 total issues: 40 closed, 0 in
+progress, and 1 open (1 ready to work).
+
+Note: work between 2026-06-26 and 2026-07-01 (19 commits hardening the wizard
+and rebuilding error analysis) was tracked in a local scratch checklist during
+active development and reconciled into Beads afterward as the closed
+`edd-ddd` epic below. Beads is best suited to epic/milestone-level tracking;
+reconcile fast iteration bursts back into it promptly once they land.
 
 ## Product Direction
 
@@ -36,16 +42,10 @@ AgentDesign
 ## Planning Anchors
 
 - [`PRODUCT_SPINE.md`](PRODUCT_SPINE.md) defines the canonical product objects.
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) summarizes the implemented system shape.
-- [`ARCHITECTURE_READINESS_BRIEF.md`](ARCHITECTURE_READINESS_BRIEF.md) defines
-  users, requirements, constraints, boundaries, and scale path.
-- [`REQUIREMENTS_AND_CONSTRAINTS.md`](REQUIREMENTS_AND_CONSTRAINTS.md),
-  [`SYSTEM_TRADEOFFS.md`](SYSTEM_TRADEOFFS.md),
-  [`OPERABILITY_AND_FAILURE_MODES.md`](OPERABILITY_AND_FAILURE_MODES.md), and
-  [`ARCHITECTURE_DEEP_DIVES.md`](ARCHITECTURE_DEEP_DIVES.md) capture the
-  architecture reasoning that guides implementation.
-- [`HLD_COVERAGE_MATRIX.md`](HLD_COVERAGE_MATRIX.md) tracks planning coverage
-  before feature code.
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) defines the implemented system shape,
+  requirements, component deep dives, and operability/failure-mode behavior.
+- [`SYSTEM_TRADEOFFS.md`](SYSTEM_TRADEOFFS.md) records the reasoning behind
+  the core architecture decisions.
 - [`hld/HLD-004-eval-contracts-runs-judges-and-fixes.md`](hld/HLD-004-eval-contracts-runs-judges-and-fixes.md)
   defines the eval-driven implementation backbone.
 - [`hld/HLD-005-relational-metadata-and-polars-analysis-plane.md`](hld/HLD-005-relational-metadata-and-polars-analysis-plane.md)
@@ -56,8 +56,6 @@ AgentDesign
   manual smoke script for validating the product flow.
 - [`engineering/TASK_TRACKING.md`](engineering/TASK_TRACKING.md) defines how
   this file and Beads work together.
-- [`PUBLIC_DOCS_REPO.md`](PUBLIC_DOCS_REPO.md) links the public documentation
-  repo and tracks the initial migration checklist.
 
 ## Completed Milestones
 
@@ -137,11 +135,30 @@ landing zones, breadth/depth/recoding sampling, promotion of accepted findings
 into proof-loop evidence, and a Polars read-side analysis plane for corpus
 coverage and failure-rate summaries.
 
+### Wizard Hardening and Error-Analysis Rebuild
+
+Complete for the current product slice.
+
+Includes iteration context carried into the failure step after a failed
+compare, a model selector (haiku/sonnet/opus) in the wizard run step, inline
+error recovery with retry on mid-wizard failures, a fix for the wizard
+dismissing itself mid-flow, sidebar re-entry that reopens the wizard at the
+agent's current evidence-state step (or the workspace directly for a
+complete agent), and a full rebuild of Error analysis into the 4-step wizard
+(Build review set -> Review & code -> Confirm modes -> Done) with Langfuse
+comment sync (`POST .../sync-langfuse-comments`) replacing the open-coded
+in-platform annotation flow. Langfuse is now required, not optional, for
+error analysis. Runs are live-only (mock mode removed).
+
+One item from this slice remains open: the wizard's done state still uses a
+separate "View evidence" button rather than an inline evidence chain
+(`edd-1z6`).
+
 ## Beads Queue At Last Reconciliation
 
-Use `bd ready` and `bd list` for the source of truth. At the 2026-06-26
-reconciliation, no Beads work was open or in progress. Recently completed
-epics and final hardening tasks were:
+Use `bd ready` and `bd list` for the source of truth. At the 2026-07-01
+reconciliation, one task was open and ready. Recently completed epics and
+final hardening tasks were:
 
 | Bead | Priority | Status | Scope |
 |---|---|---|---|
@@ -153,6 +170,8 @@ epics and final hardening tasks were:
 | `edd-wnt.5` | P3 | closed | Populate the dedicated public docs repo. |
 | `edd-6dn` | P2 | closed | Design relational metadata plus Polars trace analysis plane. |
 | `edd-eoa` | P2 | closed | Implement first Polars analysis snapshot materializer. |
+| `edd-ddd` | P1 | closed epic | Wizard hardening and error-analysis rebuild (retroactive reconciliation of the 2026-06-28 to 2026-07-01 burst). |
+| `edd-1z6` | P2 | **open, ready** | Wizard done state: show evidence inline instead of the separate "View evidence" button. |
 
 ## Current UI Status
 
@@ -171,9 +190,11 @@ The UI supports the proof-loop vertical slice:
    candidate version, rerun, reevaluate, and compare.
 10. Inspect evidence artifacts, related evidence, and Langfuse trace links from
     the right review panel.
-11. Use the Error analysis tab for trace review, open-coded notes, failure
-    taxonomy, sampling suggestions, promotion into proof-loop evidence, and
-    corpus analytics.
+11. Use the Error analysis tab's 4-step wizard (Build review set -> Review &
+    code -> Confirm modes -> Done) to pull live runs into a review corpus,
+    annotate traces in Langfuse, sync comments back with one click, assign
+    failure modes inline, and promote recurring modes into the taxonomy.
+    Langfuse must be running for this tab.
 12. Use the Readiness tab to create gates and gate decisions.
 
 ## Next Product Hardening
@@ -181,6 +202,10 @@ The UI supports the proof-loop vertical slice:
 Create the next Beads task before starting implementation work. Candidate
 hardening areas are:
 
+- close `edd-1z6`: show evidence inline in the wizard done state instead of
+  the separate "View evidence" button;
+- visual redesign (Anthropic-style tokens, typography, wizard shell) tracked
+  in `TODO.md`;
 - improve evidence-summary display;
 - broaden run history and trace replay views;
 - harden async execution design for long-running run/eval workloads.

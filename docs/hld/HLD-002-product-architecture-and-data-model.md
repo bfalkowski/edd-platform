@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Implemented for the current product slice. See `docs/ARCHITECTURE.md` and `docs/WORK_PLAN.md` for current implementation detail and remaining gaps.
 
 ## Purpose
 
@@ -121,14 +121,14 @@ adding runners, judges, gates, or persistence.
 
 ## Runtime Modes
 
-The platform should support four runtime modes.
+Original design draft (superseded — see below): four runtime modes, `mock`,
+`local`, `platform`, and `auto`, distinguished by provider-key requirements
+and state ownership.
 
-| Mode | Purpose | Provider keys | State |
-|---|---|---|---|
-| `mock` | Deterministic local tests and CI | none | platform fixtures or memory |
-| `local` | Developer-only provider experiments | local env | local platform state |
-| `platform` | Canonical live generation/evaluation | platform-owned | platform records |
-| `auto` | Prefer platform/live when configured, otherwise mock | optional | platform records |
+The implementation collapsed this to two modes: `mock` (deterministic,
+test/CI only, never exposed in the console) and `live` (the only mode the
+console can trigger). See `docs/ARCHITECTURE.md`'s Runtime Modes section for
+the current model.
 
 CI must pass without model-provider credentials.
 

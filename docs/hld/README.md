@@ -16,12 +16,13 @@ to use the consolidated product language:
 
 | ID | Title | Status |
 |---|---|---|
-| [HLD-000](HLD-000-clean-room-consolidation.md) | Clean-Room Consolidation Plan | Draft |
-| [HLD-001](HLD-001-artifact-retrieval-and-evidence-context.md) | Artifact Retrieval and Evidence Context | Draft |
-| [HLD-002](HLD-002-product-architecture-and-data-model.md) | Product Architecture and Data Model | Draft |
-| [HLD-003](HLD-003-eval-driven-agent-design-workflow.md) | Eval-Driven Agent Design Workflow | Draft |
-| [HLD-004](HLD-004-eval-contracts-runs-judges-and-fixes.md) | Eval Contracts, Runs, Judges, and Fixes | Draft |
-| [HLD-005](HLD-005-relational-metadata-and-polars-analysis-plane.md) | Relational Metadata and Polars Analysis Plane | Draft |
+| [HLD-000](HLD-000-clean-room-consolidation.md) | Clean-Room Consolidation Plan | Implemented |
+| [HLD-001](HLD-001-artifact-retrieval-and-evidence-context.md) | Artifact Retrieval and Evidence Context | Implemented for the current product slice |
+| [HLD-002](HLD-002-product-architecture-and-data-model.md) | Product Architecture and Data Model | Implemented for the current product slice |
+| [HLD-003](HLD-003-eval-driven-agent-design-workflow.md) | Eval-Driven Agent Design Workflow | Implemented for the current product slice |
+| [HLD-004](HLD-004-eval-contracts-runs-judges-and-fixes.md) | Eval Contracts, Runs, Judges, and Fixes | Implemented for the current product slice |
+| [HLD-005](HLD-005-relational-metadata-and-polars-analysis-plane.md) | Relational Metadata and Polars Analysis Plane | Implemented for the current product slice |
+| [HLD-006](HLD-006-agentic-investigation-evaluation-harness.md) | Agentic Investigation Evaluation Harness | Draft |
 
 ## Notes
 
@@ -31,15 +32,10 @@ to use the consolidated product language:
 
 ## Architecture Companions
 
-The HLD set is supported by product architecture docs at the repo root:
+The HLD set is supported by two product architecture docs at the repo root:
 
-- [`../ARCHITECTURE_READINESS_BRIEF.md`](../ARCHITECTURE_READINESS_BRIEF.md)
-  summarizes users, requirements, constraints, boundaries, and scale path.
-- [`../REQUIREMENTS_AND_CONSTRAINTS.md`](../REQUIREMENTS_AND_CONSTRAINTS.md)
-  defines functional and non-functional requirements.
-- [`../SYSTEM_TRADEOFFS.md`](../SYSTEM_TRADEOFFS.md) records architecture
-  tradeoffs.
-- [`../OPERABILITY_AND_FAILURE_MODES.md`](../OPERABILITY_AND_FAILURE_MODES.md)
-  describes failure modes and recovery behavior.
-- [`../ARCHITECTURE_DEEP_DIVES.md`](../ARCHITECTURE_DEEP_DIVES.md) expands the
-  eval evidence, tool governance, context, and readiness flows.
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) defines users, requirements,
+  system shape, component deep dives, boundaries, operability/failure-mode
+  behavior, and the scale path.
+- [`../SYSTEM_TRADEOFFS.md`](../SYSTEM_TRADEOFFS.md) records the reasoning
+  behind the core architecture decisions.

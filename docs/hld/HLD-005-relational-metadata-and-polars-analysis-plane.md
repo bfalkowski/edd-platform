@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Implemented for the current product slice. See `docs/ARCHITECTURE.md` and `docs/WORK_PLAN.md` for current implementation detail and remaining gaps.
 
 ## Purpose
 

@@ -1,6 +1,6 @@
 ---
 name: edd-docs-hld
-description: Update EDD Platform planning docs, HLDs, product spine, roadmap, or coverage matrix. Use when the user asks whether the plan is aligned, whether HLDs are complete, what to build next, how to avoid drift, or when adding/changing product architecture without feature code.
+description: Update EDD Platform planning docs, HLDs, product spine, or roadmap. Use when the user asks whether the plan is aligned, whether HLDs are complete, what to build next, how to avoid drift, or when adding/changing product architecture without feature code.
 ---
 
 # EDD Docs And HLD
@@ -12,11 +12,13 @@ Use this skill for planning and architecture work.
 Start with:
 
 - `docs/PRODUCT_SPINE.md`
-- `docs/HLD_COVERAGE_MATRIX.md`
+- `docs/ARCHITECTURE.md`
 - `docs/WORK_PLAN.md`
 - `docs/hld/README.md`
 
-Read the relevant HLD after identifying the product area.
+Read the relevant HLD after identifying the product area. Each HLD's own
+`## Status` line states whether it is implemented, implemented-with-gaps, or
+still draft — there is no separate coverage-tracking doc.
 
 ## Use Case References
 
@@ -26,7 +28,7 @@ Read the relevant HLD after identifying the product area.
 ## Workflow
 
 1. Map the question to the product spine.
-2. Check whether the capability is covered, partial, planned, or a gap in `docs/HLD_COVERAGE_MATRIX.md`.
+2. Check the capability's HLD `## Status` line and cross-reference `docs/ARCHITECTURE.md`/`docs/WORK_PLAN.md` for what's actually shipped.
 3. Update or create the smallest doc needed to remove ambiguity.
 4. Map human feedback to evidence artifacts or the eval loop before adding new concepts.
 5. Keep HLD language aligned with the consolidated repo:

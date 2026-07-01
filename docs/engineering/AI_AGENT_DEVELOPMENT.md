@@ -22,7 +22,7 @@ The project uses a small set of steering files:
 - `docs/engineering/TASK_TRACKING.md`: repo-local task tracking policy
 - `docs/design/FRONTEND_GUIDE.md`: frontend interaction and visual rules
 - `docs/hld/`: canonical high-level designs
-- `docs/decisions/`: short architectural decision records
+- `docs/SYSTEM_TRADEOFFS.md`: architectural decisions and the tradeoffs behind them
 
 If a proposed change conflicts with these files, the steering files win unless
 the user explicitly changes direction.

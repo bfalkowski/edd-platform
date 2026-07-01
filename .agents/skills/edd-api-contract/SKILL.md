@@ -32,7 +32,7 @@ Read these before coding:
 7. Update `scripts/lint_openapi.py` required paths for new route families.
 8. Regenerate `docs/openapi.json` with `npm run api:openapi`.
 9. Run `./scripts/test.sh`.
-10. Update `docs/WORK_PLAN.md` and `docs/HLD_COVERAGE_MATRIX.md` only for completed work.
+10. Update `docs/WORK_PLAN.md` only for completed work.
 
 ## Guardrails
 

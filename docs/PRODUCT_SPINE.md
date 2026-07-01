@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Current — canonical product vocabulary for the implemented product slice.
 
 ## Purpose
 
@@ -118,7 +118,8 @@ It should capture:
 
 - agent design and version
 - scenario
-- mode (`mock`, `local`, `platform`, `auto`)
+- mode (`mock` — deterministic, CI/test only, never exposed in the console;
+  `live` — the only mode reachable from the wizard)
 - provider/model if live
 - tool calls and tool results
 - output text

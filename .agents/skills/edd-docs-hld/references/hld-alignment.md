@@ -5,9 +5,10 @@ Use this reference when checking whether docs still match the product direction.
 ## Workflow
 
 1. Start from `docs/PRODUCT_SPINE.md`.
-2. Check `docs/HLD_COVERAGE_MATRIX.md` for covered, partial, planned, and gap
-   areas.
-3. Read the HLD for the product area under discussion.
+2. Read the HLD for the product area under discussion, starting with its
+   `## Status` line (implemented, implemented-with-gaps, or draft).
+3. Cross-reference `docs/WORK_PLAN.md`'s Completed Milestones for what has
+   actually shipped, since HLD status can lag real implementation.
 4. Compare the HLD against the actual repo direction:
    - one React console;
    - API-owned platform state;

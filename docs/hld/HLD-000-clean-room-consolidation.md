@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Implemented. See `docs/ARCHITECTURE.md` and `docs/WORK_PLAN.md` for current implementation detail.
 
 ## Purpose
 
