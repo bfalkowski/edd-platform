@@ -2,40 +2,26 @@
 
 FastAPI backend for EDD Platform.
 
-This app owns persistence, agent designs, judge prompts, gates, evidence
-context, promotion, and integration boundaries.
+This app owns persistence, agent designs, versions, scenarios, eval
+contracts, runs, eval results, judge outputs, failure packets, fix
+proposals, comparisons, gates, evidence artifacts/links/context packs, and
+the Langfuse integration boundary.
 
-Current first slice:
-
-- `GET /health`
-- `GET /api/projects`
-- `GET /api/projects/{project_id}`
-- `GET /api/projects/{project_id}/tools`
-- `GET /api/projects/{project_id}/agent-designs`
-- `POST /api/projects/{project_id}/agent-designs`
-- `GET /api/projects/{project_id}/agent-designs/{agent_id}`
-- `DELETE /api/projects/{project_id}/agent-designs/{agent_id}`
-- `POST /api/projects/{project_id}/agent-designs/{agent_id}/runs`
-- `POST /api/projects/{project_id}/artifact-links`
-- `GET /api/projects/{project_id}/artifacts`
-- `GET /api/projects/{project_id}/artifacts/search`
-- `GET /api/projects/{project_id}/artifacts/{artifact_id}`
-- `POST /api/projects/{project_id}/artifacts/{artifact_id}/evaluate`
-- `GET /api/projects/{project_id}/artifacts/{artifact_id}/links`
-- `POST /api/projects/{project_id}/context-packs`
+The API surface is generated, not hand-maintained here — see
+[`../../docs/API_CONTRACT.md`](../../docs/API_CONTRACT.md) and
+[`../../docs/openapi.json`](../../docs/openapi.json) for the current contract
+and the contract-first rules to follow before adding or changing routes.
 
 Local state is stored in Postgres by default. The API reads
 `EDD_PLATFORM_DATABASE_URL`, defaulting to
-`postgresql://edd_platform:edd_platform@127.0.0.1:5432/edd_platform`.
+`postgresql://edd_platform:edd_platform@127.0.0.1:15432/edd_platform`.
 
 Tests use `EDD_PLATFORM_STORAGE_BACKEND=memory` so they do not require a
 database service.
 
-Run requests default to deterministic mock mode. To use live OpenAI mode, set
-`OPENAI_API_KEY` before starting the API and send `"mode": "live"` to the run
-endpoint. The default live model is `gpt-5-nano`; set `EDD_OPENAI_MODEL` to
-override it.
-
-The API seeds an approved `get_weather` tool for local tool-calling runs. New
-agent designs currently allow that tool by default so the runner can prove the
-platform-governed tool boundary before the UI adds explicit tool assignment.
+Run requests default to deterministic `mock` mode (no provider credentials
+required). To run live, set `ANTHROPIC_API_KEY` and send `"mode": "live"` to
+the run endpoint. The default live model is Claude Haiku; override with
+`EDD_ANTHROPIC_MODEL`. The console never sends `mock` — see
+[`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)'s Runtime Modes
+section for the console/API boundary.

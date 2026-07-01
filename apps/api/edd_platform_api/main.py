@@ -184,7 +184,6 @@ if str(RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(RUNNER_ROOT))
 
 from edd_runner import (  # noqa: E402
-    AnthropicRunnerConfig,
     RunnerAgentDesign,
     RunnerScenario,
     RunnerToolDefinition,

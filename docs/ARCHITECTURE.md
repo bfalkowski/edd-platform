@@ -77,10 +77,8 @@ flowchart TB
     end
 
     subgraph Examples["examples"]
-      EvalScratch["eval-from-scratch"]
-      Regression["regression-diagnosis"]
-      Flaky["flaky-eval-pipeline"]
-      Capability["research-capability-definition"]
+      SentimentObserver["sentiment-observer"]
+      CustomerTriage["customer-triage"]
     end
   end
 
@@ -262,20 +260,19 @@ failures remain visible rather than being hidden by a single passing run.
 flowchart TB
   Platform["EDD Platform"]
 
-  Eval["Eval From Scratch<br/>define task, dataset, scoring, dashboard"]
-  Regression["Regression Diagnosis<br/>model vs harness vs data vs infra"]
-  Flaky["Flaky Eval Pipeline<br/>retries, observability, deterministic replay"]
-  Research["Capability Definition<br/>turn qualitative good into measurable artifacts"]
+  Sentiment["Sentiment Observer<br/>conversation monitoring, escalation-risk detection"]
+  Triage["Customer Triage<br/>support ticket routing, deterministic eval-driven fix loop"]
 
-  Platform --> Eval
-  Platform --> Regression
-  Platform --> Flaky
-  Platform --> Research
+  Platform --> Sentiment
+  Platform --> Triage
 ```
 
-Each example exercises the same platform services: project-scoped state,
-artifacts, artifact links, context packs, runner evidence, eval results,
-failure packets, gates, and trace references.
+Each example (`examples/sentiment-observer`, `examples/customer-triage`) is a
+seeded project that exercises the full product spine: agent design, versions,
+scenarios, eval contracts, runs, eval results, failure packets, fix proposals,
+comparisons, and evidence artifacts. Seed with
+`python scripts/seed_sentiment_observer_demo.py` and
+`python scripts/seed_customer_triage_demo.py` against a running local API.
 
 ## Responsibility Boundaries
 

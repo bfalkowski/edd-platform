@@ -1,14 +1,23 @@
 # apps/web
 
-React product console for EDD Platform.
+React product console for EDD Platform. This is the only product UI.
 
-This is the only product UI. It should absorb the useful Lab-style interaction
-patterns: quiet left navigation, agent design list, center workflow, right
-review panel, and step-local activity.
+Layout: dark warm left sidebar (agent list, service status) and a main
+workspace with five tabs per agent — Agent, Proof loop, Error analysis,
+Evidence, Readiness.
 
-Current first slice:
+Two wizards drive the workflow:
 
-- create an agent design from intent
-- list agent designs in the left nav
-- select an agent and show a deterministic evidence context pack
-- review an artifact in a docked right-side panel
+- **Agent creation wizard** (`Wizard.tsx`): Describe → Review → Run → Name
+  the failure → Fix → Compare → Done. Runs live against Anthropic.
+- **Error analysis wizard** (inline in `main.tsx`): Build review set →
+  Review & code (in Langfuse, synced back with one click) → Confirm modes →
+  Done.
+
+See [`../../docs/design/FRONTEND_GUIDE.md`](../../docs/design/FRONTEND_GUIDE.md)
+for the full interaction and visual model, and
+[`../../docs/HAPPY_PATH_WALKTHROUGH.md`](../../docs/HAPPY_PATH_WALKTHROUGH.md)
+for a step-by-step manual walkthrough.
+
+`main.tsx` and `Wizard.tsx` are large single files; component extraction is a
+known next step, not yet done.
