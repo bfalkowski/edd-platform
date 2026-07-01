@@ -45,7 +45,7 @@ AgentDesign
 
 - Treat tools, traces, judge outputs, and failure packets as evidence.
 - Prefer deterministic checks before LLM-as-judge behavior.
-- Keep live LLM calls optional and excluded from CI; provider-key env vars such as `OPENAI_API_KEY` must never be required for tests.
+- Keep live LLM calls optional and excluded from CI; provider-key env vars such as `ANTHROPIC_API_KEY` must never be required for tests.
 - Do not trust an LLM judge because it passed one example; calibrate judges
   against expected outputs or human labels before using them for gates.
 - Do not leak expected outputs into judge prompts.

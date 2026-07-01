@@ -45,5 +45,5 @@ still draft — there is no separate coverage-tracking doc.
 - Do not preserve obsolete history for its own sake.
 - Do not create broad TODO lists detached from HLD/API/UI evidence.
 - Keep private context out of public docs.
-- Do not require provider-key env vars such as `OPENAI_API_KEY` in CI or deterministic docs/examples.
+- Do not require provider-key env vars such as `ANTHROPIC_API_KEY` in CI or deterministic docs/examples.
 - Keep docs public-safe and product-focused.

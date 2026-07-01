@@ -17,7 +17,7 @@ the product.
 
 The project uses a small set of steering files:
 
-- `AGENTS.md`: repo rules, product direction, commit constraints
+- `CLAUDE.md`: repo rules, product direction, commit constraints
 - `docs/WORK_PLAN.md`: active implementation checklist
 - `docs/engineering/TASK_TRACKING.md`: repo-local task tracking policy
 - `docs/design/FRONTEND_GUIDE.md`: frontend interaction and visual rules
@@ -32,7 +32,7 @@ the user explicitly changes direction.
 The expected development loop is:
 
 1. Read the relevant steering files.
-2. Select and read the matching local skill in `.agents/skills`.
+2. Select and read the matching local skill in `.claude/skills`.
 3. Read the skill reference file when the task matches a specific workflow.
 4. Check the task queue when a repo-local tracker such as Beads is available.
 5. Translate the request into a small, verifiable outcome.
@@ -60,8 +60,8 @@ Common drift modes:
 
 Guardrails:
 
-- use the product vocabulary in `AGENTS.md`
-- apply the relevant `.agents/skills` workflow before meaningful work
+- use the product vocabulary in `CLAUDE.md`
+- apply the relevant `.claude/skills` workflow before meaningful work
 - keep frontend work aligned with the design guide
 - keep HLDs tied to `docs/WORK_PLAN.md`
 - require local/mock behavior to work without provider keys

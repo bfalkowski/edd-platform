@@ -14,15 +14,11 @@ Use Beads when it is available locally.
 Beads is a good fit because it keeps tasks close to the repo and gives agents a
 concrete ready queue instead of relying on conversational memory.
 
-Codex Symphony is useful later if the project needs multiple parallel Codex
-agents, a larger orchestration surface, or project-management style routing.
-For now, it is more machinery than this repo needs.
-
 ## What Gets Committed
 
 Commit:
 
-- the workflow rule in `AGENTS.md`
+- the workflow rule in `CLAUDE.md`
 - this task-tracking policy
 - public roadmap changes in `docs/WORK_PLAN.md`
 - durable task metadata only if it is intentionally part of the repo and does
@@ -41,7 +37,7 @@ Do not commit:
 
 Before starting or resuming a slice:
 
-1. Read `AGENTS.md`.
+1. Read `CLAUDE.md`.
 2. Read `docs/WORK_PLAN.md`.
 3. Check the Beads ready queue when Beads is installed.
 4. Pick the smallest task that advances the active milestone.

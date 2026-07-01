@@ -25,3 +25,4 @@ playwright-report/
 .beads-credential-key
 .beads/proxieddb/
 TODO.md
+.local-discussion/

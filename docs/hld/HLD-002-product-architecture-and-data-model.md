@@ -426,7 +426,7 @@ The platform should store `TraceRef` artifacts that link to Langfuse evidence.
 This repo intentionally uses AI coding agents, but product direction is governed
 by steering files:
 
-- `AGENTS.md`
+- `CLAUDE.md`
 - `docs/WORK_PLAN.md`
 - `docs/design/FRONTEND_GUIDE.md`
 - `docs/engineering/AI_AGENT_DEVELOPMENT.md`
