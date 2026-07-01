@@ -12,6 +12,16 @@ artifacts — not from intuition.
 EDD Platform turns agent traces into failure modes, failure modes into evals,
 evals into bounded fixes, and fixes into evidence-backed promotion decisions.
 
+## Live demo: syncing a Langfuse trace comment into the app
+
+![Commenting on a trace in Langfuse and syncing it back into the platform as evidence](./docs/assets/error-analysis-langfuse-sync-demo.gif)
+
+1. Open the trace for a failed run in Langfuse.
+2. Add a comment noting what went wrong.
+3. Back in the app, click "Sync Langfuse comments."
+4. The comment appears as an annotation on that trace, ready to be assigned a
+   failure mode.
+
 ## The workspace
 
 Each agent gets five tabs: **Agent**, **Proof loop**, **Error analysis**,
@@ -144,7 +154,10 @@ packages/langfuse-adapter
 ## What Works Now
 
 **Agent design**
-- Create and edit agent designs with name, core instruction, and enabled tools.
+- Outcome-based drafting is the primary creation flow — see
+  [Step 1 of the walkthrough](docs/HAPPY_PATH_WALKTHROUGH.md#step-1--describe-your-agent).
+- Create and edit agent designs directly with name, core instruction, and
+  enabled tools.
 - Platform-owned tool definitions with approval status and agent allowlists.
 
 **Proof loop**
