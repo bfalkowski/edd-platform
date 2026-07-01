@@ -203,15 +203,8 @@ except Exception:
 
 app = FastAPI(title="EDD Platform API")
 
-
-@app.get("/health")
-def health() -> Dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/api/services", response_model=ServiceStatusResponse)
-def get_service_status() -> ServiceStatusResponse:
-    return service_status_response()
+from edd_platform_api.routers import core as _core_router  # noqa: E402
+app.include_router(_core_router.router)
 
 
 def find_review_item_for_langfuse_import(
@@ -3010,16 +3003,6 @@ def delete_agent_design_records(project_id: str, agent_id: str) -> None:
 
     _agent_designs.pop(agent_id, None)
     store.delete_record("agent_designs", agent_id)
-
-
-@app.get("/api/projects")
-def list_projects() -> List[Project]:
-    return sorted(_projects.values(), key=lambda project: project.updated_at, reverse=True)
-
-
-@app.get("/api/projects/{project_id}")
-def get_project(project_id: str) -> Project:
-    return get_project_or_404(project_id)
 
 
 @app.get("/api/projects/{project_id}/agent-designs")
