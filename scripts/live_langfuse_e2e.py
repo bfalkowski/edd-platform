@@ -53,7 +53,7 @@ def get(path: str) -> Union[dict, list]:
 
 
 def main() -> None:
-    require_env("OPENAI_API_KEY")
+    require_env("ANTHROPIC_API_KEY")
     os.environ.setdefault("LANGFUSE_BASE_URL", "http://localhost:3001")
     os.environ.setdefault("LANGFUSE_PUBLIC_KEY", "pk-lf-local-demo")
     os.environ.setdefault("LANGFUSE_SECRET_KEY", "sk-lf-local-demo")

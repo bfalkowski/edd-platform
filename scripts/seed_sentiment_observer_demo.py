@@ -75,7 +75,7 @@ def should_run_live() -> bool:
         return False
     if requested in {"1", "true", "yes", "live"}:
         return True
-    return bool(os.environ.get("OPENAI_API_KEY", "").strip())
+    return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
 
 
 def main() -> None:

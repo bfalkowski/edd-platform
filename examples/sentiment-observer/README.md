@@ -33,7 +33,7 @@ Seed the example test case:
 python scripts/seed_sentiment_observer_demo.py
 ```
 
-If `OPENAI_API_KEY` is available, the script also runs and live-judges the
+If `ANTHROPIC_API_KEY` is available, the script also runs and live-judges the
 example. To force seed-only mode:
 
 ```bash
