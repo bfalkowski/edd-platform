@@ -210,6 +210,7 @@ from edd_platform_api.routers import comparisons as _comparisons_router  # noqa:
 from edd_platform_api.routers import scenarios as _scenarios_router  # noqa: E402
 from edd_platform_api.routers import artifacts as _artifacts_router  # noqa: E402
 from edd_platform_api.routers import tools as _tools_router  # noqa: E402
+from edd_platform_api.routers import eval_contracts as _eval_contracts_router  # noqa: E402
 app.include_router(_core_router.router)
 app.include_router(_trace_refs_router.router)
 app.include_router(_judge_prompt_templates_router.router)
@@ -217,6 +218,7 @@ app.include_router(_comparisons_router.router)
 app.include_router(_scenarios_router.router)
 app.include_router(_artifacts_router.router)
 app.include_router(_tools_router.router)
+app.include_router(_eval_contracts_router.router)
 
 
 def find_review_item_for_langfuse_import(
@@ -3025,7 +3027,7 @@ def draft_agent_from_outcome(
             status="active",
         ),
     )
-    contract = create_eval_contract(
+    contract = _eval_contracts_router.create_eval_contract(
         project_id,
         EvalContractCreate(
             agent_design_id=created.agent.id,
@@ -3334,148 +3336,6 @@ def get_gate_decision(project_id: str, decision_id: str) -> GateDecision:
     return get_gate_decision_or_404(project_id, decision_id)
 
 
-@app.get("/api/projects/{project_id}/eval-contracts")
-def list_eval_contracts(
-    project_id: str,
-    agent_design_id: Optional[str] = None,
-) -> List[EvalContract]:
-    get_project_or_404(project_id)
-    contracts = [
-        contract
-        for contract in _eval_contracts.values()
-        if contract.project_id == project_id
-        and (agent_design_id is None or contract.agent_design_id == agent_design_id)
-    ]
-    return sorted(contracts, key=lambda contract: contract.updated_at, reverse=True)
-
-
-@app.post("/api/projects/{project_id}/eval-contracts", status_code=201)
-def create_eval_contract(project_id: str, payload: EvalContractCreate) -> EvalContract:
-    get_project_or_404(project_id)
-    get_agent_design_or_404(project_id, payload.agent_design_id)
-    if payload.scenario_id is not None:
-        scenario = get_scenario_or_404(project_id, payload.scenario_id)
-        if scenario.agent_design_id != payload.agent_design_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Eval contract scenario must belong to the same agent design.",
-            )
-    if payload.judge_prompt_template_id is not None:
-        get_judge_prompt_template_or_404(project_id, payload.judge_prompt_template_id)
-
-    now = datetime.now(timezone.utc)
-    checks = contract_generated_checks(payload)
-    contract = EvalContract(
-        id=f"contract_{uuid4().hex[:12]}",
-        project_id=project_id,
-        agent_design_id=payload.agent_design_id,
-        name=payload.name.strip(),
-        description=payload.description.strip(),
-        scenario_id=payload.scenario_id,
-        version=payload.version.strip(),
-        expected_behavior=payload.expected_behavior,
-        required_evidence=payload.required_evidence,
-        required_tools=payload.required_tools,
-        forbidden_tools=payload.forbidden_tools,
-        forbidden_behavior=payload.forbidden_behavior,
-        output_requirements=payload.output_requirements,
-        checks=checks,
-        judge_prompt_template_id=payload.judge_prompt_template_id,
-        pass_criteria=payload.pass_criteria.strip(),
-        status=payload.status.strip(),
-        created_at=now,
-        updated_at=now,
-    )
-    _eval_contracts[contract.id] = contract
-    store.save_record("eval_contracts", contract.id, contract)
-
-    check_lines = "\n".join(
-        f"- {check.get('id', 'unnamed_check')}: {check.get('type', 'unspecified')}"
-        for check in contract.checks
-    )
-    artifact = create_artifact(
-        project_id=project_id,
-        artifact_type="EVAL_CONTRACT",
-        artifact_id=contract.id,
-        title=contract.name,
-        body=(
-            f"Description\n{contract.description or 'None'}\n\n"
-            f"Expected behavior\n"
-            + "\n".join(f"- {item}" for item in contract.expected_behavior)
-            + "\n\nRequired tools\n"
-            + "\n".join(f"- {tool}" for tool in contract.required_tools)
-            + "\n\nChecks\n"
-            + (check_lines or "None")
-            + f"\n\nPass criteria\n{contract.pass_criteria}"
-        ),
-        source="eval-contract",
-        agent_design_id=contract.agent_design_id,
-        now=now,
-    )
-    link_to_agent_design(
-        project_id=project_id,
-        agent_design_id=contract.agent_design_id,
-        artifact=artifact,
-        now=now,
-    )
-    if contract.judge_prompt_template_id is not None:
-        prompt_artifact = find_artifact_by_type_and_artifact_id(
-            "JUDGE_PROMPT_TEMPLATE",
-            contract.judge_prompt_template_id,
-        )
-        if prompt_artifact is not None:
-            link_artifacts(
-                project_id=project_id,
-                source_artifact_id=artifact.id,
-                target_artifact_id=prompt_artifact.id,
-                relationship_type="USES",
-                now=now,
-            )
-    return contract
-
-
-@app.get("/api/projects/{project_id}/eval-contracts/{contract_id}")
-def get_eval_contract(project_id: str, contract_id: str) -> EvalContract:
-    get_project_or_404(project_id)
-    return get_eval_contract_or_404(project_id, contract_id)
-
-
-@app.patch("/api/projects/{project_id}/eval-contracts/{contract_id}/rubric")
-def update_eval_contract_rubric(
-    project_id: str,
-    contract_id: str,
-    payload: EvalContractRubricUpdate,
-) -> EvalContract:
-    get_project_or_404(project_id)
-    contract = get_eval_contract_or_404(project_id, contract_id)
-    updated_checks = []
-    for check in contract.checks:
-        if check.get("type") == "rubric_judge":
-            updated_checks.append({**check, "value": payload.rubric.strip()})
-        else:
-            updated_checks.append(check)
-    updated = contract.model_copy(
-        update={"checks": updated_checks, "updated_at": datetime.now(timezone.utc)}
-    )
-    _eval_contracts[contract_id] = updated
-    store.save_record("eval_contracts", contract_id, updated)
-    return updated
-
-
-@app.patch("/api/projects/{project_id}/eval-contracts/{contract_id}/checks")
-def update_eval_contract_checks(
-    project_id: str,
-    contract_id: str,
-    payload: EvalContractChecksUpdate,
-) -> EvalContract:
-    get_project_or_404(project_id)
-    contract = get_eval_contract_or_404(project_id, contract_id)
-    updated = contract.model_copy(
-        update={"checks": payload.checks, "updated_at": datetime.now(timezone.utc)}
-    )
-    _eval_contracts[contract_id] = updated
-    store.save_record("eval_contracts", contract_id, updated)
-    return updated
 
 
 @app.get("/api/projects/{project_id}/agent-designs/{agent_id}/versions")
@@ -4506,7 +4366,7 @@ def promote_review_annotation(
             if failure_mode is not None
             else "Avoid the behavior described by the accepted discovery finding."
         )
-        contract = create_eval_contract(
+        contract = _eval_contracts_router.create_eval_contract(
             project_id,
             EvalContractCreate(
                 agent_design_id=item.agent_design_id,
