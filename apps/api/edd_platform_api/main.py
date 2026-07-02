@@ -25,6 +25,12 @@ from edd_platform_api.polars_analysis import (
     review_corpus_analysis_from_snapshot,
 )
 from edd_platform_api.tool_adapters import tool_adapter_contract
+from edd_platform_api.seed_data import (
+    APARTMENT_SEARCH_AGENT_INTENT,
+    PREVIOUS_SENTIMENT_OBSERVER_INTENT,
+    SENTIMENT_OBSERVER_INTENT,
+    build_sentiment_observer_tools,
+)
 from edd_platform_api.evidence_context import (
     build_deterministic_evidence_summary,
     build_evidence_summary_prompt,
@@ -455,182 +461,10 @@ def upsert_tool_definition_artifact(tool: ToolDefinition, now: datetime) -> Arti
     )
 
 
-previous_sentiment_observer_intent = (
-    "Monitor conversations, score sentiment, identify escalation risk, "
-    "summarize emotional trajectory, and produce concise observer notes "
-    "without taking over the conversation."
-)
-sentiment_observer_intent = (
-    "Run as a long-running observer for conversations. Maintain a running "
-    "model of the emotional arc, score sentiment and escalation movement, "
-    "summarize trajectory changes, and produce concise observer notes "
-    "that downstream APIs can use without taking over the conversation."
-)
-
-sentiment_observer_tools = [
-    ToolDefinition(
-        id="tool_score_conversation_sentiment",
-        project_id=default_project.id,
-        name="score_conversation_sentiment",
-        description="Score sentiment for the latest conversation window and report movement from prior state.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "conversation_id": {
-                    "type": "string",
-                    "description": "Stable id for the conversation being monitored.",
-                },
-                "conversation_text": {
-                    "type": "string",
-                    "description": "Conversation transcript or message text to score.",
-                },
-                "speaker": {
-                    "type": "string",
-                    "description": "Optional speaker or participant to focus on.",
-                },
-                "previous_sentiment_score": {
-                    "type": "number",
-                    "minimum": -1,
-                    "maximum": 1,
-                    "description": "Prior normalized score for this conversation, if known.",
-                },
-            },
-            "required": ["conversation_text"],
-        },
-        output_schema={
-            "type": "object",
-            "properties": {
-                "label": {"type": "string", "enum": ["positive", "neutral", "negative", "mixed"]},
-                "score": {"type": "number", "minimum": -1, "maximum": 1},
-                "delta": {"type": "number", "description": "Score movement from prior state."},
-                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                "rationale": {"type": "string"},
-            },
-            "required": ["label", "score", "confidence", "rationale"],
-        },
-        output_description="Sentiment label, normalized score, delta, confidence, and rationale.",
-        implementation_kind="mock",
-        implementation_key="mock.score_conversation_sentiment",
-        config_schema={},
-        mock_response=(
-            "Sentiment: mixed. Score: -0.25. Delta: -0.18. Confidence: 0.82. "
-            "Rationale: the customer is frustrated but still cooperative."
-        ),
-        status="approved",
-        created_at=seeded_at,
-        updated_at=seeded_at,
-    ),
-    ToolDefinition(
-        id="tool_detect_escalation_risk",
-        project_id=default_project.id,
-        name="detect_escalation_risk",
-        description="Detect escalation risk and risk movement from language, urgency, and unresolved blockers.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "conversation_text": {
-                    "type": "string",
-                    "description": "Conversation transcript or message text to assess.",
-                },
-                "known_issue_age_hours": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "description": "Optional age of the issue in hours.",
-                },
-                "previous_risk_score": {
-                    "type": "number",
-                    "minimum": 0,
-                    "maximum": 1,
-                    "description": "Prior escalation risk score for this conversation, if known.",
-                },
-            },
-            "required": ["conversation_text"],
-        },
-        output_schema={
-            "type": "object",
-            "properties": {
-                "risk_level": {"type": "string", "enum": ["low", "medium", "high"]},
-                "risk_score": {"type": "number", "minimum": 0, "maximum": 1},
-                "risk_delta": {"type": "number", "description": "Risk movement from prior state."},
-                "triggers": {"type": "array", "items": {"type": "string"}},
-                "recommended_observer_note": {"type": "string"},
-            },
-            "required": ["risk_level", "risk_score", "triggers"],
-        },
-        output_description="Escalation risk level, score, triggers, and observer note.",
-        implementation_kind="mock",
-        implementation_key="mock.detect_escalation_risk",
-        config_schema={},
-        mock_response=(
-            "Escalation risk: high. Score: 0.78. Delta: +0.21. Triggers: repeated blocker, "
-            "urgent language, unresolved ownership."
-        ),
-        status="approved",
-        created_at=seeded_at,
-        updated_at=seeded_at,
-    ),
-    ToolDefinition(
-        id="tool_summarize_conversation_signals",
-        project_id=default_project.id,
-        name="summarize_conversation_signals",
-        description="Summarize sentiment drivers, emotional trajectory, and the updated running arc state.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "conversation_text": {
-                    "type": "string",
-                    "description": "Conversation transcript or message text to summarize.",
-                },
-                "include_recommendations": {
-                    "type": "boolean",
-                    "description": "Whether to include recommended monitoring actions.",
-                },
-                "previous_arc_state": {
-                    "type": "object",
-                    "description": "Prior conversation emotional-arc state maintained by the consumer.",
-                    "additionalProperties": True,
-                },
-            },
-            "required": ["conversation_text"],
-        },
-        output_schema={
-            "type": "object",
-            "properties": {
-                "summary": {"type": "string"},
-                "sentiment_drivers": {"type": "array", "items": {"type": "string"}},
-                "trajectory": {
-                    "type": "string",
-                    "enum": ["improving", "stable", "worsening", "unclear"],
-                },
-                "trend_score": {"type": "number", "minimum": -1, "maximum": 1},
-                "arc_state": {
-                    "type": "object",
-                    "description": "Updated running emotional-arc state for downstream consumers.",
-                    "additionalProperties": True,
-                },
-                "recommended_actions": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["summary", "sentiment_drivers", "trajectory", "trend_score", "arc_state"],
-        },
-        output_description="Concise monitoring summary with drivers, trajectory, trend score, and updated arc state.",
-        implementation_kind="mock",
-        implementation_key="mock.summarize_conversation_signals",
-        config_schema={},
-        mock_response=(
-            "Summary: customer sentiment is worsening around unresolved deployment impact. "
-            "Trajectory: worsening. Trend score: -0.34. Drivers: uncertainty, repeated failure, "
-            "lack of timeline. Arc state updated for downstream monitoring."
-        ),
-        status="approved",
-        created_at=seeded_at,
-        updated_at=seeded_at,
-    ),
-]
-
-
 def seed_sentiment_observer_defaults() -> None:
     now = seeded_at
-    for tool in sentiment_observer_tools:
+    tools = build_sentiment_observer_tools(default_project.id, now)
+    for tool in tools:
         existing = _tool_definitions.get(tool.id)
         seeded_tool = tool if existing is None else tool.model_copy(
             update={
@@ -642,14 +476,14 @@ def seed_sentiment_observer_defaults() -> None:
         store.save_record("tool_definitions", seeded_tool.id, seeded_tool)
         upsert_tool_definition_artifact(seeded_tool, now)
 
-    tool_names = [tool.name for tool in sentiment_observer_tools]
+    tool_names = [tool.name for tool in tools]
     existing_agent = _agent_designs.get("agent_sentiment_observer")
     if existing_agent is None:
         agent = AgentDesign(
             id="agent_sentiment_observer",
             project_id=default_project.id,
             name="Sentiment Observer",
-            intent=sentiment_observer_intent,
+            intent=SENTIMENT_OBSERVER_INTENT,
             status="designing",
             allowed_tool_names=tool_names,
             created_at=now,
@@ -658,8 +492,8 @@ def seed_sentiment_observer_defaults() -> None:
     else:
         allowed_tool_names = list(dict.fromkeys(existing_agent.allowed_tool_names + tool_names))
         intent = (
-            sentiment_observer_intent
-            if existing_agent.intent == previous_sentiment_observer_intent
+            SENTIMENT_OBSERVER_INTENT
+            if existing_agent.intent == PREVIOUS_SENTIMENT_OBSERVER_INTENT
             else existing_agent.intent
         )
         agent = existing_agent.model_copy(
@@ -677,15 +511,6 @@ def seed_sentiment_observer_defaults() -> None:
 seed_sentiment_observer_defaults()
 
 
-apartment_search_agent_intent = (
-    "Find rental listings for a requested location and return a concrete list of homes or apartments. "
-    "Use call_http_api first for simple pages. If the fetched page looks like a JavaScript app shell, "
-    "use browse_webpage on the same URL to inspect visible listings. For Zillow-style searches, return "
-    "listing name or address, visible rent, bedrooms when shown, and a source link. Do not mark the task "
-    "complete with only a limitation explanation unless both static fetch and rendered page inspection fail."
-)
-
-
 def seed_apartment_search_agent_defaults() -> None:
     now = seeded_at
     tool_names = ["call_http_api", "browse_webpage"]
@@ -695,7 +520,7 @@ def seed_apartment_search_agent_defaults() -> None:
             id="agent_apartment_search",
             project_id=default_project.id,
             name="Apartment Search Agent",
-            intent=apartment_search_agent_intent,
+            intent=APARTMENT_SEARCH_AGENT_INTENT,
             status="designing",
             allowed_tool_names=tool_names,
             created_at=now,

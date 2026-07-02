@@ -15,6 +15,7 @@ from edd_platform_api.lookups import (
 from edd_platform_api.routers import eval_contracts as _eval_contracts_router
 from edd_platform_api.routers import scenarios as _scenarios_router
 from edd_platform_api.routers import tools as _tools_router
+from edd_platform_api.seed_data import RESULT_TOOL_MOCK_RESPONSE, SCHEDULE_TOOL_MOCK_RESPONSE
 from edd_platform_api.schemas import (
     AgentDesign,
     AgentDesignCreate,
@@ -368,14 +369,8 @@ def draft_agent_from_outcome(
 
     schedule_tool = find_project_tool_by_name(project_id, "lookup_event_schedule")
     result_tool = find_project_tool_by_name(project_id, "lookup_event_result")
-    schedule_tool_response = (
-        "Race: Austrian Grand Prix. Date: 2026-06-28. Venue: Red Bull Ring, "
-        "Spielberg, Austria. Source: Formula 1 calendar."
-    )
-    result_tool_response = (
-        "Race: Barcelona-Catalunya Grand Prix. Date: 2026-06-14. "
-        "Winner: Lewis Hamilton. Source: Formula 1 race results."
-    )
+    schedule_tool_response = SCHEDULE_TOOL_MOCK_RESPONSE
+    result_tool_response = RESULT_TOOL_MOCK_RESPONSE
     if is_schedule_task:
         if schedule_tool is None:
             schedule_tool = _tools_router.create_tool_definition(
