@@ -97,223 +97,27 @@ import {
   defaultScenarioInput,
   defaultToolInputSchema,
   defaultToolOutputSchema,
+  artifactRoleLabel,
+  externalRefDetail,
+  externalRefLabel,
+  failurePacketsForEval,
+  inferExpectedResponse,
   isDefaultRubricText,
   isDefaultTestInput,
+  parseArtifactFields,
+  parseJsonObject,
+  proofArtifactIds,
+  proofRunIds,
+  relatedEvidenceLabel,
   renderScenarioInput,
   testShapeFromSetupContext,
   testShapeInputHelp,
   testShapeInputLabels,
   testShapeLabels,
+  toolImplementationKey,
+  traceUrlFromArtifact,
+  wizardStateFromFlow,
 } from "./helpers";
-
-function traceUrlFromArtifact(artifact: ArtifactRecord): string | null {
-  if (artifact.artifact_type !== "TRACE_REF") {
-    return null;
-  }
-  const traceRef = artifact.external_refs.find(
-    (ref) => ref.provider === "langfuse" && ref.ref_type === "trace" && ref.url,
-  );
-  if (traceRef?.url) {
-    return traceRef.url;
-  }
-  const match = artifact.body.match(/URL\n(.+)/);
-  return match?.[1]?.trim() ?? null;
-}
-
-function externalRefLabel(ref: ExternalArtifactRef): string {
-  if (ref.label) {
-    return ref.label;
-  }
-  if (ref.provider === "langfuse") {
-    const labels: Record<string, string> = {
-      comment: "Langfuse comment",
-      dataset: "Langfuse dataset",
-      dataset_item: "Langfuse dataset item",
-      prompt: "Langfuse prompt",
-      score: "Langfuse score",
-      trace: "Langfuse trace",
-    };
-    return labels[ref.ref_type] ?? "Langfuse reference";
-  }
-  return `${ref.provider} ${ref.ref_type}`.trim();
-}
-
-function externalRefDetail(ref: ExternalArtifactRef): string {
-  const metadataLabel =
-    ref.metadata["score_name"] ??
-    ref.metadata["prompt_name"] ??
-    ref.metadata["dataset_name"] ??
-    ref.metadata["prompt_role"] ??
-    ref.metadata["sync_mode"];
-  if (typeof metadataLabel === "string" && metadataLabel.trim()) {
-    return `${metadataLabel.trim()} · ${ref.external_id}`;
-  }
-  return ref.external_id;
-}
-
-function parseJsonObject(value: string, label: string): Record<string, unknown> {
-  const parsed = JSON.parse(value);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`${label} must be a JSON object.`);
-  }
-  return parsed as Record<string, unknown>;
-}
-
-function toolImplementationKey(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  return `mock.${slug || "tool"}`;
-}
-
-function parseArtifactFields(body: string): { label: string; value: string }[] {
-  const fields = body
-    .split(/\n{2,}/)
-    .map((block) => {
-      const [label, ...valueLines] = block.split("\n");
-      return {
-        label: label.trim(),
-        value: valueLines.join("\n").trim(),
-      };
-    })
-    .filter((field) => field.label && field.value);
-
-  return fields.length >= 2 ? fields : [];
-}
-
-function artifactRoleLabel(artifactType: string): string {
-  const labels: Record<string, string> = {
-    AGENT_DESIGN: "Agent design",
-    AGENT_VERSION: "Agent version",
-    COMPARISON: "Comparison",
-    EVAL_CONTRACT: "Success criteria",
-    EVAL_RESULT: "Eval result",
-    FAILURE_PACKET: "Failure",
-    FIX_PROPOSAL: "Fix proposal",
-    GATE_DECISION: "Gate decision",
-    JUDGE_OUTPUT: "Judge output",
-    RUN_RESULT: "Run output",
-    SCENARIO: "Scenario",
-    TRACE_REF: "Trace",
-  };
-  return labels[artifactType] ?? artifactType.replaceAll("_", " ").toLowerCase();
-}
-
-function relatedEvidenceLabel(artifact: ArtifactRecord | undefined): string {
-  if (!artifact) {
-    return "Saved evidence";
-  }
-  if (artifact.artifact_type === "TRACE_REF") {
-    return "Trace for this run";
-  }
-  if (artifact.artifact_type === "AGENT_DESIGN") {
-    return "Agent design";
-  }
-  if (artifact.artifact_type === "RUN_RESULT") {
-    return "Run output";
-  }
-  return artifactRoleLabel(artifact.artifact_type);
-}
-
-function proofFlowSummary(flow: EddFlowState): string {
-  const parts = [
-    flow.scenario ? "scenario" : null,
-    flow.contract ? "success criteria" : null,
-    flow.baselineVersion ? "original version" : null,
-    flow.baselineRun ? "original run" : null,
-    flow.baselineEval ? "original check" : null,
-    flow.failurePackets.length > 0 ? "failure" : null,
-    flow.fixProposal ? "fix" : null,
-    flow.candidateVersion ? "candidate version" : null,
-    flow.candidateRun ? "candidate run" : null,
-    flow.candidateEval ? "candidate check" : null,
-    flow.comparison ? "comparison" : null,
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "No proof evidence yet";
-}
-
-function proofArtifactIds(flow: EddFlowState): string[] {
-  return [
-    ...(flow.baselineRun?.artifact_ids ?? []),
-    ...(flow.baselineEval?.artifact_ids ?? []),
-    ...(flow.failurePackets.flatMap((packet) => packet.evidence_artifact_ids) ?? []),
-    ...(flow.fixProposal?.artifact_ids ?? []),
-    ...(flow.candidateRun?.artifact_ids ?? []),
-    ...(flow.candidateEval?.artifact_ids ?? []),
-    ...(flow.comparison?.artifact_ids ?? []),
-  ];
-}
-
-function proofRunIds(flow: EddFlowState): string[] {
-  return [
-    flow.baselineRun?.id,
-    flow.candidateRun?.id,
-  ].filter((id): id is string => Boolean(id));
-}
-
-function failurePacketsForEval(flow: EddFlowState, evalResultId?: string): FailurePacket[] {
-  if (!evalResultId) {
-    return flow.failurePackets;
-  }
-  return flow.failurePackets.filter((packet) => packet.eval_result_id === evalResultId);
-}
-
-function inferExpectedResponse(agent: AgentDesign): string {
-  const intent = agent.intent.trim();
-  const patterns = [
-    /^(?:always\s+)?(?:reply|respond|answer|say)\s+(?:with\s+)?["']?(.+?)["']?\.?$/i,
-    /^(?:always\s+)?(?:return|output)\s+["']?(.+?)["']?\.?$/i,
-  ];
-  for (const pattern of patterns) {
-    const match = intent.match(pattern);
-    if (match?.[1]?.trim()) {
-      return match[1].trim();
-    }
-  }
-  return intent || agent.name;
-}
-
-
-function wizardStateFromFlow(
-  projectId: string,
-  agentState: Awaited<ReturnType<typeof fetchAgentWizardState>>,
-  flow: EddFlowState,
-): Partial<WizardState> {
-  const { baselineRun, baselineEval, candidateRun, candidateEval, comparison,
-          failurePackets, fixProposal, baselineVersion, candidateVersion } = flow;
-
-  const base = { projectId, agent: agentState, currentVersionId: baselineVersion?.id ?? null };
-
-  if (comparison && candidateRun && candidateEval) {
-    return {
-      ...base, step: "compare",
-      baselineRun: baselineRun ?? null, baselineEval: baselineEval ?? null,
-      candidateRun, candidateEval, comparison,
-      currentVersionId: candidateVersion?.id ?? null,
-      iterationCount: 1,
-    };
-  }
-  if (fixProposal) {
-    const instructions = typeof fixProposal.proposed_changes[0]?.change === "string"
-      ? fixProposal.proposed_changes[0].change as string
-      : "";
-    return {
-      ...base, step: "fix",
-      baselineRun: baselineRun ?? null, baselineEval: baselineEval ?? null,
-      fix: { proposed_instructions: instructions, rationale: fixProposal.rationale ?? "" },
-      fixEdited: instructions,
-    };
-  }
-  if (baselineRun && baselineEval && (failurePackets?.length ?? 0) > 0) {
-    return { ...base, step: "failure", baselineRun, baselineEval };
-  }
-  if (baselineRun && baselineEval) {
-    return { ...base, step: "done", baselineRun, baselineEval };
-  }
-  return { ...base, step: "run" };
-}
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
