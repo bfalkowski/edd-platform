@@ -13,6 +13,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { Wizard, WizardState, fetchAgentWizardState } from "./Wizard";
+import { AgentTab } from "./AgentTab";
 import type {
   AgentDesign,
   AgentSuggestion,
@@ -83,7 +84,6 @@ import {
   promoteReviewAnnotation,
   runAgentDesign,
   syncLangfuseComments,
-  updateAgentDesign,
   updateAgentDesignToolAllowlist,
   updateAgentSuggestionStatus,
   updateFixProposal,
@@ -233,7 +233,6 @@ function App() {
   const [isGateBusy, setIsGateBusy] = useState(false);
   const [updatingTools, setUpdatingTools] = useState(false);
   const [isDraftingAgent, setIsDraftingAgent] = useState(false);
-  const [isSavingAgent, setIsSavingAgent] = useState(false);
   const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -247,8 +246,6 @@ function App() {
   const [toolOutputSchema, setToolOutputSchema] = useState(defaultToolOutputSchema);
   const [toolOutputDescription, setToolOutputDescription] = useState("");
   const [toolMockResponse, setToolMockResponse] = useState("");
-  const [agentEditName, setAgentEditName] = useState("");
-  const [agentEditIntent, setAgentEditIntent] = useState("");
 
   useEffect(() => {
     Promise.all([listProjects(), listServices()])
@@ -289,10 +286,6 @@ function App() {
   );
   const selectedGeneratedDesign =
     generatedDesign && generatedDesign.agentId === selectedAgent?.id ? generatedDesign : null;
-  useEffect(() => {
-    setAgentEditName(selectedAgent?.name ?? "");
-    setAgentEditIntent(selectedAgent?.intent ?? "");
-  }, [selectedAgent]);
 
   const approvedTools = useMemo(
     () => tools.filter((tool) => tool.status === "approved"),
@@ -364,9 +357,6 @@ function App() {
     toolFilter === "enabled" || toolFilter === "available"
       ? []
       : draftTools.filter(toolMatchesSearch);
-  const agentProfileChanged =
-    Boolean(selectedAgent) &&
-    (agentEditName.trim() !== selectedAgent?.name || agentEditIntent.trim() !== selectedAgent?.intent);
   const latestGate = gates[0] ?? null;
   const latestGateDecision = gateDecisions[0] ?? null;
   const artifactsById = useMemo(() => {
@@ -782,28 +772,6 @@ function App() {
       setOpenAgentMenuId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete agent design.");
-    }
-  }
-
-  async function handleSaveAgentProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!project || !selectedAgent) {
-      return;
-    }
-    setError(null);
-    setActivity(null);
-    setIsSavingAgent(true);
-    try {
-      const updated = await updateAgentDesign(project.id, selectedAgent.id, {
-        name: agentEditName.trim(),
-        intent: agentEditIntent.trim(),
-      });
-      setAgents((items) => items.map((agent) => (agent.id === updated.id ? updated : agent)));
-      setActivity("Agent profile saved.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to update agent design.");
-    } finally {
-      setIsSavingAgent(false);
     }
   }
 
@@ -2243,107 +2211,28 @@ function App() {
               </div>
 
               {workspaceTab === "agent" ? (
-                <section className="agent-designer-panel workspace-tab-panel">
-                  <form className="agent-profile-form" onSubmit={handleSaveAgentProfile}>
-                    <div className="section-heading-row">
-                      <div>
-                        <p className="artifact-type">Agent design</p>
-                        <h2>{selectedAgent.name}</h2>
-                      </div>
-                      <span className="muted-chip">{selectedAgent.status}</span>
-                    </div>
-                    <label className="compact-label">
-                      <span>Agent name</span>
-                      <input
-                        value={agentEditName}
-                        onChange={(event) => setAgentEditName(event.target.value)}
-                        required
-                      />
-                    </label>
-                    <label className="compact-label">
-                      <span>Core instruction</span>
-                      <textarea
-                        value={agentEditIntent}
-                        onChange={(event) => setAgentEditIntent(event.target.value)}
-                        required
-                      />
-                    </label>
-                    <div className="agent-profile-actions">
-                      {activity ? <p className="activity-text">{activity}</p> : null}
-                      {error ? <p className="error-text">{error}</p> : null}
-                      <button
-                        className="primary-button"
-                        type="submit"
-                        disabled={
-                          isSavingAgent ||
-                          !agentProfileChanged ||
-                          !agentEditName.trim() ||
-                          !agentEditIntent.trim()
-                        }
-                      >
-                        {isSavingAgent ? "Saving" : "Save agent"}
-                      </button>
-                    </div>
-                  </form>
-                  <aside className="agent-tool-summary" aria-label="Agent tools">
-                    <div>
-                      <p className="artifact-type">Tools</p>
-                      <h3>
-                        {selectedAgent.allowed_tool_names.length === 0
-                          ? "No tools enabled"
-                          : `${selectedAgent.allowed_tool_names.length} enabled`}
-                      </h3>
-                      <p>
-                        {approvedTools.length} approved · {draftTools.length} draft
-                      </p>
-                    </div>
-                    <div className="tool-chip-row">
-                      {enabledToolDefinitions.length === 0 ? (
-                        <span className="muted-chip">None enabled</span>
-                      ) : (
-                        enabledToolDefinitions.slice(0, 4).map((tool) => (
-                          <span className="tool-chip" key={tool.id}>
-                            {tool.name}
-                          </span>
-                        ))
-                      )}
-                      {selectedAgent.allowed_tool_names.length > enabledToolDefinitions.length ? (
-                        <span className="muted-chip">
-                          +{selectedAgent.allowed_tool_names.length - enabledToolDefinitions.length}
-                        </span>
-                      ) : null}
-                    </div>
-                    {generatedToolStates.length > 0 ? (
-                      <div className="generated-tool-lifecycle">
-                        <p className="artifact-type">Generated tools</p>
-                        {generatedToolStates.map((tool) => (
-                          <div className="generated-tool-row" key={tool.name}>
-                            <strong>{tool.name}</strong>
-                            <span>{tool.implementationKind}</span>
-                            <span className="tool-state-chip">auto-created</span>
-                            <span className="tool-state-chip">{tool.status}</span>
-                            <span className={tool.enabled ? "tool-state-chip enabled" : "tool-state-chip"}>
-                              {tool.enabled ? "enabled" : "not enabled"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => {
-                        setToolsPanelOpen(true);
-                        setReviewArtifact(null);
-                        setReviewLinks([]);
-                        setScratchPanelOpen(false);
-                        setScenarioEditorOpen(false);
-                      }}
-                    >
-                      Manage tools
-                    </button>
-                  </aside>
-                </section>
+                <AgentTab
+                  projectId={project?.id ?? "project_default"}
+                  selectedAgent={selectedAgent}
+                  approvedTools={approvedTools}
+                  draftTools={draftTools}
+                  enabledToolDefinitions={enabledToolDefinitions}
+                  generatedToolStates={generatedToolStates}
+                  activity={activity}
+                  error={error}
+                  onAgentUpdated={(updated) =>
+                    setAgents((items) => items.map((agent) => (agent.id === updated.id ? updated : agent)))
+                  }
+                  setError={setError}
+                  setActivity={setActivity}
+                  onManageTools={() => {
+                    setToolsPanelOpen(true);
+                    setReviewArtifact(null);
+                    setReviewLinks([]);
+                    setScratchPanelOpen(false);
+                    setScenarioEditorOpen(false);
+                  }}
+                />
               ) : null}
 
               {workspaceTab === "proof" ? (
