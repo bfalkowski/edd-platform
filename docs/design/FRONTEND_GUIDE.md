@@ -61,7 +61,7 @@ Two wizards exist in the product:
 **Agent creation wizard** (`Wizard.tsx`) — triggered by "New agent". Steps:
 `Describe → Review → Run → Name the failure → Fix → Compare → Done`
 
-**Error analysis wizard** (inline in `main.tsx`) — triggered by Error analysis
+**Error analysis wizard** (`ErrorAnalysisTab.tsx`) — triggered by Error analysis
 tab. Steps: `Build corpus → Review & code → Confirm modes → Done`
 
 Rules for wizards:
@@ -73,6 +73,44 @@ Rules for wizards:
 - Primary action button (Next, Continue) lives top-right. Back lives top-left.
 - A step that is already complete (done state for agent wizard) skips the wizard
   and goes directly to the workspace tabs.
+
+## Gestalt Principles
+
+Every visual decision should map to exactly one of these. If a new UI element
+doesn't fit one of these principles, that's a sign it's decorative rather than
+functional — cut it.
+
+- **Similarity** (color, shape, badge style). Things that share a visual
+  property read as the same kind of thing. Status badges are the canonical
+  example: `reviewed`/`passed` is always the same green pill, `open`/`pending`
+  is always the same muted pill, regardless of which tab or table it appears
+  in. Don't invent a new color for the same status in a new component.
+- **Proximity** (spacing). Things placed close together read as one unit.
+  Step actions (Back / primary action) sit tight at the top of a step panel;
+  the step's content sits with more space below. A form field's label sits
+  tight above its input; unrelated fields get more gap. If two things need
+  different spacing to *not* look related, that's proximity working correctly
+  — don't override it with a divider instead.
+- **Common region** (shared container, border, background tint). Things
+  inside one visual boundary read as belonging together. A review item and
+  its expanded annotations share one row's container (`.discovery-corpus-row`
+  + `.discovery-annotation-rows`), not two separate cards. An artifact's
+  evidence row and its "Open trace" link share `.workflow-evidence-row`. When
+  two pieces of UI are logically linked (a trigger and its detail), put them
+  in the same container rather than relying on layout position alone.
+- **Figure/ground** (contrast, opacity, `--text` vs `--text-muted`). The
+  thing the user needs to act on should be visually louder than the thing
+  that's just context. Primary content uses `--text`; eyebrow labels,
+  metadata, and hints use `--text-muted`. A dismissible intro card
+  (`discovery-intro-card`) recedes once acknowledged. Don't mute something
+  the user still needs to read just to make a panel look calmer — muting is
+  for redundant or already-established context, not for genuinely new
+  information.
+
+Apply these when reviewing new panels, not just when building them: if a
+review finds two same-status items rendered with different colors, or a
+trigger and its result living in unrelated containers, that's a Gestalt
+violation to fix, not a stylistic choice.
 
 ## Visual Style
 
@@ -198,7 +236,7 @@ Avoid long instructional paragraphs or placeholder language that looks unfinishe
 | Pattern | Location |
 |---|---|
 | Agent creation wizard | `Wizard.tsx` |
-| Error analysis wizard | `main.tsx` (inline, discoveryStep state) |
+| Error analysis wizard | `ErrorAnalysisTab.tsx` (discoveryStep state) |
 | Workspace tab panel | `main.tsx` (workspaceTab state, 5 tabs) |
 | Proof loop test card | `main.tsx` (selectedGeneratedDesign, scenario-test-summary) |
 | Langfuse comment sync | `POST .../sync-langfuse-comments` + handleSyncLangfuseComments |
