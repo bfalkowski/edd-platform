@@ -26,3 +26,6 @@ playwright-report/
 .beads/proxieddb/
 TODO.md
 .local-discussion/
+
+# Scratch design notes not yet ready to commit (git add -f to commit one)
+docs/hld/notes-*.md
