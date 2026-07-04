@@ -15,6 +15,7 @@ import "./styles.css";
 import { Wizard, WizardState, fetchAgentWizardState } from "./Wizard";
 import { AgentTab } from "./AgentTab";
 import { EvidenceTab } from "./EvidenceTab";
+import { ReadinessTab } from "./ReadinessTab";
 import type {
   AgentDesign,
   AgentSuggestion,
@@ -51,8 +52,6 @@ import {
   createEvalContract,
   createFailureMode,
   createFixProposal,
-  createGateDecision,
-  createGateDefinition,
   createProjectRun,
   createReviewAnnotation,
   createReviewCorpus,
@@ -231,7 +230,6 @@ function App() {
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isFlowBusy, setIsFlowBusy] = useState(false);
-  const [isGateBusy, setIsGateBusy] = useState(false);
   const [updatingTools, setUpdatingTools] = useState(false);
   const [isDraftingAgent, setIsDraftingAgent] = useState(false);
   const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
@@ -1337,50 +1335,6 @@ function App() {
   async function reviewFirstArtifact(artifactIds: string[]) {
     if (artifactIds[0]) {
       await handleReviewArtifact(artifactIds[0]);
-    }
-  }
-
-  async function handleCreatePromotionGate() {
-    if (!project || !selectedAgent) {
-      return;
-    }
-    setError(null);
-    setActivity("Creating promotion gate.");
-    setIsGateBusy(true);
-    try {
-      const gate = await createGateDefinition(project.id, selectedAgent.id);
-      setGates((items) => [gate, ...items]);
-      setActivity("Promotion gate created.");
-      await refreshContext();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create gate.");
-      setActivity(null);
-    } finally {
-      setIsGateBusy(false);
-    }
-  }
-
-  async function handleRunPromotionGate() {
-    if (!project || !latestGate || !eddFlow.candidateEval || !eddFlow.comparison) {
-      return;
-    }
-    setError(null);
-    setActivity("Running promotion gate.");
-    setIsGateBusy(true);
-    try {
-      const decision = await createGateDecision(project.id, latestGate.id, {
-        eval_result_id: eddFlow.candidateEval.id,
-        comparison_id: eddFlow.comparison.id,
-      });
-      setGateDecisions((items) => [decision, ...items]);
-      setActivity("Promotion readiness recorded.");
-      await refreshReadiness();
-      await refreshContext();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to run gate.");
-      setActivity(null);
-    } finally {
-      setIsGateBusy(false);
     }
   }
 
@@ -3125,46 +3079,19 @@ function App() {
               ) : null}
 
               {workspaceTab === "readiness" ? (
-                <section className="readiness-panel workspace-tab-panel">
-                  <div>
-                    <p className="artifact-type">Promotion readiness</p>
-                    <h3>
-                      {latestGateDecision
-                        ? latestGateDecision.decision === "passed"
-                          ? "Ready"
-                          : "Blocked"
-                        : latestGate
-                          ? "Gate ready"
-                          : "No gate yet"}
-                    </h3>
-                    <p>
-                      {latestGateDecision
-                        ? latestGateDecision.rationale
-                        : latestGate
-                          ? "Run the gate after comparison evidence exists."
-                          : "Create a gate to turn eval evidence into an explicit readiness decision."}
-                    </p>
-                  </div>
-                  {!latestGate ? (
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleCreatePromotionGate}
-                      disabled={isGateBusy}
-                    >
-                      Create gate
-                    </button>
-                  ) : (
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={handleRunPromotionGate}
-                      disabled={isGateBusy || !eddFlow.candidateEval || !eddFlow.comparison}
-                    >
-                      {latestGateDecision ? "Run again" : "Run gate"}
-                    </button>
-                  )}
-                </section>
+                <ReadinessTab
+                  projectId={project?.id ?? "project_default"}
+                  selectedAgent={selectedAgent}
+                  latestGate={latestGate}
+                  latestGateDecision={latestGateDecision}
+                  eddFlow={eddFlow}
+                  setGates={setGates}
+                  setGateDecisions={setGateDecisions}
+                  setError={setError}
+                  setActivity={setActivity}
+                  refreshContext={refreshContext}
+                  refreshReadiness={refreshReadiness}
+                />
               ) : null}
             </section>
           ) : null}
