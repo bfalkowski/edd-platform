@@ -1,18 +1,9 @@
-import {
-  Clock3,
-  ExternalLink,
-  MoreHorizontal,
-  PanelLeft,
-  PanelRight,
-  PencilLine,
-  Play,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { PanelRight, Play, Search, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { Wizard, WizardState, fetchAgentWizardState } from "./Wizard";
+import { Sidebar } from "./Sidebar";
 import { AgentTab } from "./AgentTab";
 import { EvidenceTab } from "./EvidenceTab";
 import { ReadinessTab } from "./ReadinessTab";
@@ -706,6 +697,74 @@ function App() {
     }
   }
 
+  function handleToggleSidebar() {
+    setSidebarOpen((value) => !value);
+  }
+
+  function handleNewAgentClick() {
+    setSelectedId(null);
+    setGeneratedDesign(null);
+    setReviewArtifact(null);
+    setReviewLinks([]);
+    setToolsPanelOpen(false);
+    setScratchPanelOpen(false);
+    setActivity(null);
+    setWorkspaceTab("proof");
+    setWizardResumeState(undefined);
+    setWizardOpen(true);
+  }
+
+  function handleSelectAgent(agent: AgentDesign) {
+    setSelectedId(agent.id);
+    setOpenAgentMenuId(null);
+    setReviewArtifact(null);
+    setReviewLinks([]);
+    setToolsPanelOpen(false);
+    setScratchPanelOpen(false);
+    setScratchActivity(null);
+    setScratchError(null);
+    setScratchArtifact(null);
+    setScratchTraceUrl(null);
+    if (project) {
+      Promise.all([fetchAgentWizardState(project.id, agent.id), hydrateEddFlow(project.id, agent)])
+        .then(([agentState, flow]) => {
+          const resumeState = wizardStateFromFlow(project.id, agentState, flow);
+          if (resumeState.step === "done") {
+            // Agent passed — show workspace, not wizard
+            setWizardOpen(false);
+          } else {
+            // Mid-flow — reopen wizard at the right step
+            setWizardResumeState(resumeState);
+            setWizardOpen(true);
+          }
+        })
+        .catch(() => {
+          // Agent exists but has no wizard state yet — show workspace
+          setWizardOpen(false);
+        });
+    }
+  }
+
+  function handleToggleAgentMenu(agentId: string) {
+    setOpenAgentMenuId((current) => (current === agentId ? null : agentId));
+  }
+
+  function handleTryScenario(agent: AgentDesign) {
+    setSelectedId(agent.id);
+    setGeneratedDesign((current) => (current?.agentId === agent.id ? current : null));
+    setScratchPanelOpen(true);
+    setReviewArtifact(null);
+    setReviewLinks([]);
+    setToolsPanelOpen(false);
+    setScenarioEditorOpen(false);
+    setOpenAgentMenuId(null);
+  }
+
+  function handleRequestDeleteAgent(agent: AgentDesign) {
+    setDeleteCandidate(agent);
+    setOpenAgentMenuId(null);
+  }
+
   function openScenarioEditor() {
     setScenarioEditorOpen(true);
     setToolsPanelOpen(false);
@@ -1076,186 +1135,23 @@ function App() {
         reviewArtifact || toolsPanelOpen || scratchPanelOpen || scenarioEditorOpen ? "review-open" : "",
       ].join(" ")}
     >
-      <aside className="sidebar">
-        <div className="brand-row">
-          <div className="brand-mark">E</div>
-          {sidebarOpen ? <strong>{project?.name ?? "EDD Platform"}</strong> : null}
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Toggle sidebar"
-            onClick={() => setSidebarOpen((value) => !value)}
-          >
-            <PanelLeft size={21} />
-          </button>
-        </div>
-
-        <nav className="primary-nav" aria-label="Primary">
-          <button
-            className={wizardOpen || !selectedAgent ? "nav-item active" : "nav-item"}
-            type="button"
-            onClick={() => {
-              setSelectedId(null);
-              setGeneratedDesign(null);
-              setReviewArtifact(null);
-              setReviewLinks([]);
-              setToolsPanelOpen(false);
-              setScratchPanelOpen(false);
-              setActivity(null);
-              setWorkspaceTab("proof");
-              setWizardResumeState(undefined);
-              setWizardOpen(true);
-            }}
-          >
-            <PencilLine size={22} />
-            {sidebarOpen ? <span>New agent</span> : null}
-          </button>
-          <button className="nav-item muted" type="button">
-            <Search size={22} />
-            {sidebarOpen ? <span>Search</span> : null}
-          </button>
-          <button className="nav-item muted" type="button">
-            <Clock3 size={22} />
-            {sidebarOpen ? <span>Runs</span> : null}
-          </button>
-        </nav>
-
-        {sidebarOpen ? (
-          <>
-          <section className="service-list" aria-label="Service status">
-            <p className="section-label">Services</p>
-            {services.length === 0 ? <p className="empty-list">Checking services...</p> : null}
-            {services.map((service) => {
-              const content = (
-                <>
-                  <span className={`service-dot ${service.status}`} aria-hidden="true" />
-                  <span className="service-copy">
-                    <strong>{service.name}</strong>
-                    <small>{service.status.replace("_", " ")}</small>
-                  </span>
-                  {service.url ? <ExternalLink size={15} /> : null}
-                </>
-              );
-              return service.url ? (
-                <a
-                  className="service-row"
-                  href={service.url}
-                  key={service.id}
-                  rel="noreferrer"
-                  target="_blank"
-                  title={service.description}
-                >
-                  {content}
-                </a>
-              ) : (
-                <div className="service-row" key={service.id} title={service.description}>
-                  {content}
-                </div>
-              );
-            })}
-          </section>
-
-          <section className="agent-list" aria-label="Agent designs">
-            <p className="section-label">Agents</p>
-            {isLoading ? <p className="empty-list">Loading...</p> : null}
-            {!isLoading && agents.length === 0 ? <p className="empty-list">No agents yet</p> : null}
-            {agents.map((agent) => (
-              <div
-                className={agent.id === selectedId ? "agent-row selected" : "agent-row"}
-                key={agent.id}
-              >
-                <button
-                  className="agent-select"
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(agent.id);
-                    setOpenAgentMenuId(null);
-                    setReviewArtifact(null);
-                    setReviewLinks([]);
-                    setToolsPanelOpen(false);
-                    setScratchPanelOpen(false);
-                    setScratchActivity(null);
-                    setScratchError(null);
-                    setScratchArtifact(null);
-                    setScratchTraceUrl(null);
-                    if (project) {
-                      Promise.all([
-                        fetchAgentWizardState(project.id, agent.id),
-                        hydrateEddFlow(project.id, agent),
-                      ]).then(([agentState, flow]) => {
-                        const resumeState = wizardStateFromFlow(project.id, agentState, flow);
-                        if (resumeState.step === "done") {
-                          // Agent passed — show workspace, not wizard
-                          setWizardOpen(false);
-                        } else {
-                          // Mid-flow — reopen wizard at the right step
-                          setWizardResumeState(resumeState);
-                          setWizardOpen(true);
-                        }
-                      }).catch(() => {
-                        // Agent exists but has no wizard state yet — show workspace
-                        setWizardOpen(false);
-                      });
-                    }
-                  }}
-                >
-                  <span>{agent.name}</span>
-                </button>
-                <button
-                  className="agent-menu-button"
-                  type="button"
-                  aria-label={`Open actions for ${agent.name}`}
-                  onClick={() =>
-                    setOpenAgentMenuId((current) => (current === agent.id ? null : agent.id))
-                  }
-                >
-                  <MoreHorizontal size={21} />
-                </button>
-                {openAgentMenuId === agent.id ? (
-                  <div className="agent-menu" role="menu">
-                    <button
-                      className="agent-menu-item"
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setSelectedId(agent.id);
-                        setGeneratedDesign((current) =>
-                          current?.agentId === agent.id ? current : null,
-                        );
-                        setScratchPanelOpen(true);
-                        setReviewArtifact(null);
-                        setReviewLinks([]);
-                        setToolsPanelOpen(false);
-                        setScenarioEditorOpen(false);
-                        setOpenAgentMenuId(null);
-                      }}
-                    >
-                      <Play size={18} />
-                      <span>
-                        Try scenario
-                        <small>Ad hoc run</small>
-                      </span>
-                    </button>
-                    <button
-                      className="agent-menu-item danger"
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setDeleteCandidate(agent);
-                        setOpenAgentMenuId(null);
-                      }}
-                    >
-                      <Trash2 size={18} />
-                      Delete
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </section>
-          </>
-        ) : null}
-      </aside>
+      <Sidebar
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={handleToggleSidebar}
+        projectName={project?.name ?? "EDD Platform"}
+        wizardOpen={wizardOpen}
+        selectedAgent={selectedAgent}
+        onNewAgent={handleNewAgentClick}
+        services={services}
+        isLoading={isLoading}
+        agents={agents}
+        selectedId={selectedId}
+        onSelectAgent={handleSelectAgent}
+        openAgentMenuId={openAgentMenuId}
+        onToggleAgentMenu={handleToggleAgentMenu}
+        onTryScenario={handleTryScenario}
+        onRequestDeleteAgent={handleRequestDeleteAgent}
+      />
 
       <main className="workspace">
         {!selectedAgent ? (
