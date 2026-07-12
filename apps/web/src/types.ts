@@ -486,3 +486,21 @@ export type GeneratedDesignSummary = {
   enabledToolNames: string[];
   generatedToolNames: string[];
 };
+
+export type GeneratedToolState = {
+  name: string;
+  status: string;
+  implementationKind: string;
+  enabled: boolean;
+};
+
+// Proof loop ephemeral context (single source of truth for in-flight phase data).
+export type ProofLoopCtx = {
+  judgeOutputText: string | null;
+  analysisNoteText: string;
+  analysisFailureMode: string;
+  analysisSeverity: string;
+  analysisNote: ReviewNote | null;
+  generatedInstructions: string | null;
+  generatedRationale: string;
+};

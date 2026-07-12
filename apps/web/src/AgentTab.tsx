@@ -1,13 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { updateAgentDesign } from "./api";
-import type { AgentDesign, ToolDefinition } from "./types";
-
-type GeneratedToolState = {
-  name: string;
-  status: string;
-  implementationKind: string;
-  enabled: boolean;
-};
+import type { AgentDesign, GeneratedToolState, ToolDefinition } from "./types";
 
 type AgentTabProps = {
   projectId: string;
