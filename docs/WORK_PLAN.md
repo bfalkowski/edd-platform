@@ -7,10 +7,10 @@ Beads is the operational task tracker. Use Beads for active ownership,
 dependencies, blockers, resume state, and verification notes. Update this file
 only when milestone state, product direction, or public planning anchors change.
 
-Last Beads reconciliation: 2026-07-01.
+Last Beads reconciliation: 2026-07-13.
 
-At reconciliation time, Beads reported 41 total issues: 40 closed, 0 in
-progress, and 1 open (1 ready to work).
+At reconciliation time, Beads reported 41 total issues: 41 closed, 0 in
+progress, and 0 open.
 
 Note: work between 2026-06-26 and 2026-07-01 (19 commits hardening the wizard
 and rebuilding error analysis) was tracked in a local scratch checklist during
@@ -150,15 +150,29 @@ comment sync (`POST .../sync-langfuse-comments`) replacing the open-coded
 in-platform annotation flow. Langfuse is now required, not optional, for
 error analysis. Runs are live-only (mock mode removed).
 
-One item from this slice remains open: the wizard's done state still uses a
-separate "View evidence" button rather than an inline evidence chain
-(`edd-1z6`).
+The wizard's done state already inlines the evidence chain (agent, test
+input, rubric, run output, judge verdict, trace link) via
+`renderEvidenceChain()` in `Wizard.tsx`, shipped in the same burst
+(`edd-1z6`, closed on reconciliation — the ticket had lagged the code).
+
+### Frontend Component Split
+
+Complete.
+
+`apps/web/src/main.tsx` went from a single 5,629-line file to ~1,940 lines
+plus `Sidebar.tsx`, `AgentTab.tsx`, `EvidenceTab.tsx`, `ReadinessTab.tsx`,
+`ErrorAnalysisTab.tsx`, `ProofLoopTab.tsx`, `api.ts`, `types.ts`, and
+`helpers.tsx` (`Wizard.tsx` was already separate). No behavior change;
+verified with `npm run build`, manual click-through of all 5 tabs and the
+wizard, and the Playwright E2E suite at every extraction step. Backend
+router split (`apps/api/edd_platform_api/main.py`) was already complete
+(`edd-wnt.4`).
 
 ## Beads Queue At Last Reconciliation
 
-Use `bd ready` and `bd list` for the source of truth. At the 2026-07-01
-reconciliation, one task was open and ready. Recently completed epics and
-final hardening tasks were:
+Use `bd ready` and `bd list` for the source of truth. At the last
+reconciliation, zero tasks were open. Recently completed epics and final
+hardening tasks were:
 
 | Bead | Priority | Status | Scope |
 |---|---|---|---|
@@ -171,7 +185,7 @@ final hardening tasks were:
 | `edd-6dn` | P2 | closed | Design relational metadata plus Polars trace analysis plane. |
 | `edd-eoa` | P2 | closed | Implement first Polars analysis snapshot materializer. |
 | `edd-ddd` | P1 | closed epic | Wizard hardening and error-analysis rebuild (retroactive reconciliation of the 2026-06-28 to 2026-07-01 burst). |
-| `edd-1z6` | P2 | **open, ready** | Wizard done state: show evidence inline instead of the separate "View evidence" button. |
+| `edd-1z6` | P2 | closed | Wizard done state: show evidence inline instead of the separate "View evidence" button (already shipped by `edd-ddd`'s burst; ticket lagged the code). |
 
 ## Current UI Status
 
@@ -202,8 +216,6 @@ The UI supports the proof-loop vertical slice:
 Create the next Beads task before starting implementation work. Candidate
 hardening areas are:
 
-- close `edd-1z6`: show evidence inline in the wizard done state instead of
-  the separate "View evidence" button;
 - visual redesign (Anthropic-style tokens, typography, wizard shell) tracked
   in `TODO.md`;
 - improve evidence-summary display;

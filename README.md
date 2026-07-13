@@ -333,5 +333,3 @@ python scripts/live_langfuse_e2e.py
 - Evidence summaries are available through the API; UI display is planned.
 - Multiple test cases per agent (regression across N scenarios) is planned.
 - Score delta / trend across iterations (beyond pass/fail) is planned.
-- `main.tsx` and `main.py` are large single files; component and router
-  extraction is planned.
