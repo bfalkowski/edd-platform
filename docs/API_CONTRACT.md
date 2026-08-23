@@ -563,6 +563,14 @@ Run request:
 }
 ```
 
+`mode` selects mock vs. live execution. When `mode` is `live`, an optional
+`provider` (`anthropic` or `foundry`, defaults to `anthropic`) selects the
+live runner: `anthropic` calls the Anthropic Messages API directly or through
+a LangGraph tool loop; `foundry` runs the scenario through an Azure AI
+Foundry Agent Service thread (function-tool calls resolved against the same
+approved tool set). The response `provider` field reflects which runner
+actually executed the run (`mock`, `anthropic`, or `foundry`).
+
 Minimum response fields:
 
 ```text

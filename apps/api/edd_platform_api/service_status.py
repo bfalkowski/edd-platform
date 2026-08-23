@@ -35,6 +35,10 @@ def service_url_reachable(url: str) -> bool:
 def dependency_statuses() -> List[ServiceStatus]:
     storage_backend = os.environ.get("EDD_PLATFORM_STORAGE_BACKEND", "postgres").strip() or "postgres"
     anthropic_configured = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    foundry_configured = bool(
+        os.environ.get("AZURE_AI_FOUNDRY_PROJECT_ENDPOINT", "").strip()
+        and os.environ.get("EDD_FOUNDRY_MODEL", "").strip()
+    )
     langfuse_url = (
         os.environ.get("LANGFUSE_HOST", "").strip()
         or os.environ.get("LANGFUSE_BASE_URL", "").strip()
@@ -64,6 +68,18 @@ def dependency_statuses() -> List[ServiceStatus]:
                 "Live agent runs are enabled."
                 if anthropic_configured
                 else "Set ANTHROPIC_API_KEY before starting the API to enable live runs."
+            ),
+        ),
+        ServiceStatus(
+            id="foundry",
+            name="Azure AI Foundry",
+            status="configured" if foundry_configured else "not_configured",
+            configured=foundry_configured,
+            url="https://ai.azure.com/",
+            description=(
+                "Live Foundry Agent Service runs are enabled."
+                if foundry_configured
+                else "Set AZURE_AI_FOUNDRY_PROJECT_ENDPOINT and EDD_FOUNDRY_MODEL before starting the API to enable live Foundry runs."
             ),
         ),
         ServiceStatus(

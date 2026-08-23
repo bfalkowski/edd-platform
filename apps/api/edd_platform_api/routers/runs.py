@@ -322,6 +322,12 @@ def create_tool_evidence_artifacts(
     return artifacts
 
 
+_LIVE_PROVIDER_MISSING_CONFIG_MARKERS = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "foundry": "AZURE_AI_FOUNDRY_PROJECT_ENDPOINT",
+}
+
+
 def run_agent_with_runner(
     *,
     project_id: str,
@@ -329,9 +335,10 @@ def run_agent_with_runner(
     instructions: str,
     scenario_input: str,
     mode: Literal["mock", "live"],
+    provider: Optional[Literal["anthropic", "foundry"]] = None,
     prompt_refs: Optional[List[ExternalArtifactRef]] = None,
     model_override: Optional[str] = None,
-) -> tuple[object, ArtifactRecord, List[ArtifactRecord]]:
+) -> tuple[object, ArtifactRecord, List[ArtifactRecord], str]:
     runner_agent = RunnerAgentDesign(
         id=agent.id,
         name=agent.name,
@@ -339,23 +346,37 @@ def run_agent_with_runner(
         allowed_tool_names=agent.allowed_tool_names,
     )
     runner_scenario = RunnerScenario(input=scenario_input.strip())
+    resolved_provider = provider or "anthropic"
     if mode == "live":
         try:
-            config = api_main.anthropic_config_from_env()
-            if model_override:
-                config = config.__class__(**{**config.__dict__, "model": model_override})
-            runner_result = api_main.run_anthropic_agent(
-                runner_agent,
-                runner_scenario,
-                config,
-                approved_tools_for_agent(project_id, agent),
-            )
+            if resolved_provider == "foundry":
+                config = api_main.foundry_config_from_env()
+                if model_override:
+                    config = config.__class__(**{**config.__dict__, "model": model_override})
+                runner_result = api_main.run_foundry_agent(
+                    runner_agent,
+                    runner_scenario,
+                    config,
+                    approved_tools_for_agent(project_id, agent),
+                )
+            else:
+                config = api_main.anthropic_config_from_env()
+                if model_override:
+                    config = config.__class__(**{**config.__dict__, "model": model_override})
+                runner_result = api_main.run_anthropic_agent(
+                    runner_agent,
+                    runner_scenario,
+                    config,
+                    approved_tools_for_agent(project_id, agent),
+                )
         except RuntimeError as exc:
             detail = str(exc)
-            status_code = 400 if "ANTHROPIC_API_KEY" in detail else 502
+            marker = _LIVE_PROVIDER_MISSING_CONFIG_MARKERS[resolved_provider]
+            status_code = 400 if marker in detail else 502
             raise HTTPException(status_code=status_code, detail=detail) from exc
     else:
         runner_result = run_mock_agent(runner_agent, runner_scenario)
+        resolved_provider = "mock"
 
     now = datetime.now(timezone.utc)
     tool_summary = "\n".join(
@@ -389,7 +410,7 @@ def run_agent_with_runner(
         runner_result=runner_result,
         now=now,
     )
-    return runner_result, artifact, tool_artifacts
+    return runner_result, artifact, tool_artifacts, resolved_provider
 
 
 def validate_website_url(url: Optional[str]) -> str:
@@ -805,12 +826,13 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         version=version,
         contract_id=payload.eval_contract_id,
     )
-    runner_result, artifact, tool_artifacts = run_agent_with_runner(
+    runner_result, artifact, tool_artifacts, provider = run_agent_with_runner(
         project_id=project_id,
         agent=agent,
         instructions=instructions,
         scenario_input=scenario.input,
         mode=payload.mode,
+        provider=payload.provider,
         prompt_refs=prompt_refs,
         model_override=payload.model or None,
     )
@@ -822,7 +844,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         scenario_id=scenario.id,
         eval_contract_id=payload.eval_contract_id,
         mode=runner_result.mode,
-        provider="anthropic" if runner_result.mode == "live" else "mock",
+        provider=provider,
         model=None,
         input=runner_result.scenario_input,
         output=runner_result.response,
@@ -1156,12 +1178,13 @@ def run_agent_design(
         version=None,
         contract_id=None,
     )
-    runner_result, artifact, tool_artifacts = run_agent_with_runner(
+    runner_result, artifact, tool_artifacts, provider = run_agent_with_runner(
         project_id=project_id,
         agent=agent,
         instructions=agent.intent,
         scenario_input=payload.scenario_input,
         mode=payload.mode,
+        provider=payload.provider,
         prompt_refs=prompt_refs,
     )
     artifact_ids = [artifact.id] + [tool_artifact.id for tool_artifact in tool_artifacts]
@@ -1176,7 +1199,7 @@ def run_agent_design(
             run_id=runner_result.id,
             metadata={
                 "runner_mode": runner_result.mode,
-                "provider": "anthropic" if runner_result.mode == "live" else "mock",
+                "provider": provider,
                 "ad_hoc": True,
                 "prompt_refs": [ref.model_dump(mode="json") for ref in prompt_refs],
             },

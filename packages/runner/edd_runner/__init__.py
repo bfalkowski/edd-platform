@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -63,6 +64,12 @@ class RunnerResult(BaseModel):
 class AnthropicRunnerConfig:
     api_key: str
     model: str = "claude-sonnet-4-6"
+
+
+@dataclass(frozen=True)
+class FoundryRunnerConfig:
+    project_endpoint: str
+    model: str
 
 
 def run_mock_agent(agent: RunnerAgentDesign, scenario: RunnerScenario) -> RunnerResult:
@@ -704,17 +711,304 @@ def run_langchain_agent(
     )
 
 
+def foundry_config_from_env() -> FoundryRunnerConfig:
+    project_endpoint = os.environ.get("AZURE_AI_FOUNDRY_PROJECT_ENDPOINT", "").strip()
+    if not project_endpoint:
+        raise RuntimeError("AZURE_AI_FOUNDRY_PROJECT_ENDPOINT is required for live Foundry runs.")
+    model = os.environ.get("EDD_FOUNDRY_MODEL", "").strip()
+    if not model:
+        raise RuntimeError("EDD_FOUNDRY_MODEL is required for live Foundry runs.")
+    return FoundryRunnerConfig(project_endpoint=project_endpoint, model=model)
+
+
+def foundry_client_from_config(config: FoundryRunnerConfig):
+    try:
+        from azure.ai.agents import AgentsClient
+        from azure.identity import DefaultAzureCredential
+    except ImportError as exc:
+        raise RuntimeError(
+            "azure-ai-agents and azure-identity are required for live Foundry runs: "
+            "pip install azure-ai-agents azure-identity"
+        ) from exc
+    return AgentsClient(endpoint=config.project_endpoint, credential=DefaultAzureCredential())
+
+
+def foundry_function_tool_spec(definition: RunnerToolDefinition) -> Dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": definition.name,
+            "description": definition.description,
+            "parameters": definition.input_schema or {"type": "object", "properties": {}},
+        },
+    }
+
+
+def foundry_tool_dispatch_entry(definition: RunnerToolDefinition):
+    """Map an approved tool definition to a callable(args_dict) -> str, mirroring build_langchain_tools."""
+    if definition.implementation_key in {"open_meteo_weather", "local_weather_fixture"}:
+        return lambda args: get_weather(str(args.get("zip_code", "")))
+    if definition.implementation_key == "call_http_api":
+        return lambda args: call_http_api(str(args.get("url", "")))
+    if definition.implementation_key == "browse_webpage":
+        return lambda args: browse_webpage(
+            str(args.get("url", "")),
+            query=str(args.get("query", "")),
+            max_chars=int(args.get("max_chars", 4000)),
+        )
+    if definition.implementation_kind == "mock" or definition.implementation_key.startswith("mock."):
+        response = definition.mock_response or definition.output_description
+        return lambda _args: response
+    return None
+
+
+def build_foundry_tools(
+    tool_definitions: List[RunnerToolDefinition],
+) -> "tuple[List[Dict[str, Any]], Dict[str, Any]]":
+    specs: List[Dict[str, Any]] = []
+    dispatch: Dict[str, Any] = {}
+    for definition in tool_definitions:
+        if definition.status != "approved":
+            continue
+        handler = foundry_tool_dispatch_entry(definition)
+        if handler is None:
+            continue
+        specs.append(foundry_function_tool_spec(definition))
+        dispatch[definition.name] = handler
+    return specs, dispatch
+
+
+def extract_foundry_message_text(message) -> str:
+    content = getattr(message, "content", None) or []
+    for block in content:
+        block_type = getattr(block, "type", None) or (block.get("type") if isinstance(block, dict) else None)
+        if block_type != "text":
+            continue
+        text_value = getattr(block, "text", None) if not isinstance(block, dict) else block.get("text")
+        value = getattr(text_value, "value", None) if not isinstance(text_value, dict) else text_value.get("value")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def run_foundry_agent(
+    agent: RunnerAgentDesign,
+    scenario: RunnerScenario,
+    config: FoundryRunnerConfig,
+    tool_definitions: List[RunnerToolDefinition] | None = None,
+) -> RunnerResult:
+    """Run a scenario through an Azure AI Foundry Agent Service thread."""
+    if langfuse_tracing_enabled():
+        return run_foundry_agent_with_langfuse(
+            agent=agent,
+            scenario=scenario,
+            config=config,
+            tool_definitions=tool_definitions,
+        )
+    return run_foundry_agent_core(
+        agent=agent,
+        scenario=scenario,
+        config=config,
+        tool_definitions=tool_definitions,
+    )
+
+
+def run_foundry_agent_with_langfuse(
+    *,
+    agent: RunnerAgentDesign,
+    scenario: RunnerScenario,
+    config: FoundryRunnerConfig,
+    tool_definitions: List[RunnerToolDefinition] | None = None,
+) -> RunnerResult:
+    try:
+        from langfuse import get_client
+    except ImportError:
+        return run_foundry_agent_core(
+            agent=agent,
+            scenario=scenario,
+            config=config,
+            tool_definitions=tool_definitions,
+        )
+
+    langfuse = get_client()
+    with langfuse.start_as_current_observation(
+        as_type="agent",
+        name=f"edd-agent-run:{agent.name}",
+        input={
+            "agent_id": agent.id,
+            "agent_name": agent.name,
+            "intent": agent.intent,
+            "scenario": scenario.input,
+        },
+        metadata={
+            "source": "edd-platform",
+            "runner_mode": "live",
+            "provider": "foundry",
+            "allowed_tools": agent.allowed_tool_names,
+        },
+    ) as observation:
+        result = run_foundry_agent_core(
+            agent=agent,
+            scenario=scenario,
+            config=config,
+            tool_definitions=tool_definitions,
+        )
+        observation.update(
+            output={
+                "response": result.response,
+                "tool_calls": [tool.model_dump() for tool in result.tool_calls],
+            }
+        )
+        trace_id = langfuse.get_current_trace_id() or observation.trace_id
+        trace_url = None
+        if trace_id:
+            try:
+                trace_url = langfuse.get_trace_url(trace_id=trace_id)
+            except Exception:
+                trace_url = None
+    try:
+        langfuse.flush()
+    except Exception:
+        pass
+    return result.model_copy(
+        update={
+            "trace_id": trace_id,
+            "trace_url": trace_url,
+            "evidence": result.evidence
+            + [f"Linked Langfuse trace {trace_id}." if trace_id else "Langfuse trace unavailable."],
+        }
+    )
+
+
+_FOUNDRY_TERMINAL_STATUSES = {"completed", "failed", "cancelled", "expired"}
+_FOUNDRY_MAX_POLLS = 60
+_FOUNDRY_POLL_INTERVAL_SECONDS = 1
+
+
+def run_foundry_agent_core(
+    *,
+    agent: RunnerAgentDesign,
+    scenario: RunnerScenario,
+    config: FoundryRunnerConfig,
+    tool_definitions: List[RunnerToolDefinition] | None = None,
+    client=None,
+) -> RunnerResult:
+    """Run a scenario through an Azure AI Foundry Agent Service agent/thread/run.
+
+    Creates a scratch agent per run and deletes it afterward so runs stay
+    stateless, matching the Anthropic runner's no-persisted-state contract.
+    """
+    try:
+        from azure.ai.agents.models import (
+            RequiredFunctionToolCall,
+            SubmitToolOutputsAction,
+            ToolOutput,
+        )
+    except ImportError as exc:
+        raise RuntimeError(
+            "azure-ai-agents is required for live Foundry runs: pip install azure-ai-agents"
+        ) from exc
+
+    active_client = client or foundry_client_from_config(config)
+    tool_specs, dispatch = build_foundry_tools(tool_definitions or [])
+    instructions = (
+        "You are the candidate agent being designed in an eval-driven workflow. "
+        "Stay inside the design intent, gather or cite relevant evidence from the scenario, "
+        "state assumptions clearly, and recommend a safe next action.\n\n"
+        f"Agent name: {agent.name}\nDesign intent: {agent.intent}"
+    )
+
+    created_agent = active_client.create_agent(
+        model=config.model,
+        name=f"edd-{agent.id}"[:64],
+        instructions=instructions,
+        tools=tool_specs,
+    )
+    tool_calls: List[RunnerToolCall] = []
+    try:
+        thread = active_client.threads.create()
+        active_client.messages.create(thread_id=thread.id, role="user", content=scenario.input)
+        run = active_client.runs.create(thread_id=thread.id, agent_id=created_agent.id)
+
+        for _ in range(_FOUNDRY_MAX_POLLS):
+            if run.status in _FOUNDRY_TERMINAL_STATUSES:
+                break
+            if run.status == "requires_action" and isinstance(run.required_action, SubmitToolOutputsAction):
+                outputs = []
+                for call in run.required_action.submit_tool_outputs.tool_calls:
+                    if not isinstance(call, RequiredFunctionToolCall):
+                        continue
+                    args = json.loads(call.function.arguments or "{}")
+                    handler = dispatch.get(call.function.name)
+                    output = (
+                        handler(args)
+                        if handler is not None
+                        else f"No handler registered for tool {call.function.name}."
+                    )
+                    tool_calls.append(
+                        RunnerToolCall(name=call.function.name, input=json.dumps(args), output=output)
+                    )
+                    outputs.append(ToolOutput(tool_call_id=call.id, output=output))
+                active_client.runs.submit_tool_outputs(
+                    thread_id=thread.id, run_id=run.id, tool_outputs=outputs
+                )
+            else:
+                time.sleep(_FOUNDRY_POLL_INTERVAL_SECONDS)
+            run = active_client.runs.get(thread_id=thread.id, run_id=run.id)
+
+        if run.status != "completed":
+            status_label = getattr(run.status, "value", run.status)
+            raise RuntimeError(f"Foundry run did not complete: status={status_label}.")
+
+        response_text = ""
+        for message in active_client.messages.list(thread_id=thread.id, order="desc"):
+            if getattr(message, "role", None) != "assistant":
+                continue
+            response_text = extract_foundry_message_text(message)
+            if response_text:
+                break
+        if not response_text:
+            raise RuntimeError("Foundry agent did not return a final response.")
+    finally:
+        try:
+            active_client.delete_agent(created_agent.id)
+        except Exception:
+            pass
+
+    return RunnerResult(
+        id=f"run_{uuid4().hex[:12]}",
+        agent_design_id=agent.id,
+        mode="live",
+        scenario_input=scenario.input,
+        response=response_text,
+        tool_calls=tool_calls
+        or [
+            RunnerToolCall(name="foundry.agent", input=scenario.input, output=config.model),
+        ],
+        evidence=[
+            f"Used Azure AI Foundry Agent Service model {config.model}.",
+            f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}.",
+        ],
+        created_at=datetime.now(timezone.utc),
+    )
+
+
 __all__ = [
     "AnthropicRunnerConfig",
+    "FoundryRunnerConfig",
     "RunnerAgentDesign",
     "RunnerResult",
     "RunnerScenario",
     "RunnerToolCall",
     "RunnerToolDefinition",
     "anthropic_config_from_env",
+    "build_foundry_tools",
     "build_langchain_tools",
     "build_langfuse_langchain_callbacks",
+    "foundry_client_from_config",
+    "foundry_config_from_env",
     "langfuse_tracing_enabled",
     "run_anthropic_agent",
+    "run_foundry_agent",
     "run_mock_agent",
 ]

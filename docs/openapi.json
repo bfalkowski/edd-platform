@@ -259,6 +259,21 @@
             "title": "Mode",
             "type": "string"
           },
+          "provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "anthropic",
+                  "foundry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "scenario_input": {
             "default": "A customer asks what the agent should do next.",
             "minLength": 1,
@@ -5126,6 +5141,21 @@
               }
             ],
             "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "anthropic",
+                  "foundry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           },
           "scenario_id": {
             "minLength": 1,

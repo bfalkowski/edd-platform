@@ -168,6 +168,23 @@ wizard, and the Playwright E2E suite at every extraction step. Backend
 router split (`apps/api/edd_platform_api/main.py`) was already complete
 (`edd-wnt.4`).
 
+### Azure AI Foundry Runner Connector
+
+Complete (`edd-82u`).
+
+Adds `provider: "foundry"` as a second live runner alongside Anthropic.
+`packages/runner` gained `FoundryRunnerConfig`/`run_foundry_agent`, which
+drives an Azure AI Foundry Agent Service thread to completion (creating a
+scratch agent per run, resolving `requires_action` function-tool calls
+against the same approved-tool set the Anthropic/LangGraph path uses, then
+deleting the agent) with the same Langfuse tracing wrapper as the Anthropic
+runner. `RunCreate`/`AgentRunCreate` gained an optional `provider` field
+(`anthropic` default, non-breaking); `RunRecord.provider` reflects whichever
+runner actually executed. `/api/services` reports Foundry configuration
+status alongside Anthropic/Langfuse. CI stays provider-key-free — tests
+inject a fake Azure Agents client built from real `azure-ai-agents` SDK
+model classes rather than requiring live credentials.
+
 ## Beads Queue At Last Reconciliation
 
 Use `bd ready` and `bd list` for the source of truth. At the last

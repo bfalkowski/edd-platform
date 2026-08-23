@@ -310,6 +310,7 @@ class AgentRunCreate(BaseModel):
         min_length=1,
     )
     mode: Literal["mock", "live"] = "mock"
+    provider: Optional[Literal["anthropic", "foundry"]] = None
     target: Literal["agent", "url"] = "agent"
     url: Optional[str] = None
 
@@ -320,6 +321,7 @@ class RunCreate(BaseModel):
     scenario_id: str = Field(min_length=1)
     eval_contract_id: Optional[str] = None
     mode: Literal["mock", "live"] = "mock"
+    provider: Optional[Literal["anthropic", "foundry"]] = None
     model: Optional[str] = None
 
 
