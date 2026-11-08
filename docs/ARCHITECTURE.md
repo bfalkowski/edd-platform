@@ -259,7 +259,7 @@ failures remain visible rather than being hidden by a single passing run.
 flowchart TB
   Platform["EDD Platform"]
 
-  Triage["Customer Triage<br/>support ticket routing, deterministic eval-driven fix loop"]
+  Triage["Customer Triage<br/>support ticket routing, live eval-driven fix loop"]
 
   Platform --> Triage
 ```

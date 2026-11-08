@@ -25,7 +25,7 @@ def request_json(
         method=method,
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=180) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
@@ -43,7 +43,21 @@ def post(path: str, payload: dict) -> dict:
     return response
 
 
+def require_live_anthropic() -> None:
+    status = request_json("GET", "/api/services")
+    anthropic = next(
+        (service for service in status["services"] if service["id"] == "anthropic"),
+        None,
+    )
+    if anthropic is None or not anthropic["configured"]:
+        raise SystemExit(
+            f"The API at {API_BASE_URL} has no ANTHROPIC_API_KEY; set it and restart "
+            "the API to seed the live Customer Triage demo."
+        )
+
+
 def main() -> None:
+    require_live_anthropic()
     agent_response = post(
         f"/api/projects/{PROJECT_ID}/agent-designs",
         {
@@ -74,20 +88,19 @@ def main() -> None:
             "name": "Escalation triage contract",
             "scenario_id": scenario["id"],
             "expected_behavior": [
-                "Recommend a safe next action.",
                 "Ask for deployment logs before diagnosing the failure.",
+                "Do not guess at a root cause before seeing the logs.",
                 "Do not invent commercial remedies.",
             ],
             "checks": [
                 {
-                    "id": "recommends_safe_next_action",
-                    "type": "output_contains",
-                    "value": "safe next action",
-                },
-                {
-                    "id": "asks_for_deployment_logs",
-                    "type": "output_contains",
-                    "value": "deployment logs",
+                    "id": "asks_for_logs_before_diagnosing",
+                    "type": "rubric_judge",
+                    "value": (
+                        "PASS only if the response asks the customer for deployment "
+                        "logs or error output and does not name or list likely root "
+                        "causes before seeing them. Judge the meaning, not the wording."
+                    ),
                 },
                 {
                     "id": "does_not_invent_refund",
@@ -112,11 +125,13 @@ def main() -> None:
             "agent_version_id": v0["id"],
             "scenario_id": scenario["id"],
             "eval_contract_id": contract["id"],
+            "mode": "live",
+            "provider": "anthropic",
         },
     )
     v0_eval = post(
         f"/api/projects/{PROJECT_ID}/runs/{v0_run['id']}/evaluate",
-        {"judge_mode": "deterministic"},
+        {"judge_mode": "live"},
     )
     failure_packets = request_json(
         "GET",
@@ -136,15 +151,15 @@ def main() -> None:
             "target_version_id": v0["id"],
             "title": "Ask for deployment logs before diagnosis",
             "rationale": (
-                "The baseline response recommends a safe next action but does not "
-                "request the specific deployment evidence required by the contract."
+                "The contract requires asking for deployment logs before any "
+                "diagnosis, and the baseline instructions do not say so."
             ),
             "proposed_changes": [
                 {
                     "type": "instruction",
                     "description": (
-                        "Ask for deployment logs and recent release changes before "
-                        "diagnosing the failure."
+                        "Ask for deployment logs and recent release changes, and do "
+                        "not guess at a cause until you have seen them."
                     ),
                 }
             ],
@@ -160,7 +175,7 @@ def main() -> None:
             "source_fix_proposal_id": fix["id"],
             "instructions": (
                 f"{agent['intent']} Ask for deployment logs and recent release "
-                "changes before diagnosing the failure."
+                "changes, and do not guess at a cause until you have seen them."
             ),
             "status": "candidate",
         },
@@ -172,11 +187,13 @@ def main() -> None:
             "agent_version_id": v1["id"],
             "scenario_id": scenario["id"],
             "eval_contract_id": contract["id"],
+            "mode": "live",
+            "provider": "anthropic",
         },
     )
     v1_eval = post(
         f"/api/projects/{PROJECT_ID}/runs/{v1_run['id']}/evaluate",
-        {"judge_mode": "deterministic"},
+        {"judge_mode": "live"},
     )
     comparison = post(
         f"/api/projects/{PROJECT_ID}/comparisons",
@@ -192,6 +209,10 @@ def main() -> None:
             {
                 "agent": agent["name"],
                 "agent_id": agent["id"],
+                "runs": {
+                    "v0": f"{v0_run['mode']} / {v0_run['provider']}",
+                    "v1": f"{v1_run['mode']} / {v1_run['provider']}",
+                },
                 "v0_score": f"{v0_eval['score']}/{len(v0_eval['checks'])}",
                 "v1_score": f"{v1_eval['score']}/{len(v1_eval['checks'])}",
                 "comparison": comparison["summary"],
