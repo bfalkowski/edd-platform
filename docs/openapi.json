@@ -5290,6 +5290,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
           }
         },
         "required": [

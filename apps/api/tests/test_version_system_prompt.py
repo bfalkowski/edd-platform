@@ -107,14 +107,49 @@ def test_live_run_sends_version_instructions_as_whole_system_prompt(monkeypatch)
     assert bodies[0]["system"] == VERSION_INSTRUCTIONS
 
 
-def test_run_artifact_shows_system_prompt_sent(monkeypatch) -> None:
+def test_run_record_shows_system_prompt_sent(monkeypatch) -> None:
     client = TestClient(app)
     bodies = capture_anthropic_bodies(monkeypatch)
 
     run = create_versioned_run(client, allowed_tool_names=[])
 
-    body = run_artifact_body(client, run)
-    assert f"System prompt\n{bodies[0]['system']}\n\n" in body
+    assert run["system_prompt"] == bodies[0]["system"]
+    saved = client.get(f"/api/projects/project_default/runs/{run['id']}").json()
+    assert saved["system_prompt"] == bodies[0]["system"]
+
+
+def test_system_prompt_is_not_read_as_run_output(monkeypatch) -> None:
+    # Instructions that name a tool and the mock judge's keywords must not
+    # make the run look like it called the tool or met the judge's checks.
+    instructions = (
+        "- get_weather: look up the weather first.\n"
+        "Cite evidence, state assumptions, recommend a safe next action."
+    )
+    monkeypatch.setattr(sys.modules[__name__], "VERSION_INSTRUCTIONS", instructions)
+    client = TestClient(app)
+    capture_anthropic_bodies(monkeypatch)
+    run = create_versioned_run(client, allowed_tool_names=[])
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": run["agent_design_id"],
+            "name": "Weather tool contract",
+            "scenario_id": run["scenario_id"],
+            "forbidden_tools": ["get_weather"],
+        },
+    ).json()
+
+    contract_eval = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"eval_contract_id": contract["id"], "judge_mode": "deterministic"},
+    ).json()
+    mock_judge_eval = client.post(
+        f"/api/projects/project_default/artifacts/{run['artifact_ids'][0]}/evaluate"
+    ).json()
+
+    forbids = [c for c in contract_eval["checks"] if c["check_type"] == "tool_not_called"]
+    assert forbids and all(check["passed"] for check in forbids)
+    assert mock_judge_eval["passed"] is False
 
 
 def test_live_run_with_tools_sends_version_instructions_unchanged(monkeypatch) -> None:
@@ -125,4 +160,4 @@ def test_live_run_with_tools_sends_version_instructions_unchanged(monkeypatch) -
 
     assert len(prompts) == 1
     assert prompts[0] == VERSION_INSTRUCTIONS
-    assert f"System prompt\n{VERSION_INSTRUCTIONS}\n\n" in run_artifact_body(client, run)
+    assert run["system_prompt"] == VERSION_INSTRUCTIONS
