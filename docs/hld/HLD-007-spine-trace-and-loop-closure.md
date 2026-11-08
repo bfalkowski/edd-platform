@@ -223,7 +223,11 @@ comparison has shown fixed also block, for example a sibling version from
 another fix attempt. The gate never drops a packet just because it belongs to
 a different version.
 API tests: "fixed → passed", "candidate still fails → blocked", and "an
-unfixed open packet on a sibling version → blocked". This is the
+unfixed open packet on a sibling version → blocked". A comparison marks a
+packet fixed at the check level: none of its failed checks fail again in the
+candidate eval (`comparisons.py:75-79`). It does not mean the whole eval
+passed. So the "fixed → passed" test must use a contract where v1 passes every
+check, or the test can pass for the wrong reason. This is the
 step that lets the single-test loop end in a **passed** gate decision. API
 only, and independent of steps 1–2.
 
