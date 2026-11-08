@@ -3494,3 +3494,9 @@ dd {
   margin: 0;
   padding: 8px 12px;
 }
+
+.readiness-panel .suite-stale-decision {
+  color: var(--text);
+  font-weight: 700;
+  margin: 0 0 6px;
+}

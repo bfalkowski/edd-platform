@@ -119,6 +119,13 @@ export function ReadinessTab({
               ? "Gate ready"
               : "No gate yet"}
         </h3>
+        {latestGateDecision &&
+        suiteIsCurrent === false &&
+        latestGateDecision.comparison_id === suiteComparison?.id ? (
+          <p className="suite-stale-decision">
+            Decided before the latest results. Compare all tests again, then run the gate.
+          </p>
+        ) : null}
         <p>
           {latestGateDecision
             ? latestGateDecision.rationale

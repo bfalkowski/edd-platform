@@ -20,7 +20,8 @@ export function useSuiteResults(
   useEffect(() => {
     let isCurrent = true;
     const versionIds = versionKey ? versionKey.split(",") : [];
-    if (savedTests.length === 0 || versionIds.length === 0) {
+    // Fetched even with no saved tests: an empty suite marks an old comparison out of date.
+    if (versionIds.length === 0) {
       setResults({});
       return;
     }
