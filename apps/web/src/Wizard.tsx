@@ -4,6 +4,7 @@
  */
 import { ExternalLink, Loader } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { checkLabel } from "./checkLabel";
 
 const apiBase = "/api";
 
@@ -36,7 +37,7 @@ type RunRecord = {
 type EvalResult = {
   id: string;
   passed: boolean;
-  checks: Array<{ check_id: string; passed: boolean; notes?: string }>;
+  checks: Array<{ check_id: string; check_type?: string; expected?: string; passed: boolean; notes?: string }>;
 };
 
 type FixGenerated = {
@@ -321,15 +322,21 @@ async function getLangfuseUrl(projectId: string, runId: string): Promise<string 
 // Sub-components
 // ---------------------------------------------------------------------------
 
+const steps: { key: WizardStep; label: string }[] = [
+  { key: "describe", label: "Describe" },
+  { key: "review", label: "Review" },
+  { key: "run", label: "Run" },
+  { key: "failure", label: "Diagnose" },
+  { key: "fix", label: "Fix" },
+  { key: "compare", label: "Compare" },
+];
+
+/** The heading's "Step N of M", numbered the same way as the step indicator. */
+function stepEyebrow(step: WizardStep, title: string): string {
+  return `Step ${steps.findIndex((s) => s.key === step) + 1} of ${steps.length} — ${title}`;
+}
+
 function StepIndicator({ step }: { step: WizardStep }) {
-  const steps: { key: WizardStep; label: string }[] = [
-    { key: "describe", label: "Describe" },
-    { key: "review", label: "Review" },
-    { key: "run", label: "Run" },
-    { key: "failure", label: "Diagnose" },
-    { key: "fix", label: "Fix" },
-    { key: "compare", label: "Compare" },
-  ];
   const currentIdx = steps.findIndex((s) => s.key === step);
   return (
     <div className="wizard-steps">
@@ -371,25 +378,6 @@ function Spinner({ label }: { label: string }) {
   );
 }
 
-function checkLabel(checkId: string, outputRequirements: string[]): string {
-  const outputMatch = /^requires_output_(\d+)$/.exec(checkId);
-  if (outputMatch) {
-    const idx = parseInt(outputMatch[1], 10) - 1;
-    if (outputRequirements[idx]) return outputRequirements[idx];
-  }
-  const labelMap: Record<string, string> = {
-    outcome_rubric: "Rubric judge",
-    requires_tool: "Required tool used",
-    forbidden_tool: "Forbidden tool not used",
-    forbidden_behavior: "Forbidden behavior absent",
-    requires_evidence: "Required evidence present",
-  };
-  for (const [prefix, label] of Object.entries(labelMap)) {
-    if (checkId.startsWith(prefix)) return label;
-  }
-  return checkId;
-}
-
 function EvalSummary({
   evalResult,
   outputRequirements = [],
@@ -403,7 +391,7 @@ function EvalSummary({
       <ul>
         {evalResult.checks.map((c) => (
           <li key={c.check_id} className={c.passed ? "check-pass" : "check-fail"}>
-            {c.passed ? "✓" : "✗"} {checkLabel(c.check_id, outputRequirements)}
+            {c.passed ? "✓" : "✗"} {checkLabel(c, outputRequirements)}
             {c.notes ? <span className="check-notes"> — {c.notes}</span> : null}
           </li>
         ))}
@@ -631,7 +619,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
   function renderDescribe() {
     return (
       <div className="wizard-body">
-        <p className="wizard-eyebrow">Step 1 of 5 — Describe your agent</p>
+        <p className="wizard-eyebrow">{stepEyebrow("describe", "Describe your agent")}</p>
         <h2 className="wizard-heading">What should this agent do?</h2>
         <p className="wizard-hint">
           One sentence is enough. The platform will generate a name, test input, and
@@ -664,7 +652,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     if (!edits) return null;
     return (
       <div className="wizard-body">
-        <p className="wizard-eyebrow">Step 1 of 5 — Review the generated setup</p>
+        <p className="wizard-eyebrow">{stepEyebrow("review", "Review the generated setup")}</p>
         <h2 className="wizard-heading">Review the generated setup</h2>
         <p className="wizard-hint">Edit any field before confirming.</p>
 
@@ -729,7 +717,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
             }
             onClick={handleConfirm}
           >
-            {busy ? "Saving..." : "Looks right — run it →"}
+            {busy ? "Saving..." : "Looks right — save agent →"}
           </button>
           <button
             className="secondary-button"
@@ -749,7 +737,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     if (!agent) return null;
     return (
       <div className="wizard-body">
-        <p className="wizard-eyebrow">Step 2 of 5 — Run the agent</p>
+        <p className="wizard-eyebrow">{stepEyebrow("run", "Run the agent")}</p>
         <h2 className="wizard-heading">{agent.agent.name}</h2>
 
         <div className="wizard-test-input">
@@ -788,7 +776,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     return (
       <div className="wizard-body">
         <p className="wizard-eyebrow">
-          {iterationCount > 0 ? `Iteration ${iterationCount + 1} — Name the failure` : "Step 3 of 5 — Name the failure"}
+          {iterationCount > 0 ? `Iteration ${iterationCount + 1} — Name the failure` : stepEyebrow("failure", "Name the failure")}
         </p>
         <h2 className="wizard-heading">What went wrong?</h2>
 
@@ -890,7 +878,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     const original = agent.version.instructions;
     return (
       <div className="wizard-body">
-        <p className="wizard-eyebrow">Step 4 of 5 — Review the fix</p>
+        <p className="wizard-eyebrow">{stepEyebrow("fix", "Review the fix")}</p>
         <h2 className="wizard-heading">Does this fix address the failure?</h2>
 
         <div className="fix-diff">
@@ -948,7 +936,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     if (stillFailing) {
       return (
         <div className="wizard-body">
-          <p className="wizard-eyebrow">Step 5 of 5 — Compare</p>
+          <p className="wizard-eyebrow">{stepEyebrow("compare", "Compare")}</p>
           <h2 className="wizard-heading">Still failing.</h2>
 
           <div className="compare-grid">
@@ -1052,6 +1040,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
       candidateEval: null,
       langfuseCandidateUrl: null,
       comparisonSummary: null,
+      suggestMoreTests: !acceptedWithFailure,
     });
   }
 
@@ -1065,6 +1054,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     candidateEval,
     langfuseCandidateUrl,
     comparisonSummary,
+    suggestMoreTests = false,
   }: {
     headline: string;
     agent: OutcomeAgentResponse | null;
@@ -1075,6 +1065,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     candidateEval: EvalResult | null;
     langfuseCandidateUrl: string | null;
     comparisonSummary: string | null;
+    suggestMoreTests?: boolean;
   }) {
     const rubric = agent?.eval_contract.checks.find((c) => c.type === "rubric_judge")?.value ?? null;
     return (
@@ -1144,9 +1135,21 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
           ) : null}
         </div>
 
+        {suggestMoreTests ? (
+          <p className="wizard-hint">
+            One passing test does not show the agent is ready. Add tests for other inputs and
+            edge cases in the Proof loop.
+          </p>
+        ) : null}
+
         <div className="wizard-actions">
+          {suggestMoreTests ? (
+            <button className="primary-button" type="button" onClick={() => onDone(agentId())}>
+              Add more tests in the Proof loop →
+            </button>
+          ) : null}
           <button
-            className="primary-button"
+            className={suggestMoreTests ? "secondary-button" : "primary-button"}
             type="button"
             onClick={() => {
               onAgentCreated(agentId()); // refresh sidebar

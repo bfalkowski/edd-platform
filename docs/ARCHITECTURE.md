@@ -77,7 +77,6 @@ flowchart TB
     end
 
     subgraph Examples["examples"]
-      SentimentObserver["sentiment-observer"]
       CustomerTriage["customer-triage"]
     end
   end
@@ -260,18 +259,15 @@ failures remain visible rather than being hidden by a single passing run.
 flowchart TB
   Platform["EDD Platform"]
 
-  Sentiment["Sentiment Observer<br/>conversation monitoring, escalation-risk detection"]
   Triage["Customer Triage<br/>support ticket routing, live eval-driven fix loop"]
 
-  Platform --> Sentiment
   Platform --> Triage
 ```
 
-Each example (`examples/sentiment-observer`, `examples/customer-triage`) is a
+The example (`examples/customer-triage`) is a
 seeded project that exercises the full product spine: agent design, versions,
 scenarios, eval contracts, runs, eval results, failure packets, fix proposals,
-comparisons, and evidence artifacts. Seed with
-`python scripts/seed_sentiment_observer_demo.py` and
+comparisons, and evidence artifacts. Seed it with
 `python scripts/seed_customer_triage_demo.py` against a running local API.
 
 ## Responsibility Boundaries
