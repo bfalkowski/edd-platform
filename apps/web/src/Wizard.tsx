@@ -451,7 +451,13 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     fetchModels()
       .then((catalog) => {
         setModels(catalog.models);
-        setState((s) => (s.model ? s : { ...s, model: catalog.default_model }));
+        // An empty or no-longer-offered model (e.g. from a resumed wizard) would
+        // show one option while the run sends another, so use the default.
+        setState((s) =>
+          catalog.models.some((option) => option.id === s.model)
+            ? s
+            : { ...s, model: catalog.default_model },
+        );
       })
       .catch(() => setModels([]));
   }, []);
