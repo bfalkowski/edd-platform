@@ -14,6 +14,8 @@ evals into bounded fixes, and fixes into evidence-backed promotion decisions.
 
 ## Syncing a Langfuse trace comment into the app
 
+![A comment on a Customer Service Triage Demo trace in Langfuse](./docs/assets/langfuse-trace-comment.webp)
+
 1. Open the trace for a failed run in Langfuse.
 2. Add a comment noting what went wrong.
 3. Back in the app, click "Sync Langfuse comments."
@@ -29,12 +31,16 @@ Each agent gets five tabs: **Agent**, **Proof loop**, **Error analysis**,
 
 Define the agent's name, core instruction, and enabled tools.
 
+![Agent tab for the Customer Service Triage Demo agent](./docs/assets/agent-tab.webp)
+
 ### Proof loop tab
 
 Select a saved test, run the agent live against Anthropic, evaluate the output,
 and iterate. The proof loop shows the selected test (scenario input, judge
 method, latest result) and a next-action card that guides the evaluator toward
 the right step — run, fix, compare, or done.
+
+![Proof loop showing the failed deployment escalation test](./docs/assets/proof-loop.webp)
 
 ### Error analysis tab — 4-step wizard
 
@@ -44,6 +50,8 @@ failure mode taxonomy:
 1. **Build review set** — pull in live runs as a corpus of traces to review.
    A data table shows each item with its source, status, and note count.
 
+   ![Error analysis step 1: the review set table](./docs/assets/error-analysis-build-corpus.webp)
+
 2. **Review & code** — read each run's input, the agent's output and the
    judge's verdict, and write a note on what went wrong. Name a failure mode
    and assign notes to it with the "Assign failure mode" dropdown. Langfuse
@@ -52,6 +60,8 @@ failure mode taxonomy:
    With Langfuse running, you can also open each trace in Langfuse, comment
    there, and sync those comments back with one click. Synced comments appear
    next to the in-app notes, labeled "Langfuse".
+
+   ![Error analysis step 2: an in-app note and a synced Langfuse comment, each assigned a failure mode](./docs/assets/error-analysis-review-code.webp)
 
 3. **Confirm modes** — confirm the failure modes that are real and dismiss the
    ones that aren't.
