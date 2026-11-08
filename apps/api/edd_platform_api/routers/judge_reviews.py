@@ -101,10 +101,13 @@ def review_judge_output(
     # with the judge closes them as "withdrawn". A packet added by hand through
     # POST /failure-packets changes status like the others on its result, but
     # only the reviewer's own packet takes the overrule reason as its diagnosis.
+    # An overrule of a pass always opens or reopens the reviewer's own packet and
+    # returns it, so its reason is recorded even beside a hand-added packet.
     closed_status = "withdrawn" if judge_passed else "overruled"
     reviewer_title_prefix = "Reviewer overruled judge:"
     diagnosis = f"A reviewer overruled the judge's pass. Reason: {payload.reason}"
     failure_packet: Optional[FailurePacket] = None
+    reviewer_packet: Optional[FailurePacket] = None
     for packet in list(_failure_packets.values()):
         if packet.eval_result_id != eval_result.id:
             continue
@@ -121,10 +124,13 @@ def review_judge_output(
             packet = packet.model_copy(update={**update, "updated_at": now})
             _failure_packets[packet.id] = packet
             store.save_record("failure_packets", packet.id, packet)
-        if not passed and packet.status == "open" and failure_packet is None:
-            failure_packet = packet
-    if not passed and failure_packet is None and judge_passed:
-        failure_packet = api_main.create_failure_packet_record(
+        if not passed and packet.status == "open":
+            if judge_passed and packet.title.startswith(reviewer_title_prefix):
+                reviewer_packet = packet
+            elif failure_packet is None:
+                failure_packet = packet
+    if not passed and judge_passed:
+        failure_packet = reviewer_packet or api_main.create_failure_packet_record(
             project_id=project_id,
             agent_design_id=run.agent_design_id,
             agent_version_id=run.agent_version_id,

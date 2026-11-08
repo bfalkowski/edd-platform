@@ -905,7 +905,8 @@ follow the result:
 - Judge failed, reviewer overrules: the judge's open packets move to
   `overruled`. Agreeing later reopens them.
 - Judge passed, reviewer overrules: a packet titled "Reviewer overruled judge"
-  is opened with the reason. Agreeing later moves it to `withdrawn`.
+  is opened with the reason, even when a packet added by hand is already open
+  on the result. Agreeing later moves it to `withdrawn`.
   Overruling again reopens it, and each overrule writes its reason into the
   packet's diagnosis.
 
@@ -915,7 +916,8 @@ packets stop blocking unless a gate lists those statuses in
 that comments on the judge output artifact.
 
 The response returns `judge_output`, `eval_result` and `failure_packet` (the
-open packet when the result fails, else null).
+open packet when the result fails, else null; after overruling a pass, the
+reviewer's packet).
 
 Agreement response fields:
 
