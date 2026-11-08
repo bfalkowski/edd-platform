@@ -27,8 +27,10 @@ router = APIRouter()
 
 
 def active_tests(project_id: str, agent_design_id: str) -> List[Tuple[Scenario, EvalContract]]:
-    """An agent's tests: each active scenario with its newest eval contract, oldest first.
+    """An agent's tests: each active scenario with its test contract, oldest first.
 
+    A scenario's test contract is its newest own contract (one naming the
+    scenario), else its default contract when that belongs to the same agent.
     Matches the console's saved-test list (`pairActiveTests` in apps/web/src/api.ts).
     """
     scenarios = sorted(
@@ -50,6 +52,14 @@ def active_tests(project_id: str, agent_design_id: str) -> List[Tuple[Scenario, 
         ]
         if contracts:
             tests.append((scenario, max(contracts, key=lambda contract: contract.updated_at)))
+            continue
+        default = _eval_contracts.get(scenario.default_eval_contract_id or "")
+        if (
+            default is not None
+            and default.project_id == project_id
+            and default.agent_design_id == agent_design_id
+        ):
+            tests.append((scenario, default))
     return tests
 
 

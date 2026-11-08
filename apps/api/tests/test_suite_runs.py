@@ -374,3 +374,112 @@ def test_suite_run_records_a_judge_error_after_the_run_is_stored(monkeypatch) ->
         for test in setup["tests"]
     ]
     assert [len(items) for items in evals] == [0, 1]
+
+
+def _shared_contract_agent(client: TestClient, name: str, scenario_names: List[str]) -> dict:
+    """An agent whose active scenarios name no contract; one contract is each one's default."""
+    agent = client.post(
+        f"{P}/agent-designs",
+        json={"name": name, "intent": "Answer support questions."},
+    ).json()["agent"]
+    shared = client.post(
+        f"{P}/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Shared contract",
+            "checks": [{"id": "says_alpha", "type": "output_contains", "value": "alpha"}],
+        },
+    ).json()
+    scenarios = [
+        client.post(
+            f"{P}/scenarios",
+            json={
+                "agent_design_id": agent["id"],
+                "name": scenario_name,
+                "input": "A customer reports a failed deployment.",
+                "default_eval_contract_id": shared["id"],
+                "status": "active",
+            },
+        ).json()
+        for scenario_name in scenario_names
+    ]
+    return {"agent": agent, "shared": shared, "scenarios": scenarios}
+
+
+def test_suite_runs_and_compares_scenarios_that_share_a_default_contract() -> None:
+    client = TestClient(app)
+    setup = _shared_contract_agent(client, "Shared Contract Agent", ["one", "two", "three"])
+    agent, shared = setup["agent"], setup["shared"]
+    scenario_ids = [scenario["id"] for scenario in setup["scenarios"]]
+    v0 = _version(client, agent, "v0", "Say nothing useful.")
+    v1 = _version(client, agent, "v1", "Always say alpha.")
+
+    baseline = _run_suite(client, agent, v0)
+    candidate = _run_suite(client, agent, v1)
+
+    assert [test["scenario_id"] for test in candidate["tests"]] == scenario_ids
+    assert {test["eval_contract_id"] for test in candidate["tests"]} == {shared["id"]}
+    assert all(test["error"] is None for test in candidate["tests"])
+    assert (baseline["passed"], baseline["total"]) == (0, 3)
+    assert (candidate["passed"], candidate["total"]) == (3, 3)
+    # Each scenario reads its own eval of the shared contract, not another scenario's.
+    eval_run_ids = [test["eval_result"]["run_id"] for test in candidate["tests"]]
+    runs = {run["id"]: run for run in client.get(f"{P}/runs", params={"agent_design_id": agent["id"]}).json()}
+    assert [runs[run_id]["scenario_id"] for run_id in eval_run_ids] == scenario_ids
+
+    comparison = _compare_suites(client, v0, v1)
+
+    assert [row["scenario_id"] for row in comparison["tests"]] == scenario_ids
+    assert [row["outcome"] for row in comparison["tests"]] == ["fixed", "fixed", "fixed"]
+
+
+def test_suite_uses_a_scenarios_own_contract_over_its_default_contract() -> None:
+    client = TestClient(app)
+    setup = _shared_contract_agent(client, "Own Contract Agent", ["own", "shared"])
+    agent, shared = setup["agent"], setup["shared"]
+    own_scenario = setup["scenarios"][0]
+    own = client.post(
+        f"{P}/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Own contract",
+            "scenario_id": own_scenario["id"],
+            "checks": [{"id": "says_beta", "type": "output_contains", "value": "beta"}],
+        },
+    ).json()
+    v0 = _version(client, agent, "v0", "Always say alpha.")
+
+    result = _run_suite(client, agent, v0)
+
+    assert [(test["scenario_id"], test["eval_contract_id"]) for test in result["tests"]] == [
+        (own_scenario["id"], own["id"]),
+        (setup["scenarios"][1]["id"], shared["id"]),
+    ]
+    assert [test["eval_result"]["passed"] for test in result["tests"]] == [False, True]
+
+
+def test_a_default_contract_of_another_agent_is_not_a_test() -> None:
+    client = TestClient(app)
+    other = _shared_contract_agent(client, "Contract Owner Agent", [])
+    agent = client.post(
+        f"{P}/agent-designs",
+        json={"name": "Borrowing Agent", "intent": "Answer support questions."},
+    ).json()["agent"]
+    client.post(
+        f"{P}/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "input": "A customer reports a failed deployment.",
+            "default_eval_contract_id": other["shared"]["id"],
+            "status": "active",
+        },
+    )
+    v0 = _version(client, agent, "v0", "Always say alpha.")
+
+    response = client.post(
+        f"{P}/agent-designs/{agent['id']}/versions/{v0['id']}/suite-runs",
+        json={"mode": "mock", "judge_mode": "deterministic"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Agent has no active tests to run."

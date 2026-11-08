@@ -176,3 +176,56 @@ test("A test that passed on v0 and fails on v1 is marked as a regression and blo
   await page.getByRole("button", { name: "Run gate" }).click();
   await expect(page.getByRole("heading", { name: "Blocked" })).toBeVisible();
 });
+
+test("Scenarios sharing a default contract are tests in both the saved-test list and the suite run", async ({
+  page,
+  request,
+}) => {
+  // Three active scenarios that name no contract share one as their default.
+  // A fourth active scenario has no contract at all, so it is not a test.
+  const name = await seedAgent(request, []);
+  const agents = await (await request.get(`${PROJECT}/agent-designs`)).json();
+  const agent = agents.find((item: { name: string }) => item.name === name);
+  const shared = await postJson<{ id: string }>(request, "/eval-contracts", {
+    agent_design_id: agent.id,
+    name: "Shared contract",
+    checks: [{ id: "phrase_check", type: "output_contains", value: "rollback plan" }],
+  });
+  const sharedNames = ["Shared one", "Shared two", "Shared three"];
+  for (const scenarioName of [...sharedNames, "No contract"]) {
+    await postJson(request, "/scenarios", {
+      agent_design_id: agent.id,
+      name: scenarioName,
+      input: "A deployment failed. What should I do?",
+      setup_context: "test_shape:single_turn",
+      default_eval_contract_id: scenarioName === "No contract" ? null : shared.id,
+      status: "active",
+    });
+  }
+  await page.goto("/");
+  await openAgent(page, name);
+
+  const rows = page.getByRole("list", { name: "Saved tests" }).getByRole("button");
+  await expect(rows).toHaveCount(3);
+  for (const [index, scenarioName] of sharedNames.entries()) {
+    await expect(rows.nth(index)).toContainText(scenarioName);
+  }
+  await expect(rows.filter({ hasText: "No contract" })).toHaveCount(0);
+
+  const version = page.getByRole("group", { name: "Version" });
+  const passCount = page.locator(".suite-pass-count");
+  await version.getByRole("button", { name: "v0" }).click();
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  await expect(passCount).toHaveText("0 of 3 passed");
+  await version.getByRole("button", { name: "v1" }).click();
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  await expect(passCount).toHaveText("3 of 3 passed");
+  for (const scenarioName of sharedNames) {
+    await expect(testRow(page, scenarioName)).toContainText("Passed");
+  }
+
+  await page.getByRole("button", { name: "Compare all tests" }).click();
+  await expect(
+    page.getByRole("region", { name: "Test comparison" }).getByText("3 fixed · 0 regressed · 0 still passing · 0 still failing"),
+  ).toBeVisible();
+});
