@@ -19,12 +19,20 @@ from edd_platform_api.lookups import (
 )
 from edd_platform_api.schemas import (
     ArtifactRecord,
+    FailurePacket,
     GateDecision,
     GateDecisionCreate,
     GateDefinition,
     GateDefinitionCreate,
 )
-from edd_platform_api.state import _artifacts, _failure_packets, _gate_decisions, _gate_definitions, store
+from edd_platform_api.state import (
+    _artifacts,
+    _failure_packets,
+    _gate_decisions,
+    _gate_definitions,
+    _runs,
+    store,
+)
 
 router = APIRouter()
 
@@ -42,6 +50,12 @@ def artifacts_for_agent_by_type(
         and artifact.agent_design_id == agent_design_id
         and artifact.artifact_type == artifact_type
     ]
+
+
+def _packet_version_id(failure: FailurePacket) -> Optional[str]:
+    """The version whose run produced the packet."""
+    run = _runs.get(failure.run_id)
+    return run.agent_version_id if run is not None else failure.agent_version_id
 
 
 def create_gate_decision_record(
@@ -107,8 +121,9 @@ def create_gate_decision_record(
             row for row in comparison.tests if row.outcome in ("regressed", "still_failing")
         ]
 
-    # Every open packet for the agent blocks, except the ones the referenced
-    # comparison proved fixed (HLD-007 step 3).
+    # Open packets from the judged version's own runs block, except the ones the
+    # referenced comparison proved fixed (HLD-007 step 3). With no version
+    # referenced, every open packet for the agent blocks.
     agent_blocking_failures = [
         failure
         for failure in _failure_packets.values()
@@ -125,6 +140,7 @@ def create_gate_decision_record(
         failure.id
         for failure in agent_blocking_failures
         if failure.id not in fixed_failure_packet_ids
+        and (judged_version_id is None or _packet_version_id(failure) == judged_version_id)
     ]
     for failure_id in blocking_failure_packet_ids:
         failure_artifact = api_main.find_artifact_by_type_and_artifact_id("FAILURE_PACKET", failure_id)
