@@ -51,6 +51,12 @@ After finishing meaningful work:
 3. Update `docs/WORK_PLAN.md` only when milestone state changed.
 4. Commit only when the user asks.
 
+## Office Sessions
+
+When an office runs a session on this repo, the office ticket is the task and
+the request to commit. The session does not change Beads or `.beads/`, and
+opens one pull request per ticket. See "Working in an office" in `CLAUDE.md`.
+
 ## Drift Prevention
 
 Task tracking is here to prevent these failure modes:
