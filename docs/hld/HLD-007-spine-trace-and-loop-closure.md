@@ -55,7 +55,7 @@ reload, the console shows it again without the user redoing the step.
 | Run | Yes. `POST/GET /runs`, list by agent. | Proof loop "Run v0" / "Run version"; wizard. The console always sends `mode: "live"` (`main.tsx:103`). | Yes | Should. `hydrateEddFlow` finds the latest run matching version + scenario + contract. T-5 reports "Not run" after reload; cause not confirmed (see §2). | API: yes (`test_project_scoped_run_*`, live runs with stubbed providers). Browser: no. |
 | EvalResult | Yes. `POST /runs/{id}/evaluate`, list by run. | Proof loop "Check answer" / "Check version". | Yes | Yes, through the run it belongs to. | API: yes (`test_contract_driven_run_evaluation_*`). Browser: no. |
 | JudgeOutput | Yes. Written by evaluate; `GET /judge-outputs`. | Partly. Judge reasoning shows inside the failure card. Not on the Evidence tab (T-7). | Yes | No. `judgeOutputText` lives in memory (`ProofLoopCtx`) and is only filled by Auto-diagnose. | API: yes (live judge with stubbed client). Browser: no. |
-| FailurePacket | Yes. Created by evaluate when a check fails, status `open` (`routers/runs.py:1099`). CRUD routes exist. | Indirectly. It gates "Generate fix", but the console never refreshes packets after evaluate (cause of T-6). Nothing in the console or API ever changes a packet's status. | Yes | Yes, loaded once when the agent is selected. | API: yes. Browser: no. |
+| FailurePacket | Yes. Created by evaluate when a check fails, status `open` (`routers/runs.py:1115`). CRUD routes exist. | Indirectly. It gates "Generate fix", but the console never refreshes packets after evaluate (cause of T-6). Nothing in the console or API ever changes a packet's status. | Yes | Yes, loaded once when the agent is selected. | API: yes. Browser: no. |
 | ReviewNote (the Proof loop's "analysis") | Yes. `POST /review-notes`, list by target artifact. | Proof loop "Save analysis". | Yes | No. `analysisNote` lives in memory (`ProofLoopCtx`) and is reset on agent select and reload. | API: yes. Browser: no. |
 | FixProposal | Yes. `POST /fix-proposals/generate` (always calls Anthropic, no deterministic mode), `POST /fix-proposals`, `PATCH`. | Proof loop "Generate fix" / "Save fix proposal", unreachable after "Save analysis" (T-6). | Saved proposal: yes. Generated text before "Save": no. | Saved: yes. Generated-but-unsaved text: no. | Create: API yes. Generate: no API test; only `scripts/outcome_agent_lifecycle_e2e.py` (live). |
 | AgentVersion (candidate) | Yes. `POST /agent-designs/{id}/versions`, `source_fix_proposal_id`, `parent_version_id`. | Proof loop "Create version". | Yes | Yes, chosen by heuristics (`source_fix_proposal_id`, then status, then label `v1`). | API: yes. Browser: no. |
@@ -178,7 +178,10 @@ console always sends live runs. Generate fix always calls Anthropic, and the
 deterministic judge always fails rubric checks. The smallest approach that
 needs no product code:
 
-- Use a test with an `output_contains` check, not a rubric.
+- Use a test with an `output_contains` check, not a rubric. The mock output
+  also echoes the agent name and the scenario input, so the expected phrase
+  must appear in neither of them. It may appear only in v1's instructions;
+  otherwise v0 passes too and the test proves nothing.
 - In Playwright, rewrite `POST /runs` and `POST /runs/{id}/evaluate` request
   bodies to `mode: "mock"` / `judge_mode: "deterministic"`, and answer
   `POST /fix-proposals/generate` with fixed instructions that contain the
@@ -213,9 +216,14 @@ T-4 must land first so a reload of a wizard-made agent does not hit the 500.
 
 ### Step 3 — The gate judges the version being promoted (T-16, new)
 
-Blocking packets are those on the version being promoted, plus any the
-comparison reports as new. Packets the comparison lists as fixed do not block.
-API tests: "fixed → passed" and "candidate still fails → blocked". This is the
+Rule: every open packet for the agent blocks, except the packets that the
+referenced comparison lists as fixed. So the candidate's own failures and the
+comparison's new failures block. Open packets on any other version that no
+comparison has shown fixed also block, for example a sibling version from
+another fix attempt. The gate never drops a packet just because it belongs to
+a different version.
+API tests: "fixed → passed", "candidate still fails → blocked", and "an
+unfixed open packet on a sibling version → blocked". This is the
 step that lets the single-test loop end in a **passed** gate decision. API
 only, and independent of steps 1–2.
 
@@ -289,9 +297,9 @@ conflict in logic.
 - **Deterministic tests cannot cover rubric checks.** The loop is proven
   without keys only for `output_contains` tests. Rubric behavior stays covered
   by API tests with a stubbed judge client.
-- **Scoping the gate to one version** must not hide failures. T-16 requires
-  that every ignored packet is backed by a comparison or eval that proves the
-  fix.
+- **Changing the gate rule** must not hide failures. Under step 3's rule, the
+  gate ignores a packet only when the referenced comparison lists it as fixed.
+  T-16's sibling-version test guards this.
 
 ## Success criteria
 
