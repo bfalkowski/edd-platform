@@ -1,3 +1,4 @@
+import { testFailurePackets, testFixProposal } from "./testScope";
 import type {
   AgentDesign,
   AgentRunResult,
@@ -1248,6 +1249,8 @@ export async function hydrateEddFlow(
     candidateRun ? listEvalResults(projectId, candidateRun.id) : Promise.resolve([]),
   ]);
 
+  const testPackets = testFailurePackets(failurePackets, runs, scenario?.id, contract?.id);
+
   return {
     baselineVersion,
     candidateVersion,
@@ -1257,10 +1260,8 @@ export async function hydrateEddFlow(
     candidateRun,
     baselineEval: baselineEvalResults[0],
     candidateEval: candidateEvalResults[0],
-    failurePackets: failurePackets.filter((packet) => packet.eval_contract_id === contract?.id),
-    fixProposal: fixProposals.find(
-      (proposal) => contract && proposal.validation_contract_ids.includes(contract.id),
-    ),
+    failurePackets: testPackets,
+    fixProposal: testFixProposal(fixProposals, testPackets, contract?.id),
     comparison,
     suiteComparison: comparisons.find(
       (item) =>
