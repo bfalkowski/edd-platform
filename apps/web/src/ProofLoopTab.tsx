@@ -13,6 +13,7 @@ import {
   runSuite,
 } from "./api";
 import { checkLabel } from "./checkLabel";
+import { nextVersionLabel } from "./nextVersionLabel";
 import { proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
 import { suiteComparisonIsCurrent, suiteIsComplete, suiteTestResult } from "./suite";
 import { SuiteComparisonTable } from "./SuiteComparisonTable";
@@ -366,8 +367,7 @@ export function ProofLoopTab({
         generatedInstructions: result.proposed_instructions,
         generatedRationale: result.rationale,
       }));
-      setActivity("Fix generated. Review and confirm to create v" +
-        ((eddFlow.baselineVersion.version_label.match(/\d+/)?.[0] ?? 0) as number + 1) + ".");
+      setActivity(`Fix generated. Review and confirm to create ${nextVersionLabel(eddFlow.baselineVersion.version_label)}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to generate fix.");
       setActivity(null);
