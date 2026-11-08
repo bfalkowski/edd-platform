@@ -289,6 +289,9 @@ test("An artifact load error shows once when the tools panel is open on the Evid
   await evidenceRows(page, "Run output").click();
 
   await expect(page.getByText("Unable to load artifact. (HTTP 500)")).toHaveCount(1);
+  await expect(
+    page.getByRole("complementary", { name: "Tool marketplace" }).getByText("Unable to load artifact. (HTTP 500)"),
+  ).toBeVisible();
 });
 
 test("Readiness tab shows the error when creating a gate fails, and clears it on tab switch", async ({
