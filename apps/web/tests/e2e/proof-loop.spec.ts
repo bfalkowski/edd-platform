@@ -9,14 +9,14 @@ async function postJson<T>(request: APIRequestContext, path: string, data: objec
 }
 
 /** An agent with one test the stub model fails until its instructions ask for a rollback plan. */
-async function seedAgent(request: APIRequestContext): Promise<string> {
+async function seedAgent(request: APIRequestContext, checkFirst = false): Promise<string> {
   const name = `Proof Loop Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {
     name,
     intent: "Answer support questions with a safe next action.",
   });
   // The console creates v0 with an agent's first test; seeding through the API has to do it too.
-  await postJson(request, `/agent-designs/${agent.id}/versions`, {
+  const v0 = await postJson<{ id: string }>(request, `/agent-designs/${agent.id}/versions`, {
     version_label: "v0",
     instructions: "Answer support questions with a safe next action.",
     status: "baseline",
@@ -28,12 +28,22 @@ async function seedAgent(request: APIRequestContext): Promise<string> {
     setup_context: "test_shape:single_turn",
     status: "active",
   });
-  await postJson(request, "/eval-contracts", {
+  const contract = await postJson<{ id: string }>(request, "/eval-contracts", {
     agent_design_id: agent.id,
     name: "Gives a rollback plan",
     scenario_id: scenario.id,
     checks: [{ id: "rollback_plan", type: "output_contains", value: "rollback plan" }],
   });
+  if (checkFirst) {
+    const run = await postJson<{ id: string }>(request, "/runs", {
+      agent_design_id: agent.id,
+      agent_version_id: v0.id,
+      scenario_id: scenario.id,
+      eval_contract_id: contract.id,
+      mode: "live",
+    });
+    await postJson(request, `/runs/${run.id}/evaluate`, { judge_mode: "deterministic" });
+  }
   return name;
 }
 
@@ -92,4 +102,17 @@ test("A failed test goes from Save analysis to a compared new version", async ({
   await clickNext(page, "Compare");
 
   await expect(nextAction(page).getByText("Iteration complete — passed")).toBeVisible();
+});
+
+test("A failed test checked in an earlier session still reaches Generate fix", async ({ page, request }) => {
+  const name = await seedAgent(request, true);
+  await openAgent(page, name);
+
+  const analysis = page.locator(".failure-analysis-panel");
+  await analysis.getByLabel("Failure mode").fill("missing rollback plan");
+  await analysis.getByLabel(/Review note/).fill("The answer never gives a rollback plan.");
+  await analysis.getByRole("button", { name: "Save analysis" }).click();
+
+  await clickNext(page, "Generate fix");
+  await expect(nextAction(page).getByRole("heading", { name: "Confirm and save fix" })).toBeVisible();
 });

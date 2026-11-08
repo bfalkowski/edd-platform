@@ -270,8 +270,10 @@ export function ProofLoopTab({
     setIsFlowBusy(true);
     try {
       const baselineEval = await evaluateRun(projectId, eddFlow.baselineRun.id, currentJudgeMode);
+      // Keep the saved eval even if the packet reload fails, so Check is not run twice.
+      setEddFlow((flow) => ({ ...flow, baselineEval }));
       const failurePackets = await loadFailurePackets(baselineEval.eval_contract_id);
-      setEddFlow((flow) => ({ ...flow, baselineEval, failurePackets }));
+      setEddFlow((flow) => ({ ...flow, failurePackets }));
       setActivity(
         baselineEval.passed ? "Current answer passed." : "Current answer failed; evidence saved.",
       );
@@ -469,8 +471,10 @@ export function ProofLoopTab({
     setIsFlowBusy(true);
     try {
       const candidateEval = await evaluateRun(projectId, eddFlow.candidateRun.id, currentJudgeMode);
+      // Keep the saved eval even if the packet reload fails, so Check is not run twice.
+      setEddFlow((flow) => ({ ...flow, candidateEval }));
       const failurePackets = await loadFailurePackets(candidateEval.eval_contract_id);
-      setEddFlow((flow) => ({ ...flow, candidateEval, failurePackets }));
+      setEddFlow((flow) => ({ ...flow, failurePackets }));
       setActivity(candidateEval.passed ? "New version passed." : "New version still fails.");
       await refreshContext();
       await reviewFirstArtifact(candidateEval.artifact_ids);
