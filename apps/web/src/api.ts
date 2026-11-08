@@ -308,7 +308,7 @@ export async function createScenario(
 export async function updateScenario(
   projectId: string,
   scenarioId: string,
-  payload: { name?: string; status?: string },
+  payload: { name?: string; status?: "draft" | "active" | "superseded" },
 ): Promise<Scenario> {
   const response = await fetch(`${apiBase}/projects/${projectId}/scenarios/${scenarioId}`, {
     method: "PATCH",
