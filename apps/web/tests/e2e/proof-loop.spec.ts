@@ -163,3 +163,36 @@ test("A fix proposal names the failure packet when the Check reload failed", asy
   const proposal = await (await saved).json();
   expect(proposal.addressed_failure_packet_ids).toHaveLength(1);
 });
+
+test("The fix message never names a version label other than the one created", async ({ page, request }) => {
+  const name = await seedAgent(request);
+  // An extra version that is neither the baseline nor a candidate: the server's next label skips past it.
+  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
+    (agent: { name: string }) => agent.name === name,
+  ).id;
+  await postJson(request, `/agent-designs/${agentId}/versions`, { version_label: "draft", status: "draft" });
+  await openAgent(page, name);
+  await clickNext(page, "Run current");
+  await clickNext(page, "Check answer");
+
+  const analysis = page.locator(".failure-analysis-panel");
+  await analysis.getByLabel("Failure mode").fill("missing rollback plan");
+  await analysis.getByLabel(/Review note/).fill("The answer never gives a rollback plan.");
+  await analysis.getByRole("button", { name: "Save analysis" }).click();
+
+  await clickNext(page, "Generate fix");
+  const message = page.locator(".activity-text").filter({ hasText: "Fix generated" }).first();
+  await expect(message).toHaveText("Fix generated. Review and confirm to create a new version.");
+  const text = (await message.textContent()) ?? "";
+
+  await clickNext(page, "Save fix proposal");
+  const created = page.waitForResponse(
+    (response) => response.request().method() === "POST" && /\/versions$/.test(new URL(response.url()).pathname),
+  );
+  await clickNext(page, "Create version");
+  const version = await (await created).json();
+  for (const label of text.match(/\bv\d+\b/g) ?? []) {
+    expect(label).toBe(version.version_label);
+  }
+  await expect(page.locator(".activity-text").filter({ hasText: `${version.version_label} is ready to run.` }).first()).toBeVisible();
+});
