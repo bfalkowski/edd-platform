@@ -182,7 +182,7 @@ test("The fix message never names a version label other than the one created", a
 
   await clickNext(page, "Generate fix");
   const message = page.locator(".activity-text").filter({ hasText: "Fix generated" }).first();
-  await expect(message).toBeVisible();
+  await expect(message).toHaveText("Fix generated. Review and confirm to create a new version.");
   const text = (await message.textContent()) ?? "";
 
   await clickNext(page, "Save fix proposal");
@@ -194,4 +194,5 @@ test("The fix message never names a version label other than the one created", a
   for (const label of text.match(/\bv\d+\b/g) ?? []) {
     expect(label).toBe(version.version_label);
   }
+  await expect(page.locator(".activity-text").filter({ hasText: `${version.version_label} is ready to run.` }).first()).toBeVisible();
 });
