@@ -41,7 +41,8 @@ The expected development loop is:
 8. Run the relevant checks.
 9. Browser-smoke visible UI changes.
 10. Update task status and `docs/WORK_PLAN.md` when milestones move.
-11. Commit only when explicitly asked.
+11. Commit only when explicitly asked. In an office session, the ticket is the
+    ask (see "Working in an office" in `CLAUDE.md`).
 
 This loop is meant to keep AI-assisted work boring, inspectable, and reversible.
 
@@ -110,7 +111,7 @@ vibes-based.
 
 Commits should be:
 
-- requested by the user
+- requested by the user, or by an office ticket
 - scoped to the completed slice
 - free of `Co-authored-by` trailers
 - free of secrets and local run artifacts

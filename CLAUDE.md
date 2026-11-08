@@ -24,6 +24,8 @@ Before implementing:
 - If multiple interpretations exist, present them instead of picking silently.
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop, name what is confusing, and ask.
+- In an office session, "ask" and "present" mean: write it down where the
+  person will read it. See [Working in an office](#working-in-an-office).
 
 ### 2. Simplicity First
 
@@ -79,7 +81,8 @@ implementation rather than after mistakes.
 
 ## Commit Rules
 
-- Only commit when asked.
+- Only commit when asked. An office ticket counts as asking (see
+  [Working in an office](#working-in-an-office)).
 - Never add `Co-authored-by` trailers to commits.
 - Do not commit secrets, `.env` files, API keys, or local run artifacts.
 
@@ -87,11 +90,50 @@ implementation rather than after mistakes.
 
 - Use `docs/WORK_PLAN.md` for the public milestone checklist.
 - When Beads is installed, use repo-local Beads tasks for active work, blockers,
-  dependencies, and resume state.
+  dependencies, and resume state. In an office session, the office ticket
+  takes this place.
 - Before resuming implementation, check the ready task queue and the work plan.
 - After meaningful work, update task status, verification notes, and the work
   plan when milestone state changes.
 - Do not commit private scratch notes, secrets, or local-only run artifacts.
+
+## Working in an office
+
+This repo can be worked on by an office: a relay that runs Claude Code sessions
+as a Lead, Devs, reviewers and a PM, with a person as the manager. You are in an
+office session when the office started you: you got a brief, and
+`OFFICE_TICKET_TOKEN` is set. In an office session, these rules replace the
+ones above where they differ:
+
+- **The ticket is the request.** Your brief names one ticket. Do that ticket
+  in one pull request. Every changed line should trace to it.
+- **Commit, push and open the PR.** Commit on the ticket's own branch in your
+  own worktree, push with a plain `git push`, open the pull request against
+  `main` ready for review, then stop. Never commit to `main` directly, and do
+  not merge. Who merges follows the office's rules.
+- **Choose, then say what you chose.** Nobody may be watching, so do not wait
+  on a question. For a choice that is easy to undo, pick the simpler option and
+  write the choice and the reason in the pull request. Stop and ask only for a
+  one-way door: deleting data, changing a public API or the database schema in
+  a way that cannot be rolled back, or changing these rules.
+- **File other work, do not do it.** When you find work outside your ticket,
+  file it with the ticket command your brief names, and carry on.
+- **Use the office board, not Beads.** Beads stays the tracker for anyone
+  working without an office. In an office session, do not create, update or
+  close Beads tasks, and do not change files in `.beads/` in your pull request,
+  since parallel branches would conflict on its JSONL files. You may read Beads
+  (`bd ready`, `bd show`) for context. The Beads git hooks in `.beads/hooks`
+  exit at once when `OFFICE_TICKET_TOKEN` is set, so an office commit never
+  writes the shared Beads database into the main folder. Update
+  `docs/WORK_PLAN.md` when a milestone moves, as before.
+- **Show evidence.** In the pull request, say what you ran, what you checked
+  by hand, what you could not check, and what else the change can affect. For
+  a bug or new behavior, show the test that failed before your change and
+  passes after it.
+- **Everything else still holds:** no `Co-authored-by` trailers, no secrets,
+  CI stays green without provider keys, frontend work follows
+  `docs/design/FRONTEND_GUIDE.md`, and new routes follow
+  `docs/API_CONTRACT.md`.
 
 ## Product Direction
 
