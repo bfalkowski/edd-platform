@@ -789,6 +789,8 @@ def list_runs(
 
 # Tag lines the platform writes into setup_context for its own use (the
 # console's test shape, the outcome draft's origin). They are not for the agent.
+# Keep the test_shape values in step with TestShape in apps/web/src/types.ts;
+# a shape missing here is sent to the agent.
 _SETUP_CONTEXT_TAGS = {
     "test_shape:single_turn",
     "test_shape:conversation",
