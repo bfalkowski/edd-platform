@@ -1161,12 +1161,26 @@
             "type": "array"
           },
           "baseline_eval_result_id": {
-            "title": "Baseline Eval Result Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Eval Result Id"
           },
           "baseline_run_id": {
-            "title": "Baseline Run Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Run Id"
           },
           "baseline_version_id": {
             "anyOf": [
@@ -1180,12 +1194,26 @@
             "title": "Baseline Version Id"
           },
           "candidate_eval_result_id": {
-            "title": "Candidate Eval Result Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Eval Result Id"
           },
           "candidate_run_id": {
-            "title": "Candidate Run Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Run Id"
           },
           "candidate_version_id": {
             "anyOf": [
@@ -1235,16 +1263,29 @@
           "summary": {
             "title": "Summary",
             "type": "string"
+          },
+          "tests": {
+            "items": {
+              "$ref": "#/components/schemas/ComparisonTestRow"
+            },
+            "title": "Tests",
+            "type": "array"
+          },
+          "totals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonTotals"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "id",
           "project_id",
           "agent_design_id",
-          "baseline_run_id",
-          "candidate_run_id",
-          "baseline_eval_result_id",
-          "candidate_eval_result_id",
           "fixed_failure_packet_ids",
           "new_failure_packet_ids",
           "remaining_failure_packet_ids",
@@ -1279,6 +1320,88 @@
           "eval_contract_id"
         ],
         "title": "ComparisonCreate",
+        "type": "object"
+      },
+      "ComparisonTestRow": {
+        "properties": {
+          "baseline_eval_result_id": {
+            "title": "Baseline Eval Result Id",
+            "type": "string"
+          },
+          "baseline_run_id": {
+            "title": "Baseline Run Id",
+            "type": "string"
+          },
+          "candidate_eval_result_id": {
+            "title": "Candidate Eval Result Id",
+            "type": "string"
+          },
+          "candidate_run_id": {
+            "title": "Candidate Run Id",
+            "type": "string"
+          },
+          "eval_contract_id": {
+            "title": "Eval Contract Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "fixed",
+              "regressed",
+              "still_passing",
+              "still_failing"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "scenario_id": {
+            "title": "Scenario Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_id",
+          "eval_contract_id",
+          "baseline_run_id",
+          "candidate_run_id",
+          "baseline_eval_result_id",
+          "candidate_eval_result_id",
+          "outcome"
+        ],
+        "title": "ComparisonTestRow",
+        "type": "object"
+      },
+      "ComparisonTotals": {
+        "properties": {
+          "fixed": {
+            "title": "Fixed",
+            "type": "integer"
+          },
+          "regressed": {
+            "title": "Regressed",
+            "type": "integer"
+          },
+          "still_failing": {
+            "title": "Still Failing",
+            "type": "integer"
+          },
+          "still_passing": {
+            "title": "Still Passing",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "fixed",
+          "regressed",
+          "still_passing",
+          "still_failing"
+        ],
+        "title": "ComparisonTotals",
         "type": "object"
       },
       "ContextPack": {
@@ -5689,6 +5812,140 @@
         "title": "ServiceStatusResponse",
         "type": "object"
       },
+      "SuiteComparisonCreate": {
+        "properties": {
+          "baseline_version_id": {
+            "minLength": 1,
+            "title": "Baseline Version Id",
+            "type": "string"
+          },
+          "candidate_version_id": {
+            "minLength": 1,
+            "title": "Candidate Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseline_version_id",
+          "candidate_version_id"
+        ],
+        "title": "SuiteComparisonCreate",
+        "type": "object"
+      },
+      "SuiteResult": {
+        "properties": {
+          "agent_design_id": {
+            "title": "Agent Design Id",
+            "type": "string"
+          },
+          "agent_version_id": {
+            "title": "Agent Version Id",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "tests": {
+            "items": {
+              "$ref": "#/components/schemas/SuiteTestResult"
+            },
+            "title": "Tests",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "agent_design_id",
+          "agent_version_id",
+          "passed",
+          "total",
+          "tests"
+        ],
+        "title": "SuiteResult",
+        "type": "object"
+      },
+      "SuiteRunCreate": {
+        "properties": {
+          "judge_mode": {
+            "default": "deterministic",
+            "enum": [
+              "deterministic",
+              "live"
+            ],
+            "title": "Judge Mode",
+            "type": "string"
+          },
+          "mode": {
+            "default": "mock",
+            "enum": [
+              "mock",
+              "live"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "anthropic",
+                  "foundry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "title": "SuiteRunCreate",
+        "type": "object"
+      },
+      "SuiteTestResult": {
+        "properties": {
+          "eval_contract_id": {
+            "title": "Eval Contract Id",
+            "type": "string"
+          },
+          "eval_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvalResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scenario_id": {
+            "title": "Scenario Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_id",
+          "eval_contract_id"
+        ],
+        "title": "SuiteTestResult",
+        "type": "object"
+      },
       "ToolAdapterContract": {
         "properties": {
           "eval_validation": {
@@ -6668,6 +6925,130 @@
         "summary": "Get Agent Version"
       }
     },
+    "/api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}/suite-result": {
+      "get": {
+        "operationId": "get_version_suite_result_api_projects__project_id__agent_designs__agent_id__versions__version_id__suite_result_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuiteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Version Suite Result"
+      }
+    },
+    "/api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}/suite-runs": {
+      "post": {
+        "operationId": "run_version_suite_api_projects__project_id__agent_designs__agent_id__versions__version_id__suite_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuiteRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuiteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Version Suite"
+      }
+    },
     "/api/projects/{project_id}/agent-designs/{agent_id}/wizard-state": {
       "get": {
         "description": "Return the agent in OutcomeAgentCreated shape so the wizard can resume.",
@@ -7420,6 +7801,55 @@
           }
         },
         "summary": "Create Comparison"
+      }
+    },
+    "/api/projects/{project_id}/comparisons/suite": {
+      "post": {
+        "operationId": "create_suite_comparison_api_projects__project_id__comparisons_suite_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuiteComparisonCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Suite Comparison"
       }
     },
     "/api/projects/{project_id}/comparisons/{comparison_id}": {

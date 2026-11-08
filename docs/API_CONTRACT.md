@@ -325,9 +325,11 @@ readiness artifact.
 
 Every failure packet for the agent whose status is in the gate's
 `blocking_failure_statuses` blocks, except the packets that the referenced
-`comparison_id` lists in `fixed_failure_packet_ids`. When both
+`comparison_id` lists in `fixed_failure_packet_ids`. A suite comparison also blocks when any of its
+`tests` rows is `regressed` or `still_failing`. When both
 `eval_result_id` and `comparison_id` are given, the eval result must be the
-comparison's `candidate_eval_result_id`, or the request returns 400. The
+comparison's `candidate_eval_result_id` (for a suite comparison, one of its
+rows' `candidate_eval_result_id`), or the request returns 400. The
 rationale names the judged version by label and id (the comparison's candidate
 version, else the eval result's run version) and the packets it ignored as
 fixed.
@@ -563,6 +565,50 @@ langfuse_prompt_label
 created_at
 updated_at
 ```
+
+### Suite Runs
+
+A suite run executes every test for an agent against one version: each
+`active` scenario paired with its newest eval contract, the same list the
+Proof loop shows as saved tests. Tests run one at a time, and each stores one
+run and one eval result. Nothing else is stored: a version's suite result is
+the latest eval per (version, scenario, contract), read on demand.
+
+```text
+POST  /api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}/suite-runs
+GET   /api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}/suite-result
+```
+
+Suite run request (all fields optional; they match the run and evaluate
+requests):
+
+```json
+{
+  "mode": "mock",
+  "provider": "anthropic",
+  "model": null,
+  "judge_mode": "deterministic"
+}
+```
+
+Both routes return the suite result. A suite run on an agent with no active
+tests returns 400. A live suite costs one provider call per test, or two with
+a live judge.
+
+Minimum response fields:
+
+```text
+agent_design_id
+agent_version_id
+passed
+total
+tests[].scenario_id
+tests[].eval_contract_id
+tests[].eval_result
+```
+
+`passed` counts tests whose latest eval passed; a test with no eval for the
+version has `eval_result: null`.
 
 ### Runs
 
@@ -928,6 +974,44 @@ summary
 artifact_ids
 created_at
 ```
+
+A suite comparison compares two versions over every active test:
+
+```text
+POST  /api/projects/{project_id}/comparisons/suite
+```
+
+```json
+{
+  "baseline_version_id": "version_v0",
+  "candidate_version_id": "version_v1"
+}
+```
+
+It returns a `Comparison` whose single-pair run and eval fields are null, with
+these added fields:
+
+```text
+tests[].scenario_id
+tests[].eval_contract_id
+tests[].baseline_run_id
+tests[].candidate_run_id
+tests[].baseline_eval_result_id
+tests[].candidate_eval_result_id
+tests[].outcome            fixed | regressed | still_passing | still_failing
+totals.total
+totals.fixed
+totals.regressed
+totals.still_passing
+totals.still_failing
+```
+
+Each row compares each version's latest eval on that test. Both versions must
+have an eval on every active test, or the request returns 400 naming the
+missing tests by scenario name and id. The fixed, new and remaining failure
+packet lists are the union of the per-test lists, worked out with the
+single-pair rules below.
+Single-pair comparisons return `tests: []` and `totals: null`.
 
 Fixed and remaining failure packets cover every packet on the eval contract
 from any run of the baseline version on the same scenario, not only the

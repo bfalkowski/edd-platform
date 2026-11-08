@@ -78,6 +78,7 @@ def create_gate_decision_record(
         evidence_artifact_ids.extend(eval_result.artifact_ids)
 
     fixed_failure_packet_ids: List[str] = []
+    failing_tests = []
     if payload.comparison_id is not None:
         comparison = get_comparison_or_404(project_id, payload.comparison_id)
         if comparison.agent_design_id != gate.agent_design_id:
@@ -85,9 +86,14 @@ def create_gate_decision_record(
                 status_code=400,
                 detail="Gate decision comparison must belong to the same agent design.",
             )
+        candidate_eval_result_ids = (
+            [row.candidate_eval_result_id for row in comparison.tests]
+            if comparison.tests
+            else [comparison.candidate_eval_result_id]
+        )
         if (
             payload.eval_result_id is not None
-            and comparison.candidate_eval_result_id != payload.eval_result_id
+            and payload.eval_result_id not in candidate_eval_result_ids
         ):
             raise HTTPException(
                 status_code=400,
@@ -96,6 +102,10 @@ def create_gate_decision_record(
         evidence_artifact_ids.extend(comparison.artifact_ids)
         fixed_failure_packet_ids = comparison.fixed_failure_packet_ids
         judged_version_id = comparison.candidate_version_id or judged_version_id
+        # A suite comparison also blocks on any test that regressed or still fails.
+        failing_tests = [
+            row for row in comparison.tests if row.outcome in ("regressed", "still_failing")
+        ]
 
     # Every open packet for the agent blocks, except the ones the referenced
     # comparison proved fixed (HLD-007 step 3).
@@ -122,7 +132,7 @@ def create_gate_decision_record(
             evidence_artifact_ids.append(failure_artifact.id)
 
     evidence_artifact_ids = sorted(set(evidence_artifact_ids))
-    passed = not missing_artifact_types and not blocking_failure_packet_ids
+    passed = not missing_artifact_types and not blocking_failure_packet_ids and not failing_tests
     decision_value: Literal["passed", "blocked"] = "passed" if passed else "blocked"
     if judged_version_id:
         judged_version = get_agent_version_or_404(project_id, judged_version_id)
@@ -141,6 +151,12 @@ def create_gate_decision_record(
     if blocking_failure_packet_ids:
         rationale_parts.append(
             f"Blocking failure packets remain: {', '.join(blocking_failure_packet_ids)}."
+        )
+    if failing_tests:
+        rationale_parts.append(
+            f"Suite comparison {payload.comparison_id} has failing tests: "
+            + ", ".join(f"{row.scenario_id} ({row.outcome})" for row in failing_tests)
+            + "."
         )
     if passed:
         rationale_parts.append("Required evidence is present and no blocking failures remain.")
