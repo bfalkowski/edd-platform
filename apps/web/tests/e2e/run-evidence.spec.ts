@@ -252,3 +252,20 @@ test("A run lookup that fails for a reason other than 404 says the prompt could 
   await expect(prompt).toContainText("Could not load the system prompt: Boom. (HTTP 500)");
   await expect(prompt.locator("pre")).toHaveCount(0);
 });
+
+test("Evidence tab shows the error when an artifact fails to load", async ({ page, request }) => {
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  // Fail only the artifact GET, not its /links call.
+  await page.route(/\/artifacts\/[^/?]+$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 500, body: "Internal Server Error" })
+      : route.continue(),
+  );
+  await evidenceRows(page, "Run output").click();
+
+  await expect(page.getByText("Unable to load artifact. (HTTP 500)")).toBeVisible();
+  await expect(page.locator(".review-panel")).toHaveCount(0);
+});

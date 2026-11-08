@@ -1271,6 +1271,11 @@ function App() {
                 </div>
               </div>
 
+              {/* The other tabs render the shared error text themselves. */}
+              {error && (workspaceTab === "evidence" || workspaceTab === "readiness") ? (
+                <p className="error-text">{error}</p>
+              ) : null}
+
               {workspaceTab === "agent" ? (
                 <AgentTab
                   projectId={project?.id ?? "project_default"}
