@@ -134,3 +134,32 @@ test("A failed check stays saved when the packet reload fails", async ({ page, r
   await expect(page.locator(".failure-analysis-panel").getByRole("heading", { name: "Name this failure" })).toBeVisible();
   await expect(nextAction(page).getByRole("button", { name: "Check answer", exact: true })).toHaveCount(0);
 });
+
+test("A fix proposal names the failure packet when the Check reload failed", async ({ page, request }) => {
+  const name = await seedAgent(request);
+  await openAgent(page, name);
+  await clickNext(page, "Run current");
+
+  // Fail only the failure-packet reload Check makes after saving its eval.
+  let failed = false;
+  await page.route("**/failure-packets?*", (route) => {
+    if (failed) return route.continue();
+    failed = true;
+    return route.fulfill({ status: 500, body: "{}" });
+  });
+  await clickNext(page, "Check answer");
+
+  const analysis = page.locator(".failure-analysis-panel");
+  await analysis.getByLabel("Failure mode").fill("missing rollback plan");
+  await analysis.getByLabel(/Review note/).fill("The answer never gives a rollback plan.");
+  await analysis.getByRole("button", { name: "Save analysis" }).click();
+
+  await clickNext(page, "Generate fix");
+  await expect(page.getByLabel("Proposed instructions")).toHaveValue(/rollback plan/);
+  const saved = page.waitForResponse(
+    (response) => response.request().method() === "POST" && /\/fix-proposals$/.test(new URL(response.url()).pathname),
+  );
+  await clickNext(page, "Save fix proposal");
+  const proposal = await (await saved).json();
+  expect(proposal.addressed_failure_packet_ids).toHaveLength(1);
+});
