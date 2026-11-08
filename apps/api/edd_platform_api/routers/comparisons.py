@@ -308,7 +308,7 @@ def create_suite_comparison(
             eval_contract_id=contract.id,
         )
         if baseline_eval is None or candidate_eval is None:
-            unevaluated.append(scenario.name)
+            unevaluated.append(f"{scenario.name} ({scenario.id})")
             continue
         baseline_run = _runs[baseline_eval.run_id]
         candidate_run = _runs[candidate_eval.run_id]

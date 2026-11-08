@@ -264,7 +264,7 @@ def test_suite_comparison_requires_both_versions_evaluated_on_every_test() -> No
     )
 
     assert response.status_code == 400
-    assert "alpha test" in response.json()["detail"]
+    assert f"alpha test ({setup['tests'][0]['scenario']['id']})" in response.json()["detail"]
 
 
 def test_gate_accepts_a_suite_rows_candidate_eval_result() -> None:

@@ -959,8 +959,9 @@ totals.still_failing
 
 Each row compares each version's latest eval on that test. Both versions must
 have an eval on every active test, or the request returns 400 naming the
-missing tests. The fixed, new and remaining failure packet lists are the union
-of the per-test lists, worked out with the single-pair rules below.
+missing tests by scenario name and id. The fixed, new and remaining failure
+packet lists are the union of the per-test lists, worked out with the
+single-pair rules below.
 Single-pair comparisons return `tests: []` and `totals: null`.
 
 Fixed and remaining failure packets cover every packet on the eval contract
