@@ -116,3 +116,21 @@ test("A failed test checked in an earlier session still reaches Generate fix", a
   await clickNext(page, "Generate fix");
   await expect(nextAction(page).getByRole("heading", { name: "Confirm and save fix" })).toBeVisible();
 });
+
+test("A failed check stays saved when the packet reload fails", async ({ page, request }) => {
+  const name = await seedAgent(request);
+  await openAgent(page, name);
+  await clickNext(page, "Run current");
+
+  // Fail only the next failure-packet reload, the one Check makes after saving its eval.
+  let failed = false;
+  await page.route("**/failure-packets?*", (route) => {
+    if (failed) return route.continue();
+    failed = true;
+    return route.fulfill({ status: 500, body: "{}" });
+  });
+  await clickNext(page, "Check answer");
+
+  await expect(page.locator(".failure-analysis-panel").getByRole("heading", { name: "Name this failure" })).toBeVisible();
+  await expect(nextAction(page).getByRole("button", { name: "Check answer", exact: true })).toHaveCount(0);
+});
