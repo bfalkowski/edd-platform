@@ -338,3 +338,54 @@ def test_live_run_requires_foundry_project_endpoint(monkeypatch) -> None:
 
     assert response.status_code == 400
     assert "AZURE_AI_FOUNDRY_PROJECT_ENDPOINT" in response.json()["detail"]
+
+
+def test_foundry_run_record_shows_version_instructions_sent(monkeypatch) -> None:
+    import edd_runner
+
+    instructions = "You write clear Jira tickets. Use the template: Title, Context, Acceptance criteria."
+    completed_run = ThreadRun(
+        id="run_fake", object="thread.run", created_at=0,
+        thread_id="thread_fake", agent_id="agent_fake", status=RunStatus.COMPLETED,
+    )
+    fake_client = FakeAgentsClient(
+        run_sequence=[completed_run],
+        response_messages=[assistant_message("Title: Dark mode")],
+    )
+    monkeypatch.setenv("AZURE_AI_FOUNDRY_PROJECT_ENDPOINT", FOUNDRY_CONFIG.project_endpoint)
+    monkeypatch.setenv("EDD_FOUNDRY_MODEL", FOUNDRY_CONFIG.model)
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    monkeypatch.setattr(edd_runner, "foundry_client_from_config", lambda _config: fake_client)
+
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Ticket Writer", "intent": "Write tickets."},
+    ).json()["agent"]
+    version = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={"instructions": instructions},
+    ).json()
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={"agent_design_id": agent["id"], "name": "Dark mode ticket", "input": "Write a ticket for dark mode."},
+    ).json()
+
+    response = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "agent_version_id": version["id"],
+            "scenario_id": scenario["id"],
+            "mode": "live",
+            "provider": "foundry",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    run = response.json()
+    assert fake_client.create_agent_calls[0]["instructions"] == instructions
+    assert run["system_prompt"] == instructions
+    saved = client.get(f"/api/projects/project_default/runs/{run['id']}").json()
+    assert saved["system_prompt"] == instructions
