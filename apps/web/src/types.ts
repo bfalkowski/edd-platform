@@ -453,6 +453,12 @@ export type GateDecision = {
   created_at: string;
 };
 
+export type SavedTest = {
+  scenario: Scenario;
+  contract: EvalContract;
+  latestResult: "passed" | "failed" | "not_run";
+};
+
 export type EddFlowState = {
   baselineVersion?: AgentVersion;
   candidateVersion?: AgentVersion;

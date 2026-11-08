@@ -502,6 +502,14 @@ GET    /api/projects/{project_id}/scenarios/{scenario_id}
 PATCH  /api/projects/{project_id}/scenarios/{scenario_id}
 ```
 
+`name` is optional on create; a blank name defaults to the start of the input
+(first line, up to 60 characters). `PATCH` accepts `name` and `status`.
+
+The Proof loop lists an agent's `active` scenarios, each paired with its newest
+eval contract, as saved tests. Saving an edit in the console creates a new
+`active` scenario and contract and sets the old scenario to `superseded`, so
+its runs and evidence stay intact. `draft` scenarios are not listed.
+
 Minimum response fields:
 
 ```text

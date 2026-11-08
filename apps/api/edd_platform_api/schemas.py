@@ -49,7 +49,8 @@ class AgentDesign(BaseModel):
 
 class ScenarioCreate(BaseModel):
     agent_design_id: str = Field(min_length=1)
-    name: str = Field(min_length=1)
+    # Blank or missing names default to the start of the input.
+    name: str = ""
     input: str = Field(min_length=1)
     setup_context: str = ""
     fixture_refs: List[str] = Field(default_factory=list)
@@ -69,6 +70,11 @@ class Scenario(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class ScenarioUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1)
+    status: Optional[str] = Field(default=None, min_length=1)
 
 
 class EvalContractCreate(BaseModel):

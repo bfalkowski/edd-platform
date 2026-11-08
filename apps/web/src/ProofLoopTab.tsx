@@ -18,9 +18,16 @@ import type {
   GeneratedDesignSummary,
   GeneratedToolState,
   ProofLoopCtx,
+  SavedTest,
 } from "./types";
 
 const runMode = "live" as const;
+
+const savedTestResultLabels: Record<SavedTest["latestResult"], string> = {
+  passed: "Passed",
+  failed: "Failed",
+  not_run: "Not run",
+};
 
 const initialProofLoopCtx: ProofLoopCtx = {
   judgeOutputText: null,
@@ -47,7 +54,8 @@ type ProofLoopTabProps = {
   baselineTraceUrl: string | null;
   analysisTargetArtifactId: string;
   failedBaselineChecks: EvalResult["checks"];
-  testOutOfSync: boolean;
+  savedTests: SavedTest[];
+  onSelectTest: (scenarioId: string) => void;
   currentJudgeMode: "deterministic" | "live";
   proofLoopCtx: ProofLoopCtx;
   setProofLoopCtx: (updater: (ctx: ProofLoopCtx) => ProofLoopCtx) => void;
@@ -87,7 +95,8 @@ export function ProofLoopTab({
   baselineTraceUrl,
   analysisTargetArtifactId,
   failedBaselineChecks,
-  testOutOfSync,
+  savedTests,
+  onSelectTest,
   currentJudgeMode,
   proofLoopCtx,
   setProofLoopCtx,
@@ -425,6 +434,7 @@ export function ProofLoopTab({
   const baselineLabel = eddFlow.baselineVersion?.version_label ?? "current";
   const displayedJudgeMode = eddFlow.baselineEval?.mode ?? currentJudgeMode;
   const hasSavedScenarioTest = Boolean(eddFlow.scenario && eddFlow.contract);
+  const selectedSavedTest = savedTests.find((test) => test.scenario.id === eddFlow.scenario?.id);
   const savedTestShape = testShapeFromSetupContext(eddFlow.scenario?.setup_context);
   const savedEvalCheck = eddFlow.contract?.checks[0];
   const savedContractUsesRubric =
@@ -460,16 +470,6 @@ export function ProofLoopTab({
         detail: "Choose an input shape and judge method before running the agent.",
         label: "New test",
         onClick: onOpenNewScenarioEditor,
-        disabled: isFlowBusy,
-      };
-    }
-    if (testOutOfSync) {
-      return {
-        eyebrow: "Next action",
-        title: "Update the test",
-        detail: "The saved test does not match the scenario or eval method shown above.",
-        label: "Edit test",
-        onClick: onOpenScenarioEditor,
         disabled: isFlowBusy,
       };
     }
@@ -737,6 +737,32 @@ export function ProofLoopTab({
         </div>
       ) : null}
       <div className="proof-scenario-card">
+        {savedTests.length > 0 ? (
+          <ul className="saved-test-list" aria-label="Saved tests">
+            {savedTests.map((test) => {
+              const isSelected = test.scenario.id === eddFlow.scenario?.id;
+              return (
+                <li key={test.scenario.id}>
+                  <button
+                    className={isSelected ? "saved-test-row selected" : "saved-test-row"}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => onSelectTest(test.scenario.id)}
+                    disabled={isFlowBusy}
+                  >
+                    <span className="saved-test-name">{test.scenario.name}</span>
+                    <span className="scenario-shape-pill">
+                      {testShapeLabels[testShapeFromSetupContext(test.scenario.setup_context)]}
+                    </span>
+                    <span className={`saved-test-result ${test.latestResult}`}>
+                      {savedTestResultLabels[test.latestResult]}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
         {hasSavedScenarioTest ? (
           <div className="scenario-test-summary">
             <div>
@@ -759,11 +785,13 @@ export function ProofLoopTab({
               <div>
                 <dt>Latest result</dt>
                 <dd>
-                  {eddFlow.baselineEval
-                    ? eddFlow.baselineEval.passed
-                      ? "Passed"
-                      : "Failed"
-                    : "Not run"}
+                  {selectedSavedTest
+                    ? savedTestResultLabels[selectedSavedTest.latestResult]
+                    : eddFlow.baselineEval
+                      ? eddFlow.baselineEval.passed
+                        ? "Passed"
+                        : "Failed"
+                      : "Not run"}
                 </dd>
               </div>
             </dl>

@@ -3176,3 +3176,74 @@ dd {
 .discovery-intro-dismiss:hover {
   color: var(--text);
 }
+
+.saved-test-list {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.saved-test-list li {
+  border-bottom: 1px solid var(--border);
+}
+
+.saved-test-list li:last-child {
+  border-bottom: 0;
+}
+
+.saved-test-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.saved-test-row:hover:not(:disabled),
+.saved-test-row.selected {
+  background: var(--surface2);
+}
+
+.saved-test-row.selected .saved-test-name {
+  font-weight: 700;
+}
+
+.saved-test-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-test-row .scenario-shape-pill {
+  margin: 0;
+}
+
+.saved-test-result {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.saved-test-result.not_run {
+  background: var(--surface2);
+  color: var(--text-muted);
+}
+
+.saved-test-result.passed {
+  background: var(--success);
+  color: #fff;
+}
+
+.saved-test-result.failed {
+  background: var(--error);
+  color: #fff;
+}
