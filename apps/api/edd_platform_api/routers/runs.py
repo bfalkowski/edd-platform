@@ -383,6 +383,11 @@ def run_agent_with_runner(
     tool_summary = "\n".join(
         f"- {tool.name}: {tool.output}" for tool in runner_result.tool_calls
     )
+    system_prompt_section = (
+        f"System prompt\n{runner_result.system_prompt}\n\n"
+        if runner_result.system_prompt is not None
+        else ""
+    )
     artifact = api_main.create_artifact(
         project_id=project_id,
         artifact_type="RUN_RESULT",
@@ -390,6 +395,7 @@ def run_agent_with_runner(
         title=f"Run: {agent.name}",
         body=(
             f"Response\n{runner_result.response}\n\n"
+            f"{system_prompt_section}"
             f"Scenario\n{runner_result.scenario_input}\n\n"
             f"Tools\n{tool_summary}"
         ),

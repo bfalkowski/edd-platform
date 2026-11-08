@@ -57,6 +57,7 @@ class RunnerResult(BaseModel):
     evidence: List[str]
     trace_id: Optional[str] = None
     trace_url: Optional[str] = None
+    system_prompt: Optional[str] = None
     created_at: datetime
 
 
@@ -561,16 +562,13 @@ def run_anthropic_agent_core(
     config: AnthropicRunnerConfig,
     tool_definitions: List[RunnerToolDefinition] | None = None,
 ) -> RunnerResult:
-    instructions = (
-        "You are the candidate agent being designed in an eval-driven workflow. "
-        "Stay inside the design intent, gather or cite relevant evidence from the scenario, "
-        "state assumptions clearly, and recommend a safe next action."
-    )
+    # The version's instructions are the whole system prompt, so a run tests
+    # exactly the prompt the user will ship.
+    system_prompt = agent.intent
     active_tools = build_langchain_tools(tool_definitions or [])
     if active_tools:
-        return run_langchain_agent(agent, scenario, config, instructions, active_tools)
+        return run_langchain_agent(agent, scenario, config, system_prompt, active_tools)
 
-    system_prompt = f"{instructions}\n\nAgent name: {agent.name}\nDesign intent: {agent.intent}"
     messages = [{"role": "user", "content": scenario.input}]
     body = {
         "model": config.model,
@@ -616,6 +614,7 @@ def run_anthropic_agent_core(
             f"Used Anthropic Messages API model {config.model}.",
             "Live provider run; output should be evaluated before promotion.",
         ],
+        system_prompt=system_prompt,
         created_at=datetime.now(timezone.utc),
     )
 
@@ -633,7 +632,7 @@ def run_langchain_agent(
     agent: RunnerAgentDesign,
     scenario: RunnerScenario,
     config: AnthropicRunnerConfig,
-    instructions: str,
+    system_prompt: str,
     tools,
 ) -> RunnerResult:
     try:
@@ -650,16 +649,7 @@ def run_langchain_agent(
     graph = create_agent(
         model=f"anthropic:{config.model}",
         tools=tools,
-        system_prompt=(
-            f"{instructions}\n\n"
-            f"Agent name: {agent.name}\n"
-            f"Design intent: {agent.intent}\n"
-            f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}\n\n"
-            f"TOOL CALL BUDGET: You have a budget of up to {max_tool_calls} tool call(s). "
-            "Use only as many as needed to answer the user's question. "
-            "Once you have enough information, stop calling tools and write your final response. "
-            "Do not call a tool again if the result you already have is sufficient."
-        ),
+        system_prompt=system_prompt,
     )
     callbacks = build_langfuse_langchain_callbacks()
     invoke_config: dict = {"recursion_limit": recursion_limit}
@@ -707,6 +697,7 @@ def run_langchain_agent(
             f"Used LangChain/LangGraph agent with Anthropic model {config.model}.",
             f"Allowed tools: {', '.join(agent.allowed_tool_names) or 'none'}.",
         ],
+        system_prompt=system_prompt,
         created_at=datetime.now(timezone.utc),
     )
 
