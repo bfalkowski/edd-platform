@@ -1033,9 +1033,11 @@ function App() {
       ]);
       // A run output artifact records its run's id as artifact_id. The system
       // prompt lives on the run, not in the artifact body that evals read.
+      // Ad hoc and Call URL results have no run record, so a failed lookup
+      // means no prompt to show, not a panel that won't open.
       const run =
         artifact.artifact_type === "RUN_RESULT"
-          ? await loadRun(project.id, artifact.artifact_id)
+          ? await loadRun(project.id, artifact.artifact_id).catch(() => null)
           : null;
       setReviewArtifact(artifact);
       setReviewLinks(links);

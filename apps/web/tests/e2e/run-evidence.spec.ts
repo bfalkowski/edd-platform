@@ -214,3 +214,22 @@ test("A live run output shows the system prompt sent; a mock run output shows no
   // The prompt shows once, in its own section, not inside the run output body.
   await expect(review.getByText("Answer support questions with a safe next action.")).toHaveCount(1);
 });
+
+test("An ad hoc run result, which has no run record, still opens in the review panel", async ({
+  page,
+  request,
+}) => {
+  const agent = await seedAgent(request, { live: 0, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("button", { name: `Open actions for ${agent.name}` }).click();
+  await page.getByRole("menuitem", { name: /Try scenario/ }).click();
+  const scratch = page.getByRole("complementary", { name: "Try scenario" });
+  await scratch.getByRole("button", { name: "Run ad hoc" }).click();
+  await scratch.getByRole("button", { name: "View result" }).click();
+
+  const review = page.getByRole("complementary", { name: "Artifact review" });
+  await expect(review).toBeVisible();
+  await expect(review.getByText("Run output", { exact: true })).toBeVisible();
+  await expect(review.getByRole("heading", { name: "System prompt" })).toHaveCount(0);
+});
