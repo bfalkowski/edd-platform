@@ -17,6 +17,8 @@ import type {
   FixProposal,
   GateDecision,
   GateDefinition,
+  JudgeAgreement,
+  JudgeOutput,
   LangfuseObjectRef,
   NewAgentResponse,
   OutcomeAgentResponse,
@@ -930,7 +932,7 @@ export async function listEvalResults(projectId: string, runId: string): Promise
   return response.json();
 }
 
-async function listEvalResultsForContract(
+export async function listEvalResultsForContract(
   projectId: string,
   contractId: string,
 ): Promise<EvalResult[]> {
@@ -939,6 +941,46 @@ async function listEvalResultsForContract(
   );
   if (!response.ok) {
     throw await responseError(response, "Unable to load eval results.");
+  }
+  return response.json();
+}
+
+export async function listJudgeOutputs(projectId: string): Promise<JudgeOutput[]> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/judge-outputs`);
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load judge outputs.");
+  }
+  return response.json();
+}
+
+export async function reviewJudgeOutput(
+  projectId: string,
+  judgeOutputId: string,
+  payload: { verdict: "agree" | "overrule"; reason: string },
+): Promise<{ judge_output: JudgeOutput; eval_result: EvalResult; failure_packet: FailurePacket | null }> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/judge-outputs/${judgeOutputId}/review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to save the review.");
+  }
+  return response.json();
+}
+
+export async function getJudgeAgreement(
+  projectId: string,
+  contractId: string,
+): Promise<JudgeAgreement> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/eval-contracts/${contractId}/judge-agreement`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load judge agreement.");
   }
   return response.json();
 }

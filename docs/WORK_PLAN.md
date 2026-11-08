@@ -106,6 +106,9 @@ Complete for the current product slice.
 Includes platform-stored judge prompts, mock judge execution, optional live
 LLM-as-judge execution, gate definitions, gate decision artifacts, token/cost
 telemetry for live judge calls, and readiness views backed by gate decisions.
+A reviewer can agree with or overrule a judge verdict with a reason; an
+overrule flips the eval result and keeps the judge's verdict on record, and
+the Evidence tab shows each contract's judge agreement rate.
 
 ### Langfuse Adapter
 

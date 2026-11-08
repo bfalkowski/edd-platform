@@ -1333,8 +1333,11 @@ function App() {
                 />
               ) : null}
 
-              {workspaceTab === "evidence" ? (
+              {workspaceTab === "evidence" && selectedAgent ? (
                 <EvidenceTab
+                  projectId={project?.id ?? "project_default"}
+                  agentId={selectedAgent.id}
+                  onReviewed={refreshContext}
                   evidenceArtifacts={evidenceArtifacts}
                   isLoadingContext={isLoadingContext}
                   onReviewArtifact={handleReviewArtifact}

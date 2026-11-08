@@ -177,6 +177,7 @@ export function artifactRoleLabel(artifactType: string): string {
     FIX_PROPOSAL: "Fix proposal",
     GATE_DECISION: "Gate decision",
     JUDGE_OUTPUT: "Judge output",
+    JUDGE_REVIEW: "Judge review",
     RUN_RESULT: "Run output",
     SCENARIO: "Scenario",
     TRACE_REF: "Trace",

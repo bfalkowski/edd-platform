@@ -3247,3 +3247,57 @@ dd {
   background: var(--error);
   color: #fff;
 }
+
+.judge-review-panel,
+.judge-review-contract {
+  display: grid;
+  gap: 8px;
+}
+
+.judge-review-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.judge-review-verdicts {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.judge-review-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.judge-review-actions input {
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.judge-verdict-badge {
+  border-radius: 999px;
+  color: #fff;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.judge-verdict-badge.pass {
+  background: var(--success);
+}
+
+.judge-verdict-badge.fail {
+  background: var(--error);
+}

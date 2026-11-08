@@ -772,6 +772,20 @@ class EvalResult(BaseModel):
     created_at: datetime
 
 
+class JudgeReviewCreate(BaseModel):
+    verdict: Literal["agree", "overrule"]
+    reason: str = Field(min_length=1)
+    reviewer: str = "human"
+
+
+class JudgeReview(BaseModel):
+    verdict: Literal["agree", "overrule"]
+    reason: str
+    reviewer: str
+    judge_passed: bool
+    reviewed_at: datetime
+
+
 class JudgeOutput(BaseModel):
     id: str
     project_id: str
@@ -784,7 +798,16 @@ class JudgeOutput(BaseModel):
     token_usage: Dict[str, object]
     cost_estimate: Optional[float] = None
     artifact_ids: List[str]
+    review: Optional[JudgeReview] = None
     created_at: datetime
+
+
+class JudgeAgreement(BaseModel):
+    eval_contract_id: str
+    reviewed: int
+    agreed: int
+    overruled: int
+    agreement_rate: Optional[float] = None
 
 
 class FailurePacketCreate(BaseModel):
@@ -827,6 +850,12 @@ class FailurePacket(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class JudgeReviewResult(BaseModel):
+    judge_output: JudgeOutput
+    eval_result: EvalResult
+    failure_packet: Optional[FailurePacket] = None
 
 
 class DiscoveryPromotionResult(BaseModel):

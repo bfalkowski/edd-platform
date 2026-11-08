@@ -781,6 +781,47 @@ artifact_ids
 created_at
 ```
 
+### Judge Reviews
+
+A reviewer can agree with a judge output or overrule it, with a reason.
+
+```text
+POST  /api/projects/{project_id}/judge-outputs/{judge_output_id}/review
+GET   /api/projects/{project_id}/eval-contracts/{contract_id}/judge-agreement
+```
+
+Review request:
+
+```json
+{
+  "verdict": "agree | overrule",
+  "reason": "Bundles three fixes into one ticket.",
+  "reviewer": "human"
+}
+```
+
+The review is stored on the judge output as `review`, with `judge_passed`
+holding the judge's own verdict. The judge output text is not changed.
+Overruling flips the eval result's `passed`. When the result becomes a fail,
+an open failure packet is created for it unless one is already open. When it
+becomes a pass, its open failure packets move to status `overruled`, so gates
+stop blocking on them. A later review replaces the earlier one and is applied
+to the judge's original verdict. Each review saves a `JUDGE_REVIEW` artifact
+that comments on the judge output artifact.
+
+The response returns `judge_output`, `eval_result` and `failure_packet` (the
+open packet when the result fails, else null).
+
+Agreement response fields:
+
+```text
+eval_contract_id
+reviewed
+agreed
+overruled
+agreement_rate   (agreed / reviewed, null when nothing is reviewed)
+```
+
 ### Failure Packets
 
 Failure packets turn failed checks into diagnosis.
