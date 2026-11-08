@@ -607,3 +607,113 @@ def test_promote_annotation_creates_proof_loop_artifacts() -> None:
     )
     assert links_response.status_code == 200
     assert links_response.json()
+
+
+def _in_app_review_setup(client: TestClient, langfuse_ref: dict | None) -> tuple[dict, dict, dict]:
+    """A corpus, one run review item and one in-app note, written as the console writes them."""
+    created = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "In-app Review Agent", "intent": "Answer deployment questions."},
+    ).json()
+    agent = created["agent"]
+    corpus = client.post(
+        "/api/projects/project_default/review-corpora",
+        json={"agent_design_id": agent["id"], "name": "In-app review", "source": "mixed"},
+    ).json()
+    item = client.post(
+        "/api/projects/project_default/review-items",
+        json={
+            "corpus_id": corpus["id"],
+            "source_kind": "artifact",
+            "source_id": created["artifact"]["id"],
+            "title": "Run: Discovery Agent",
+            "content": "Response\nRestart the service.\n\nScenario\nA deployment failed.",
+            "langfuse_ref": langfuse_ref,
+        },
+    ).json()
+    note = client.post(
+        "/api/projects/project_default/review-annotations",
+        json={
+            "review_item_id": item["id"],
+            "body": "Never suggests rolling back.",
+            "author": "human",
+            "status": "accepted",
+            "metadata": {"source": "in_app"},
+        },
+    )
+    assert note.status_code == 201
+    return agent, corpus, note.json()
+
+
+def test_in_app_notes_and_failure_modes_show_up_in_corpus_analysis() -> None:
+    client = TestClient(app)
+    agent, corpus, note = _in_app_review_setup(client, langfuse_ref=None)
+
+    mode = client.post(
+        "/api/projects/project_default/failure-modes",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Missing rollback",
+            "description": "No rollback step offered.",
+        },
+    ).json()
+    assert mode["status"] == "candidate"
+    assigned = client.patch(
+        f"/api/projects/project_default/review-annotations/{note['id']}",
+        json={"failure_mode_id": mode["id"]},
+    )
+    assert assigned.status_code == 200
+    confirmed = client.patch(
+        f"/api/projects/project_default/failure-modes/{mode['id']}",
+        json={"status": "confirmed"},
+    )
+    assert confirmed.json()["status"] == "confirmed"
+
+    analysis = client.get(
+        f"/api/projects/project_default/review-corpora/{corpus['id']}/analysis"
+    ).json()
+    assert analysis["annotation_status_counts"] == {"accepted": 1}
+    assert [
+        (count["failure_mode_id"], count["accepted_annotations"])
+        for count in analysis["failure_mode_counts"]
+    ] == [(mode["id"], 1)]
+
+
+def test_langfuse_comment_sync_does_not_duplicate_in_app_notes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from edd_platform_api import main as api_main
+    from edd_platform_api.routers import error_analysis
+
+    client = TestClient(app)
+    _, corpus, note = _in_app_review_setup(
+        client,
+        langfuse_ref={
+            "trace_id": "trace_in_app_1",
+            "object_type": "TRACE",
+            "url": "http://langfuse.local/trace/trace_in_app_1",
+        },
+    )
+    monkeypatch.setattr(api_main, "langfuse_credentials_configured", lambda: True)
+    monkeypatch.setattr(
+        error_analysis,
+        "get_langfuse_comments",
+        lambda object_type, object_id: [
+            {"id": "comment_1", "content": "Tone is too casual.", "authorUserId": "reviewer"}
+        ],
+    )
+    sync_path = f"/api/projects/project_default/review-corpora/{corpus['id']}/sync-langfuse-comments"
+
+    first = client.post(sync_path).json()
+    second = client.post(sync_path).json()
+
+    assert first["imported_count"] == 1
+    assert second["imported_count"] == 0
+    annotations = client.get(
+        f"/api/projects/project_default/review-annotations?corpus_id={corpus['id']}"
+    ).json()
+    assert sorted(annotation["body"] for annotation in annotations) == [
+        "Never suggests rolling back.",
+        "Tone is too casual.",
+    ]
+    assert note["id"] in {annotation["id"] for annotation in annotations}

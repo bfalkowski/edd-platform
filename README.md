@@ -53,18 +53,21 @@ failure mode taxonomy:
 
 ![EDD Platform Error analysis step 1 — build review set table](./docs/assets/error-analysis-build-corpus.webp)
 
-2. **Review & code** — open each trace in Langfuse and add comments there.
-   Reviewers annotate directly in Langfuse — not in a shallow copy inside the
-   platform.
+2. **Review & code** — read each run's input, the agent's output and the
+   judge's verdict, and write a note on what went wrong. Name a failure mode
+   and assign notes to it with the "Assign failure mode" dropdown. Langfuse
+   is not needed for this step.
+
+   With Langfuse running, you can also open each trace in Langfuse, comment
+   there, and sync those comments back with one click. Synced comments appear
+   next to the in-app notes, labeled "Langfuse".
 
 ![Langfuse trace with live judge span and tool calls for Sentiment Observer](./docs/assets/langfuse-live-judge-trace.webp)
 
-   Then sync those comments back into the platform with one click. Synced
-   comments appear inline per trace with an "Assign failure mode" dropdown.
-
 ![EDD Platform Error analysis step 2 — synced Langfuse comments with failure mode assignment](./docs/assets/error-analysis-review-code.webp)
 
-3. **Confirm modes** — promote recurring annotations to named failure modes.
+3. **Confirm modes** — confirm the failure modes that are real and dismiss the
+   ones that aren't.
 4. **Done** — the taxonomy is ready to inform test cases and fix proposals in
    the Proof loop.
 
@@ -74,10 +77,11 @@ failure mode taxonomy:
 Observe -> Analyze -> Measure -> Improve -> Compare -> Gate
 ```
 
-**Observe** — produce or import traces from live agent runs linked to Langfuse.
+**Observe** — produce live agent runs, linked to Langfuse traces when Langfuse
+is configured.
 
-**Analyze** — review traces in Langfuse, add comments, sync them into the
-platform, and name recurring failure modes through the Error analysis wizard.
+**Analyze** — review runs in the Error analysis wizard, write notes (or sync
+Langfuse trace comments), and name recurring failure modes.
 
 **Measure** — turn failure modes into eval contracts: deterministic checks,
 rubric dimensions, or LLM-as-judge prompts. The Proof loop runs these against
@@ -283,7 +287,10 @@ The default model is Claude Haiku 5.5 (`claude-haiku-5-5`, set by
 
 ## Langfuse
 
-Langfuse is required for error analysis. Start Langfuse and the app together:
+Langfuse is optional. Error analysis works without it: notes and failure modes
+are written in the app. With Langfuse running, runs link to traces and trace
+comments can be synced in next to the in-app notes. Start Langfuse and the app
+together:
 
 ```bash
 ./scripts/dev_langfuse.sh
@@ -299,11 +306,12 @@ LANGFUSE_SECRET_KEY=sk-lf-local-demo
 
 ### Langfuse Boundary
 
-Langfuse is the review surface for traces. EDD Platform is the workflow layer:
+Langfuse is an optional review surface for traces. EDD Platform is the workflow
+layer:
 
 ```text
-Langfuse trace comments
-  -> ReviewAnnotations (synced by platform)
+In-app notes or synced Langfuse trace comments
+  -> ReviewAnnotations
   -> FailureModes (named by evaluator)
   -> EvalContracts (encoded from modes)
   -> FixProposals (linked to failure packets)

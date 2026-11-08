@@ -728,7 +728,7 @@ textarea {
   border-bottom: 1px solid var(--border);
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(0, 1fr) 40px 40px 68px 76px;
+  grid-template-columns: minmax(0, 1fr) 76px 56px 68px 76px auto;
   padding: 12px;
 }
 
@@ -3306,4 +3306,66 @@ dd {
 
 .judge-verdict-badge.fail {
   background: var(--error);
+}
+
+.discovery-mode-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 0.6fr) minmax(0, 1fr) auto;
+}
+
+.discovery-mode-form input {
+  border-radius: 8px;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
+.discovery-item-details {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.discovery-item-details dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.discovery-item-details dd {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+}
+
+.discovery-note-source {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 8px;
+  text-transform: uppercase;
+}
+
+.discovery-note-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-top: 10px;
+}
+
+.discovery-note-form textarea {
+  border-radius: 8px;
+  font-size: 13px;
+  min-height: 64px;
+  padding: 8px 12px;
+}
+
+@media (max-width: 640px) {
+  .discovery-mode-form,
+  .discovery-note-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

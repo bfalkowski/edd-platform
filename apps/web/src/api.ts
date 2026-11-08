@@ -563,6 +563,33 @@ export async function createFailureMode(
   return response.json();
 }
 
+export async function updateFailureModeStatus(
+  projectId: string,
+  failureModeId: string,
+  status: "confirmed" | "dismissed",
+): Promise<FailureMode> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/failure-modes/${failureModeId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update failure mode.");
+  }
+  return response.json();
+}
+
+export async function markReviewItemReviewed(projectId: string, reviewItemId: string): Promise<void> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/review-items/${reviewItemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "reviewed" }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update review item.");
+  }
+}
+
 export async function listReviewAnnotations(
   projectId: string,
   corpusId: string,

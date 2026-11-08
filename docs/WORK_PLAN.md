@@ -258,9 +258,9 @@ The UI supports the proof-loop vertical slice:
     the right review panel.
 11. Use the Error analysis tab's 4-step wizard (Build review set -> Review &
     code -> Confirm modes -> Done) to pull live runs into a review corpus,
-    annotate traces in Langfuse, sync comments back with one click, assign
-    failure modes inline, and promote recurring modes into the taxonomy.
-    Langfuse must be running for this tab.
+    write notes on each run in the app, name failure modes, assign notes to
+    them, and confirm or dismiss each mode. Langfuse is optional: when it is
+    running, comments on traces sync in next to the in-app notes.
 12. Use the Readiness tab to create gates and gate decisions.
 
 ## Next Product Hardening
