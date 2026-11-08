@@ -180,6 +180,8 @@ export function artifactRoleLabel(artifactType: string): string {
     JUDGE_REVIEW: "Judge review",
     RUN_RESULT: "Run output",
     SCENARIO: "Scenario",
+    TOOL_CALL: "Tool call",
+    TOOL_RESULT: "Tool result",
     TRACE_REF: "Trace",
   };
   return labels[artifactType] ?? artifactType.replaceAll("_", " ").toLowerCase();

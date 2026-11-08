@@ -67,6 +67,33 @@ test("Evidence tab lists every run output, eval result and judge output", async 
   await expect(page.locator(".workflow-evidence-meta").first()).toHaveText(/^stub-model · \d+\.\ds$/);
 });
 
+test("Evidence tab groups rows by run and pages older runs", async ({ page, request }) => {
+  const agent = await seedAgent(request, { live: 7, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  const agentSection = page.getByRole("region", { name: "Agent artifacts" });
+  await expect(agentSection.getByText("Scenario", { exact: true })).toBeVisible();
+  await expect(
+    agentSection.locator(".workflow-evidence-item > span", {
+      hasText: /^(Run output|Eval result|Judge output|Failure)$/,
+    }),
+  ).toHaveCount(0);
+
+  // The five newest runs show, each with its own run output, eval and judge rows.
+  const runSections = page.getByRole("region", { name: "Run evidence" });
+  await expect(runSections).toHaveCount(5);
+  for (const section of await runSections.all()) {
+    await expect(section.locator(".workflow-evidence-item > span").first()).toHaveText("Run output");
+    await expect(section.locator(".workflow-evidence-item > span", { hasText: /^Eval result$/ })).toHaveCount(1);
+    await expect(section.locator(".workflow-evidence-item > span", { hasText: /^Judge output$/ })).toHaveCount(1);
+  }
+
+  await page.getByRole("button", { name: "Show older runs (2 more)" }).click();
+  await expect(runSections).toHaveCount(7);
+  await expect(page.getByRole("button", { name: /Show older runs/ })).toHaveCount(0);
+});
+
 test("Pull in new runs adds one review item per live run, once", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 3, mock: 1 });
   // A Langfuse-traced run: the trace link lives on a separate TRACE_REF artifact.

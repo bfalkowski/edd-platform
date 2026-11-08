@@ -951,8 +951,10 @@ export async function createGateDecision(
   return response.json();
 }
 
-export async function listEvalResults(projectId: string, runId: string): Promise<EvalResult[]> {
-  const response = await fetch(`${apiBase}/projects/${projectId}/eval-results?run_id=${runId}`);
+/** Eval results for one run, or for every run in the project when runId is left out. */
+export async function listEvalResults(projectId: string, runId?: string): Promise<EvalResult[]> {
+  const query = runId ? `?run_id=${runId}` : "";
+  const response = await fetch(`${apiBase}/projects/${projectId}/eval-results${query}`);
   if (!response.ok) {
     throw await responseError(response, "Unable to load eval results.");
   }
