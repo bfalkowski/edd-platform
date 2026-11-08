@@ -135,6 +135,28 @@ def test_run_foundry_agent_core_returns_completed_response() -> None:
     assert any("Foundry Agent Service" in item for item in result.evidence)
 
 
+def test_run_foundry_agent_core_sends_version_instructions_unchanged() -> None:
+    completed_run = ThreadRun(
+        id="run_fake", object="thread.run", created_at=0,
+        thread_id="thread_fake", agent_id="agent_fake", status=RunStatus.COMPLETED,
+    )
+    client = FakeAgentsClient(
+        run_sequence=[completed_run],
+        response_messages=[assistant_message("Recommended a rollback.")],
+    )
+
+    result = run_foundry_agent_core(
+        agent=FOUNDRY_AGENT,
+        scenario=FOUNDRY_SCENARIO,
+        config=FOUNDRY_CONFIG,
+        tool_definitions=[],
+        client=client,
+    )
+
+    assert client.create_agent_calls[0]["instructions"] == FOUNDRY_AGENT.intent
+    assert result.system_prompt == FOUNDRY_AGENT.intent
+
+
 def test_run_foundry_agent_core_executes_tool_calls() -> None:
     tool_call = RequiredFunctionToolCall(
         id="call_1",
@@ -316,3 +338,54 @@ def test_live_run_requires_foundry_project_endpoint(monkeypatch) -> None:
 
     assert response.status_code == 400
     assert "AZURE_AI_FOUNDRY_PROJECT_ENDPOINT" in response.json()["detail"]
+
+
+def test_foundry_run_record_shows_version_instructions_sent(monkeypatch) -> None:
+    import edd_runner
+
+    instructions = "You write clear Jira tickets. Use the template: Title, Context, Acceptance criteria."
+    completed_run = ThreadRun(
+        id="run_fake", object="thread.run", created_at=0,
+        thread_id="thread_fake", agent_id="agent_fake", status=RunStatus.COMPLETED,
+    )
+    fake_client = FakeAgentsClient(
+        run_sequence=[completed_run],
+        response_messages=[assistant_message("Title: Dark mode")],
+    )
+    monkeypatch.setenv("AZURE_AI_FOUNDRY_PROJECT_ENDPOINT", FOUNDRY_CONFIG.project_endpoint)
+    monkeypatch.setenv("EDD_FOUNDRY_MODEL", FOUNDRY_CONFIG.model)
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    monkeypatch.setattr(edd_runner, "foundry_client_from_config", lambda _config: fake_client)
+
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Ticket Writer", "intent": "Write tickets."},
+    ).json()["agent"]
+    version = client.post(
+        f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+        json={"instructions": instructions},
+    ).json()
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={"agent_design_id": agent["id"], "name": "Dark mode ticket", "input": "Write a ticket for dark mode."},
+    ).json()
+
+    response = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "agent_version_id": version["id"],
+            "scenario_id": scenario["id"],
+            "mode": "live",
+            "provider": "foundry",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    run = response.json()
+    assert fake_client.create_agent_calls[0]["instructions"] == instructions
+    assert run["system_prompt"] == instructions
+    saved = client.get(f"/api/projects/project_default/runs/{run['id']}").json()
+    assert saved["system_prompt"] == instructions
