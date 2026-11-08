@@ -126,7 +126,7 @@ def review_judge_output(
             store.save_record("failure_packets", packet.id, packet)
         if not passed and packet.status == "open":
             if judge_passed and packet.title.startswith(reviewer_title_prefix):
-                reviewer_packet = packet
+                reviewer_packet = reviewer_packet or packet
             elif failure_packet is None:
                 failure_packet = packet
     if not passed and judge_passed:
