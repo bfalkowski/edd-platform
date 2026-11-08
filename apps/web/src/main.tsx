@@ -728,7 +728,8 @@ function App() {
         ] as const)
         .then(([agentState, flow]) => {
           const resumeState = wizardStateFromFlow(project.id, agentState, flow);
-          if (resumeState.step === "done") {
+          // An edited wizard test means the user has moved on to the workspace.
+          if (resumeState.step === "done" || agentState.scenario.status === "superseded") {
             // Agent passed — show workspace, not wizard
             setWizardOpen(false);
           } else {

@@ -216,3 +216,37 @@ test("An agent whose passed test was saved as a draft opens the workspace, not t
   await page.waitForLoadState("networkidle");
   await expect(page.locator(".wizard-heading")).toHaveCount(0);
 });
+
+test("An agent whose wizard test was edited opens the workspace, not the wizard", async ({
+  page,
+  request,
+}) => {
+  const name = `Edited Wizard Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const drafted = await postJson<{ agent: { id: string }; scenario: { id: string } }>(
+    request,
+    "/agent-designs/from-outcome",
+    { outcome: "Answer support questions with a safe next action.", name },
+  );
+  // Same as saving "Edit test" in the workspace: a new active revision, the old one superseded.
+  const revision = await postJson<{ id: string }>(request, "/scenarios", {
+    agent_design_id: drafted.agent.id,
+    input: "A deployment failed. What should I do?",
+    setup_context: "test_shape:single_turn",
+    status: "active",
+  });
+  await postJson(request, "/eval-contracts", {
+    agent_design_id: drafted.agent.id,
+    name: "Required phrase",
+    scenario_id: revision.id,
+    checks: [{ id: "includes_required_phrase", type: "output_contains", value: "next action" }],
+  });
+  const patched = await request.patch(`${PROJECT}/scenarios/${drafted.scenario.id}`, {
+    data: { status: "superseded" },
+  });
+  expect(patched.ok()).toBeTruthy();
+
+  await openAgent(page, name);
+  await page.waitForLoadState("networkidle");
+  await expect(page.locator(".wizard-heading")).toHaveCount(0);
+  await expect(testRows(page)).toHaveCount(1);
+});
