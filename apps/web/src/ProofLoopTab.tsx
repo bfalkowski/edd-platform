@@ -7,7 +7,9 @@ import {
   diagnoseFailure,
   evaluateRun,
   generateFixProposal,
+  listFailurePackets,
 } from "./api";
+import { proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
 import { failurePacketsForEval, renderScenarioInput, testShapeFromSetupContext, testShapeLabels } from "./helpers";
 import type {
   AgentDesign,
@@ -22,6 +24,15 @@ import type {
 } from "./types";
 
 const runMode = "live" as const;
+
+type LoopAction = {
+  eyebrow: string;
+  title: string;
+  detail: string;
+  label: string;
+  onClick: (() => void) | undefined;
+  disabled: boolean;
+};
 
 const savedTestResultLabels: Record<SavedTest["latestResult"], string> = {
   passed: "Passed",
@@ -136,6 +147,12 @@ export function ProofLoopTab({
     }
   }
 
+  /** The contract's failure packets; a failed check creates one on the server. */
+  async function loadFailurePackets(contractId: string) {
+    const packets = await listFailurePackets(projectId, selectedAgent.id);
+    return packets.filter((packet) => packet.eval_contract_id === contractId);
+  }
+
   async function handleRunBaseline() {
     if (!eddFlow.baselineVersion || !eddFlow.scenario || !eddFlow.contract) {
       return;
@@ -172,7 +189,8 @@ export function ProofLoopTab({
     setIsFlowBusy(true);
     try {
       const baselineEval = await evaluateRun(projectId, eddFlow.baselineRun.id, currentJudgeMode);
-      setEddFlow((flow) => ({ ...flow, baselineEval }));
+      const failurePackets = await loadFailurePackets(baselineEval.eval_contract_id);
+      setEddFlow((flow) => ({ ...flow, baselineEval, failurePackets }));
       setActivity(
         baselineEval.passed ? "Current answer passed." : "Current answer failed; evidence saved.",
       );
@@ -370,7 +388,8 @@ export function ProofLoopTab({
     setIsFlowBusy(true);
     try {
       const candidateEval = await evaluateRun(projectId, eddFlow.candidateRun.id, currentJudgeMode);
-      setEddFlow((flow) => ({ ...flow, candidateEval }));
+      const failurePackets = await loadFailurePackets(candidateEval.eval_contract_id);
+      setEddFlow((flow) => ({ ...flow, candidateEval, failurePackets }));
       setActivity(candidateEval.passed ? "New version passed." : "New version still fails.");
       await refreshContext();
       await reviewFirstArtifact(candidateEval.artifact_ids);
@@ -462,151 +481,123 @@ export function ProofLoopTab({
           check.check_id.toLowerCase().includes("rubric"),
       ),
   );
-  const currentLoopAction = (() => {
-    if (!eddFlow.contract) {
-      return {
-        eyebrow: "Next action",
-        title: "Create a test case",
-        detail: "Choose an input shape and judge method before running the agent.",
-        label: "New test",
-        onClick: onOpenNewScenarioEditor,
-        disabled: isFlowBusy,
-      };
-    }
-    if (!eddFlow.baselineRun) {
-      return {
-        eyebrow: selectedGeneratedDesign ? "Generated test ready" : "Next action",
-        title: selectedGeneratedDesign ? `Run generated ${baselineLabel}` : `Run ${baselineLabel}`,
-        detail: selectedGeneratedDesign
-          ? "Run the generated first version against the generated scenario and success criteria."
-          : "Capture how the current instructions answer the scenario.",
-        label: selectedGeneratedDesign ? `Run ${baselineLabel}` : "Run current",
-        onClick: handleRunBaseline,
-        disabled: isFlowBusy,
-      };
-    }
-    if (!eddFlow.baselineEval) {
-      return {
-        eyebrow: selectedGeneratedDesign ? "Run saved" : "Next action",
-        title: selectedGeneratedDesign ? `Evaluate generated ${baselineLabel}` : `Check ${baselineLabel}`,
-        detail: selectedGeneratedDesign
-          ? "Judge the generated response against the generated contract and save pass/fail evidence."
-          : "Judge the response against the saved eval method and record what failed.",
-        label: selectedGeneratedDesign ? "Evaluate" : "Check answer",
-        onClick: handleEvaluateBaseline,
-        disabled: isFlowBusy,
-      };
-    }
-    if (baselinePassed) {
-      return {
-        eyebrow: "Complete",
-        title: `${baselineLabel} passed`,
-        detail: "No fix is needed for this contract. Open the saved evidence to inspect the result.",
-        label: "Done",
-        onClick: undefined,
-        disabled: true,
-      };
-    }
-    if (improvementNeeded && !analysisNote) {
-      return {
-        eyebrow: "Next action",
-        title: "Analyze the failed evidence",
-        detail: "Name the failure mode before turning it into a targeted fix.",
-        label: "Save analysis",
-        onClick: handleSaveAnalysisNote,
-        disabled: isFlowBusy || isSavingAnalysis || !analysisNoteText.trim() || !analysisTargetArtifactId,
-      };
-    }
-    if (!eddFlow.fixProposal && eddFlow.failurePackets.length > 0 && !generatedInstructions) {
-      return {
-        eyebrow: "Next action",
-        title: "Generate a fix",
-        detail: "Claude will read the failure evidence and propose improved instructions.",
-        label: "Generate fix",
-        onClick: handleGenerateFix,
-        disabled: isFlowBusy || isGeneratingFix,
-      };
-    }
-    if (!eddFlow.fixProposal && generatedInstructions) {
-      return {
-        eyebrow: "Next action",
-        title: "Confirm and save fix",
-        detail: "Review the proposed instructions below, then save to lock them in.",
-        label: "Save fix proposal",
-        onClick: handleCreateFixProposal,
-        disabled: isFlowBusy || !generatedInstructions.trim(),
-      };
-    }
-    if (!eddFlow.candidateVersion && eddFlow.fixProposal) {
-      return {
-        eyebrow: "Next action",
-        title: "Create the next version",
-        detail: "Apply the saved fix to create a new agent version.",
-        label: "Create version",
-        onClick: handleCreateCandidate,
-        disabled: isFlowBusy || (!generatedInstructions && !eddFlow.fixProposal?.proposed_changes[0]?.change),
-      };
-    }
-    if (!eddFlow.candidateRun && eddFlow.candidateVersion) {
-      return {
-        eyebrow: "Next action",
-        title: `Run ${eddFlow.candidateVersion.version_label}`,
-        detail: "Run the improved version against the same scenario.",
-        label: "Run version",
-        onClick: handleRunCandidate,
-        disabled: isFlowBusy,
-      };
-    }
-    if (!eddFlow.candidateEval && eddFlow.candidateRun) {
-      return {
-        eyebrow: "Next action",
-        title: `Check ${eddFlow.candidateVersion?.version_label ?? "next version"}`,
-        detail: "Judge the new response against the same success criteria.",
-        label: "Check version",
-        onClick: handleEvaluateCandidate,
-        disabled: isFlowBusy,
-      };
-    }
-    if (!eddFlow.comparison && eddFlow.baselineEval && eddFlow.candidateEval) {
-      return {
-        eyebrow: "Next action",
-        title: "Compare versions",
-        detail: "Show whether the new version fixed the failure or still needs work.",
-        label: "Compare",
-        onClick: handleCompareRuns,
-        disabled: isFlowBusy,
-      };
-    }
-    if (eddFlow.comparison && eddFlow.candidateVersion && eddFlow.candidateRun && eddFlow.candidateEval) {
-      const candidatePassed = eddFlow.candidateEval.passed === true;
-      if (candidatePassed) {
-        return {
-          eyebrow: "Iteration complete — passed",
-          title: eddFlow.comparison.summary,
-          detail: "The new version passed the success criteria. You can promote it or keep the evidence as-is.",
-          label: "Done",
-          onClick: undefined,
-          disabled: true,
-        };
-      }
-      return {
-        eyebrow: "Iteration complete — still failing",
-        title: eddFlow.comparison.summary,
-        detail: "The new version still fails. Name the remaining failure below to propose another targeted fix.",
-        label: "Try another fix",
-        onClick: handleContinueImprovement,
-        disabled: isFlowBusy,
-      };
-    }
-    return {
+  const loopStep = proofLoopStep({
+    flow: eddFlow,
+    analysisSaved: Boolean(analysisNote),
+    fixGenerated: generatedInstructions !== null,
+  });
+  const candidateLabel = eddFlow.candidateVersion?.version_label ?? "next version";
+  const loopActions: Record<ProofLoopStep, LoopAction> = {
+    create_test: {
       eyebrow: "Next action",
-      title: "Continue the proof loop",
-      detail: "",
-      label: "Continue",
+      title: "Create a test case",
+      detail: "Choose an input shape and judge method before running the agent.",
+      label: "New test",
+      onClick: onOpenNewScenarioEditor,
+      disabled: isFlowBusy,
+    },
+    run_baseline: {
+      eyebrow: selectedGeneratedDesign ? "Generated test ready" : "Next action",
+      title: selectedGeneratedDesign ? `Run generated ${baselineLabel}` : `Run ${baselineLabel}`,
+      detail: selectedGeneratedDesign
+        ? "Run the generated first version against the generated scenario and success criteria."
+        : "Capture how the current instructions answer the scenario.",
+      label: selectedGeneratedDesign ? `Run ${baselineLabel}` : "Run current",
+      onClick: handleRunBaseline,
+      disabled: isFlowBusy,
+    },
+    check_baseline: {
+      eyebrow: selectedGeneratedDesign ? "Run saved" : "Next action",
+      title: selectedGeneratedDesign ? `Evaluate generated ${baselineLabel}` : `Check ${baselineLabel}`,
+      detail: selectedGeneratedDesign
+        ? "Judge the generated response against the generated contract and save pass/fail evidence."
+        : "Judge the response against the saved eval method and record what failed.",
+      label: selectedGeneratedDesign ? "Evaluate" : "Check answer",
+      onClick: handleEvaluateBaseline,
+      disabled: isFlowBusy,
+    },
+    baseline_passed: {
+      eyebrow: "Complete",
+      title: `${baselineLabel} passed`,
+      detail: "No fix is needed for this contract. Open the saved evidence to inspect the result.",
+      label: "Done",
       onClick: undefined,
       disabled: true,
-    };
-  })();
+    },
+    save_analysis: {
+      eyebrow: "Next action",
+      title: "Analyze the failed evidence",
+      detail: "Name the failure mode before turning it into a targeted fix.",
+      label: "Save analysis",
+      onClick: handleSaveAnalysisNote,
+      disabled: isFlowBusy || isSavingAnalysis || !analysisNoteText.trim() || !analysisTargetArtifactId,
+    },
+    generate_fix: {
+      eyebrow: "Next action",
+      title: "Generate a fix",
+      detail: "Claude will read the failure evidence and propose improved instructions.",
+      label: "Generate fix",
+      onClick: handleGenerateFix,
+      disabled: isFlowBusy || isGeneratingFix,
+    },
+    save_fix: {
+      eyebrow: "Next action",
+      title: "Confirm and save fix",
+      detail: "Review the proposed instructions below, then save to lock them in.",
+      label: "Save fix proposal",
+      onClick: handleCreateFixProposal,
+      disabled: isFlowBusy || !generatedInstructions?.trim(),
+    },
+    create_version: {
+      eyebrow: "Next action",
+      title: "Create the next version",
+      detail: "Apply the saved fix to create a new agent version.",
+      label: "Create version",
+      onClick: handleCreateCandidate,
+      disabled: isFlowBusy || (!generatedInstructions && !eddFlow.fixProposal?.proposed_changes[0]?.change),
+    },
+    run_candidate: {
+      eyebrow: "Next action",
+      title: `Run ${candidateLabel}`,
+      detail: "Run the improved version against the same scenario.",
+      label: "Run version",
+      onClick: handleRunCandidate,
+      disabled: isFlowBusy,
+    },
+    check_candidate: {
+      eyebrow: "Next action",
+      title: `Check ${candidateLabel}`,
+      detail: "Judge the new response against the same success criteria.",
+      label: "Check version",
+      onClick: handleEvaluateCandidate,
+      disabled: isFlowBusy,
+    },
+    compare: {
+      eyebrow: "Next action",
+      title: "Compare versions",
+      detail: "Show whether the new version fixed the failure or still needs work.",
+      label: "Compare",
+      onClick: handleCompareRuns,
+      disabled: isFlowBusy,
+    },
+    candidate_passed: {
+      eyebrow: "Iteration complete — passed",
+      title: eddFlow.comparison?.summary ?? "",
+      detail: "The new version passed the success criteria. You can promote it or keep the evidence as-is.",
+      label: "Done",
+      onClick: undefined,
+      disabled: true,
+    },
+    candidate_failed: {
+      eyebrow: "Iteration complete — still failing",
+      title: eddFlow.comparison?.summary ?? "",
+      detail: "The new version still fails. Name the remaining failure below to propose another targeted fix.",
+      label: "Try another fix",
+      onClick: handleContinueImprovement,
+      disabled: isFlowBusy,
+    },
+  };
+  const currentLoopAction = loopActions[loopStep];
 
   return (
     <section className="edd-loop-panel proof-workspace-panel workspace-tab-panel">

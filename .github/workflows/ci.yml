@@ -143,6 +143,10 @@ jobs:
         run: npm run build
         working-directory: apps/web
 
+      - name: Run web unit tests
+        run: npm run test:unit
+        working-directory: apps/web
+
   web-e2e:
     name: Web end-to-end
     runs-on: ubuntu-latest
