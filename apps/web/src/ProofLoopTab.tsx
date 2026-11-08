@@ -9,6 +9,7 @@ import {
   generateFixProposal,
   listFailurePackets,
 } from "./api";
+import { checkLabel } from "./checkLabel";
 import { proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
 import { failurePacketsForEval, renderScenarioInput, testShapeFromSetupContext, testShapeLabels } from "./helpers";
 import type {
@@ -952,9 +953,13 @@ export function ProofLoopTab({
             <h4>{analysisNote ? "Failure named" : "Name this failure"}</h4>
             {!analysisNote ? (
               <p className="failure-analysis-instruction">
-                Review the evidence below, then fill in the form or click Auto-diagnose to let Claude pre-fill it.
+                Read the agent's answer and the failed checks, then fill in the form or click Auto-diagnose to let Claude pre-fill it.
               </p>
             ) : null}
+          </div>
+          <div className="agent-output-block">
+            <p className="output-label">Agent answer</p>
+            <pre className="agent-output">{eddFlow.baselineRun?.output || "(no output)"}</pre>
           </div>
           <div className="failure-analysis-body">
             <div className="failure-analysis-summary">
@@ -971,7 +976,7 @@ export function ProofLoopTab({
                 ) : (
                   failedBaselineChecks.map((check) => (
                     <span key={check.check_id}>
-                      <strong>{check.check_id}</strong>
+                      <strong>{checkLabel(check)}</strong>
                       {check.comment || check.observed}
                     </span>
                   ))

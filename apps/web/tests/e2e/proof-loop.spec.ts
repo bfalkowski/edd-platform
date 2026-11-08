@@ -66,6 +66,10 @@ test("A failed test goes from Save analysis to a compared new version", async ({
 
   const analysis = page.locator(".failure-analysis-panel");
   await expect(analysis.getByRole("heading", { name: "Name this failure" })).toBeVisible();
+  // The answer being judged sits above the form, and the failed check is named, not shown by ID.
+  await expect(analysis.locator(".agent-output")).toHaveText("Stub live answer. Recommend a safe next action.");
+  await expect(analysis.locator(".failed-check-list strong")).toHaveText("Includes “rollback plan”");
+  await expect(analysis.getByText("rollback_plan", { exact: true })).toHaveCount(0);
   await analysis.getByRole("button", { name: "Auto-diagnose" }).click();
   await expect(analysis.getByLabel("Failure mode")).toHaveValue("missing rollback plan");
   await analysis.getByRole("button", { name: "Save analysis" }).click();
