@@ -1,14 +1,25 @@
 import { PanelRight } from "lucide-react";
 import { artifactRoleLabel, traceUrlFromArtifact } from "./helpers";
+import { JudgeReviewPanel } from "./JudgeReviewPanel";
 import type { ArtifactRecord } from "./types";
 
 type EvidenceTabProps = {
+  projectId: string;
+  agentId: string;
+  onReviewed: () => Promise<void>;
   evidenceArtifacts: ArtifactRecord[];
   isLoadingContext: boolean;
   onReviewArtifact: (artifactId: string) => void;
 };
 
-export function EvidenceTab({ evidenceArtifacts, isLoadingContext, onReviewArtifact }: EvidenceTabProps) {
+export function EvidenceTab({
+  projectId,
+  agentId,
+  onReviewed,
+  evidenceArtifacts,
+  isLoadingContext,
+  onReviewArtifact,
+}: EvidenceTabProps) {
   return (
     <section className="workflow-evidence-panel workspace-tab-panel">
       <div className="workflow-evidence-header">
@@ -18,6 +29,7 @@ export function EvidenceTab({ evidenceArtifacts, isLoadingContext, onReviewArtif
         </div>
         <span>{evidenceArtifacts.length} saved</span>
       </div>
+      <JudgeReviewPanel projectId={projectId} agentId={agentId} onReviewed={onReviewed} />
       <div className="workflow-evidence-list">
         {isLoadingContext ? <p className="muted-copy">Loading evidence...</p> : null}
         {!isLoadingContext && evidenceArtifacts.length === 0 ? (

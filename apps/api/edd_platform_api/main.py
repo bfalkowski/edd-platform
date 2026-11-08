@@ -230,6 +230,7 @@ from edd_platform_api.routers import agent_designs as _agent_designs_router  # n
 from edd_platform_api.routers import runs as _runs_router  # noqa: E402
 from edd_platform_api.routers import fix_proposals as _fix_proposals_router  # noqa: E402
 from edd_platform_api.routers import error_analysis as _error_analysis_router  # noqa: E402
+from edd_platform_api.routers import judge_reviews as _judge_reviews_router  # noqa: E402
 app.include_router(_core_router.router)
 app.include_router(_trace_refs_router.router)
 app.include_router(_judge_prompt_templates_router.router)
@@ -243,6 +244,7 @@ app.include_router(_agent_designs_router.router)
 app.include_router(_runs_router.router)
 app.include_router(_fix_proposals_router.router)
 app.include_router(_error_analysis_router.router)
+app.include_router(_judge_reviews_router.router)
 
 
 

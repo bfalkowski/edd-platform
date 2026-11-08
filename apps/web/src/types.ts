@@ -227,6 +227,34 @@ export type EvalResult = {
   created_at: string;
 };
 
+export type JudgeReview = {
+  verdict: "agree" | "overrule";
+  reason: string;
+  reviewer: string;
+  judge_passed: boolean;
+  reviewed_at: string;
+};
+
+export type JudgeOutput = {
+  id: string;
+  project_id: string;
+  eval_result_id: string;
+  mode: string;
+  model: string | null;
+  output: string;
+  artifact_ids: string[];
+  review: JudgeReview | null;
+  created_at: string;
+};
+
+export type JudgeAgreement = {
+  eval_contract_id: string;
+  reviewed: number;
+  agreed: number;
+  overruled: number;
+  agreement_rate: number | null;
+};
+
 export type FailurePacket = {
   id: string;
   project_id: string;

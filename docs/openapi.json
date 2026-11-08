@@ -3266,6 +3266,45 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "JudgeAgreement": {
+        "properties": {
+          "agreed": {
+            "title": "Agreed",
+            "type": "integer"
+          },
+          "agreement_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement Rate"
+          },
+          "eval_contract_id": {
+            "title": "Eval Contract Id",
+            "type": "string"
+          },
+          "overruled": {
+            "title": "Overruled",
+            "type": "integer"
+          },
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "eval_contract_id",
+          "reviewed",
+          "agreed",
+          "overruled"
+        ],
+        "title": "JudgeAgreement",
+        "type": "object"
+      },
       "JudgeOutput": {
         "properties": {
           "artifact_ids": {
@@ -3336,6 +3375,16 @@
           "project_id": {
             "title": "Project Id",
             "type": "string"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JudgeReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "token_usage": {
             "additionalProperties": true,
@@ -3511,6 +3560,98 @@
           "template"
         ],
         "title": "JudgePromptTemplateCreate",
+        "type": "object"
+      },
+      "JudgeReview": {
+        "properties": {
+          "judge_passed": {
+            "title": "Judge Passed",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "agree",
+              "overrule"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "reason",
+          "reviewer",
+          "judge_passed",
+          "reviewed_at"
+        ],
+        "title": "JudgeReview",
+        "type": "object"
+      },
+      "JudgeReviewCreate": {
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "reviewer": {
+            "default": "human",
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "agree",
+              "overrule"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "reason"
+        ],
+        "title": "JudgeReviewCreate",
+        "type": "object"
+      },
+      "JudgeReviewResult": {
+        "properties": {
+          "eval_result": {
+            "$ref": "#/components/schemas/EvalResult"
+          },
+          "failure_packet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailurePacket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "judge_output": {
+            "$ref": "#/components/schemas/JudgeOutput"
+          }
+        },
+        "required": [
+          "judge_output",
+          "eval_result"
+        ],
+        "title": "JudgeReviewResult",
         "type": "object"
       },
       "LangfuseAnnotationImport": {
@@ -7590,6 +7731,55 @@
         "summary": "Update Eval Contract Checks"
       }
     },
+    "/api/projects/{project_id}/eval-contracts/{contract_id}/judge-agreement": {
+      "get": {
+        "description": "How often reviewers agreed with the judge on this contract's eval results.",
+        "operationId": "get_judge_agreement_api_projects__project_id__eval_contracts__contract_id__judge_agreement_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contract_id",
+            "required": true,
+            "schema": {
+              "title": "Contract Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JudgeAgreement"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Judge Agreement"
+      }
+    },
     "/api/projects/{project_id}/eval-contracts/{contract_id}/rubric": {
       "patch": {
         "operationId": "update_eval_contract_rubric_api_projects__project_id__eval_contracts__contract_id__rubric_patch",
@@ -9006,6 +9196,65 @@
           }
         },
         "summary": "List Judge Outputs"
+      }
+    },
+    "/api/projects/{project_id}/judge-outputs/{judge_output_id}/review": {
+      "post": {
+        "description": "Record a reviewer verdict on a judge output: agree, or overrule its pass/fail.",
+        "operationId": "review_judge_output_api_projects__project_id__judge_outputs__judge_output_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "judge_output_id",
+            "required": true,
+            "schema": {
+              "title": "Judge Output Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JudgeReviewCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JudgeReviewResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Judge Output"
       }
     },
     "/api/projects/{project_id}/judge-prompt-templates": {
