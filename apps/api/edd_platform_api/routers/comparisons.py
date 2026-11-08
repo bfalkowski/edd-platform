@@ -91,21 +91,24 @@ def create_comparison_record(
         project_id=project_id,
         eval_result_id=candidate_eval_result.id,
     )
-    candidate_failed_check_ids = {
-        check.check_id for check in candidate_eval_result.checks if not check.passed
-    }
     baseline_failed_check_ids = {
         check.check_id for check in baseline_eval_result.checks if not check.passed
     }
+    candidate_passed_check_ids = {
+        check.check_id for check in candidate_eval_result.checks if check.passed
+    }
+    # Fixed only with evidence: the packet names failed checks, and the
+    # candidate eval ran and passed every one of them.
     fixed_failure_packet_ids = [
         packet.id
         for packet in baseline_packets
-        if not set(packet.failed_check_ids) & candidate_failed_check_ids
+        if packet.failed_check_ids
+        and set(packet.failed_check_ids) <= candidate_passed_check_ids
     ]
     remaining_failure_packet_ids = [
         packet.id
         for packet in baseline_packets
-        if set(packet.failed_check_ids) & candidate_failed_check_ids
+        if packet.id not in fixed_failure_packet_ids
     ]
     new_failure_packet_ids = [
         packet.id
