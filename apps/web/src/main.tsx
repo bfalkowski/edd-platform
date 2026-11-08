@@ -60,6 +60,7 @@ import {
   listToolDefinitions,
   loadArtifact,
   loadArtifactLinks,
+  loadRun,
   runAgentDesign,
   updateAgentDesignToolAllowlist,
   updateScenario,
@@ -119,6 +120,11 @@ function App() {
   const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
+  // The system prompt sent on the reviewed run, keyed by its run output artifact.
+  const [reviewRunPrompt, setReviewRunPrompt] = useState<{
+    artifactId: string;
+    systemPrompt: string | null;
+  } | null>(null);
   const initialProofLoopCtx: ProofLoopCtx = {
     judgeOutputText: null,
     analysisNoteText: "",
@@ -332,6 +338,10 @@ function App() {
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
   const reviewExternalRefs = reviewArtifact?.external_refs ?? [];
+  const reviewSystemPrompt =
+    reviewArtifact && reviewRunPrompt?.artifactId === reviewArtifact.id
+      ? reviewRunPrompt.systemPrompt
+      : null;
   const generatedVersionArtifact = selectedGeneratedDesign
     ? artifactByRecordKey.get(`AGENT_VERSION:${selectedGeneratedDesign.version.id}`)
     : undefined;
@@ -1021,8 +1031,15 @@ function App() {
         loadArtifact(project.id, artifactId),
         loadArtifactLinks(project.id, artifactId),
       ]);
+      // A run output artifact records its run's id as artifact_id. The system
+      // prompt lives on the run, not in the artifact body that evals read.
+      const run =
+        artifact.artifact_type === "RUN_RESULT"
+          ? await loadRun(project.id, artifact.artifact_id)
+          : null;
       setReviewArtifact(artifact);
       setReviewLinks(links);
+      setReviewRunPrompt({ artifactId: artifact.id, systemPrompt: run?.system_prompt ?? null });
       setToolsPanelOpen(false);
       setScratchPanelOpen(false);
       setScenarioEditorOpen(false);
@@ -1771,6 +1788,12 @@ function App() {
                 </a>
               ) : null}
             </section>
+            {reviewSystemPrompt ? (
+              <section aria-labelledby="review-system-prompt-heading">
+                <h3 id="review-system-prompt-heading">System prompt</h3>
+                <pre className="agent-output">{reviewSystemPrompt}</pre>
+              </section>
+            ) : null}
             {reviewExternalRefs.length > 0 ? (
               <section>
                 <h3>External evidence</h3>

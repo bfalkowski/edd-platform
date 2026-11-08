@@ -197,6 +197,7 @@ export type RunRecord = {
   mode: string;
   provider: string | null;
   model: string | null;
+  system_prompt: string | null;
   input: string;
   output: string;
   status: string;

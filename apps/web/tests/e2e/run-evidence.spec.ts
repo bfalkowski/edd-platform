@@ -188,3 +188,29 @@ test("No live runs: the message shows on Error analysis only", async ({ page, re
   );
   await expect(message).toHaveCount(0);
 });
+
+test("A live run output shows the system prompt sent; a mock run output shows none", async ({
+  page,
+  request,
+}) => {
+  const agent = await seedAgent(request, { live: 1, mock: 1 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  const runOutputs = page.locator(".workflow-evidence-item", { hasText: "Run output" });
+  await expect(runOutputs).toHaveCount(2);
+  const review = page.getByRole("complementary", { name: "Artifact review" });
+
+  // Newest run first: the mock run, which sent no system prompt.
+  await runOutputs.nth(0).click();
+  await expect(review).toBeVisible();
+  await expect(review.getByRole("heading", { name: "System prompt" })).toHaveCount(0);
+
+  // The live run sent the agent's intent as its system prompt.
+  await runOutputs.nth(1).click();
+  const prompt = review.getByRole("region", { name: "System prompt" });
+  await expect(prompt).toBeVisible();
+  await expect(prompt.locator("pre")).toHaveText("Answer support questions with a safe next action.");
+  // The prompt shows once, in its own section, not inside the run output body.
+  await expect(review.getByText("Answer support questions with a safe next action.")).toHaveCount(1);
+});
