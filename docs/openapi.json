@@ -5743,6 +5743,11 @@
           },
           "status": {
             "default": "draft",
+            "enum": [
+              "draft",
+              "active",
+              "superseded"
+            ],
             "title": "Status",
             "type": "string"
           }
@@ -5771,7 +5776,11 @@
           "status": {
             "anyOf": [
               {
-                "minLength": 1,
+                "enum": [
+                  "draft",
+                  "active",
+                  "superseded"
+                ],
                 "type": "string"
               },
               {

@@ -517,9 +517,13 @@ PATCH  /api/projects/{project_id}/scenarios/{scenario_id}
 (first line, up to 60 characters). `PATCH` accepts `name` and `status`.
 
 The Proof loop lists an agent's `active` scenarios, each paired with its newest
-eval contract, as saved tests. Saving an edit in the console creates a new
-`active` scenario and contract and sets the old scenario to `superseded`, so
-its runs and evidence stay intact. `draft` scenarios are not listed.
+eval contract, as saved tests. Saving an edit in the console sets the old
+scenario to `superseded`, then creates a new `active` scenario and contract, so
+its runs and evidence stay intact. If either create fails, the console sets the
+old scenario back to `active` and a new scenario left without a contract to
+`draft`, so one revision stays listed. `draft` scenarios are not listed.
+`status` must be one of `draft`, `active`, or `superseded`; any other value is
+rejected with `422`.
 
 Minimum response fields:
 

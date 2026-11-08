@@ -47,6 +47,10 @@ class AgentDesign(BaseModel):
     updated_at: datetime
 
 
+# Only `active` scenarios are listed as saved tests, so a typo must not hide one.
+ScenarioStatus = Literal["draft", "active", "superseded"]
+
+
 class ScenarioCreate(BaseModel):
     agent_design_id: str = Field(min_length=1)
     # Blank or missing names default to the start of the input.
@@ -55,7 +59,7 @@ class ScenarioCreate(BaseModel):
     setup_context: str = ""
     fixture_refs: List[str] = Field(default_factory=list)
     default_eval_contract_id: Optional[str] = None
-    status: str = "draft"
+    status: ScenarioStatus = "draft"
 
 
 class Scenario(BaseModel):
@@ -74,7 +78,7 @@ class Scenario(BaseModel):
 
 class ScenarioUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1)
-    status: Optional[str] = Field(default=None, min_length=1)
+    status: Optional[ScenarioStatus] = None
 
 
 class EvalContractCreate(BaseModel):

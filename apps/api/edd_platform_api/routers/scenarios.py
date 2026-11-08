@@ -174,7 +174,7 @@ def create_scenario(project_id: str, payload: ScenarioCreate) -> Scenario:
         setup_context=payload.setup_context.strip(),
         fixture_refs=payload.fixture_refs,
         default_eval_contract_id=payload.default_eval_contract_id,
-        status=payload.status.strip(),
+        status=payload.status,
         created_at=now,
         updated_at=now,
     )
@@ -222,7 +222,7 @@ def update_scenario(project_id: str, scenario_id: str, payload: ScenarioUpdate) 
     if payload.name is not None:
         changes["name"] = payload.name.strip()
     if payload.status is not None:
-        changes["status"] = payload.status.strip()
+        changes["status"] = payload.status
     updated = scenario.model_copy(update=changes)
     _scenarios[scenario_id] = updated
     store.save_record("scenarios", scenario_id, updated)
