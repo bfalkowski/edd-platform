@@ -12,9 +12,7 @@ artifacts — not from intuition.
 EDD Platform turns agent traces into failure modes, failure modes into evals,
 evals into bounded fixes, and fixes into evidence-backed promotion decisions.
 
-## Live demo: syncing a Langfuse trace comment into the app
-
-![Commenting on a trace in Langfuse and syncing it back into the platform as evidence](./docs/assets/error-analysis-langfuse-sync-demo.gif)
+## Syncing a Langfuse trace comment into the app
 
 1. Open the trace for a failed run in Langfuse.
 2. Add a comment noting what went wrong.
@@ -29,10 +27,7 @@ Each agent gets five tabs: **Agent**, **Proof loop**, **Error analysis**,
 
 ### Agent tab
 
-Define the agent's name, core instruction, and enabled tools. The warm card
-layout keeps the design surface clean against the sidebar.
-
-![EDD Platform Agent tab showing the Sentiment Observer agent design](./docs/assets/sentiment-observer-agent.webp)
+Define the agent's name, core instruction, and enabled tools.
 
 ### Proof loop tab
 
@@ -40,8 +35,6 @@ Select a saved test, run the agent live against Anthropic, evaluate the output,
 and iterate. The proof loop shows the selected test (scenario input, judge
 method, latest result) and a next-action card that guides the evaluator toward
 the right step — run, fix, compare, or done.
-
-![EDD Platform Proof loop showing a passed Sentiment Observer test](./docs/assets/sentiment-observer-proof-loop.webp)
 
 ### Error analysis tab — 4-step wizard
 
@@ -51,8 +44,6 @@ failure mode taxonomy:
 1. **Build review set** — pull in live runs as a corpus of traces to review.
    A data table shows each item with its source, status, and note count.
 
-![EDD Platform Error analysis step 1 — build review set table](./docs/assets/error-analysis-build-corpus.webp)
-
 2. **Review & code** — read each run's input, the agent's output and the
    judge's verdict, and write a note on what went wrong. Name a failure mode
    and assign notes to it with the "Assign failure mode" dropdown. Langfuse
@@ -61,10 +52,6 @@ failure mode taxonomy:
    With Langfuse running, you can also open each trace in Langfuse, comment
    there, and sync those comments back with one click. Synced comments appear
    next to the in-app notes, labeled "Langfuse".
-
-![Langfuse trace with live judge span and tool calls for Sentiment Observer](./docs/assets/langfuse-live-judge-trace.webp)
-
-![EDD Platform Error analysis step 2 — synced Langfuse comments with failure mode assignment](./docs/assets/error-analysis-review-code.webp)
 
 3. **Confirm modes** — confirm the failure modes that are real and dismiss the
    ones that aren't.
@@ -199,7 +186,8 @@ packages/langfuse-adapter
 
 **Persistence**
 - Project-scoped state through Postgres.
-- Seeded demo data for local walkthroughs (Customer Triage).
+- A fresh start seeds one agent, Apartment Search Agent. Add the Customer
+  Triage demo with `python scripts/seed_customer_triage_demo.py`.
 
 ## Local Development
 
@@ -212,6 +200,9 @@ npm install
 
 You need [uv](https://docs.astral.sh/uv/) and Node. Docker is only needed for
 Postgres.
+
+On a fresh start the API seeds one agent, Apartment Search Agent. See
+[Verification](#verification) for the Customer Triage demo seed script.
 
 ### Without Docker (in-memory storage)
 
@@ -364,10 +355,10 @@ EDD_E2E_API_PORT=8191 EDD_E2E_WEB_PORT=5283 EDD_E2E_STUB_PORT=8192 npm run test:
 Set `EDD_E2E_REUSE_SERVERS=1` to reuse servers you already started on those
 ports.
 
-Seed demo data after the app is running:
+A fresh start already has one agent, Apartment Search Agent. To add the
+Customer Triage demo agent, run this after the app is running:
 
 ```bash
-python scripts/seed_sentiment_observer_demo.py
 python scripts/seed_customer_triage_demo.py
 ```
 

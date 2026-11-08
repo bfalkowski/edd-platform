@@ -17,7 +17,7 @@ export const defaultTraceReplayInput =
 export const defaultRubricText =
   "A good answer should directly answer the user request, avoid unsupported claims, and ask for missing details only when they are required.";
 export const defaultConversationRubricText =
-  "A good observer output should review the latest customer turn in context, identify that sentiment or escalation risk is worsening, mention the image pull backoff blocker, avoid claiming the issue is fixed, and produce concise downstream-safe observer notes.";
+  "A good answer should respond to the latest turn using context from the earlier messages, avoid repeating questions already answered, and avoid unsupported claims.";
 export const defaultTraceReplayRubricText =
   "A good answer should use the replayed evidence, preserve important context from the trace, and avoid inventing facts not present in the replay.";
 export const testShapeLabels: Record<TestShape, string> = {
