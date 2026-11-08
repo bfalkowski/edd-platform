@@ -8,8 +8,8 @@ async function postJson<T>(request: APIRequestContext, path: string, data: objec
   return response.json();
 }
 
-/** An agent whose contract the judge passes, evaluated on two runs. */
-async function seedJudgedAgent(request: APIRequestContext) {
+/** An agent whose contract the judge passes, evaluated on `runCount` runs. */
+async function seedJudgedAgent(request: APIRequestContext, runCount = 2) {
   const name = `Judged Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {
     name,
@@ -27,7 +27,7 @@ async function seedJudgedAgent(request: APIRequestContext) {
     checks: [{ id: "no_phrase", type: "output_not_contains", value: "purple elephant" }],
   });
   const evalResultIds: string[] = [];
-  for (let i = 0; i < 2; i += 1) {
+  for (let i = 0; i < runCount; i += 1) {
     const run = await postJson<{ id: string }>(request, "/runs", {
       agent_design_id: agent.id,
       scenario_id: scenario.id,
@@ -85,4 +85,21 @@ test("A reviewer agrees with one judge verdict, overrules another, and sees the 
     ),
   );
   expect(results.filter((result: { passed: boolean }) => !result.passed)).toHaveLength(1);
+});
+
+test("Judge agreement shows the five newest verdicts and pages older ones", async ({ page, request }) => {
+  const seeded = await seedJudgedAgent(request, 7);
+  await page.goto("/");
+  await page.getByRole("region", { name: "Agent designs" }).getByText(seeded.name).click();
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+
+  const contract = page
+    .getByRole("region", { name: "Judge agreement" })
+    .getByRole("group", { name: "One fix per ticket" });
+  const rows = contract.getByTestId("judge-review-row");
+  await expect(rows).toHaveCount(5);
+
+  await contract.getByRole("button", { name: "Show older verdicts (2 more)" }).click();
+  await expect(rows).toHaveCount(7);
+  await expect(contract.getByRole("button", { name: /Show older verdicts/ })).toHaveCount(0);
 });
