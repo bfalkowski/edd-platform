@@ -209,7 +209,10 @@ def main() -> None:
             {
                 "agent": agent["name"],
                 "agent_id": agent["id"],
-                "runs": f"{v0_run['mode']} / {v0_run['provider']}",
+                "runs": {
+                    "v0": f"{v0_run['mode']} / {v0_run['provider']}",
+                    "v1": f"{v1_run['mode']} / {v1_run['provider']}",
+                },
                 "v0_score": f"{v0_eval['score']}/{len(v0_eval['checks'])}",
                 "v1_score": f"{v1_eval['score']}/{len(v1_eval['checks'])}",
                 "comparison": comparison["summary"],

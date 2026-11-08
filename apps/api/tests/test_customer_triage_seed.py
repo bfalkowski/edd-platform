@@ -72,6 +72,7 @@ def test_seed_stores_live_anthropic_runs_and_prints_summary(monkeypatch, capsys)
     assert summary["v0_score"] == "2/2"
     assert summary["v1_score"] == "2/2"
     assert summary["comparison"]
+    assert summary["runs"] == {"v0": "live / anthropic", "v1": "live / anthropic"}
     runs = client.get(
         f"/api/projects/project_default/runs?agent_design_id={summary['agent_id']}"
     ).json()
