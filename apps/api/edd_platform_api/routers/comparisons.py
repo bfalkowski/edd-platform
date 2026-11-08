@@ -14,7 +14,7 @@ from edd_platform_api.lookups import (
     get_run_or_404,
 )
 from edd_platform_api.schemas import Comparison, ComparisonCreate, EvalResult, FailurePacket
-from edd_platform_api.state import _comparisons, _eval_results, _failure_packets, store
+from edd_platform_api.state import _comparisons, _eval_results, _failure_packets, _runs, store
 
 router = APIRouter()
 
@@ -48,6 +48,30 @@ def failure_packets_for_eval(
     ]
 
 
+def baseline_failure_packets(
+    *,
+    project_id: str,
+    baseline_run,
+    eval_contract_id: str,
+) -> List[FailurePacket]:
+    # Every packet on this contract from any run of the baseline version on
+    # the same scenario: re-evaluating a run or re-running the version makes a
+    # new packet for the same failure, and the candidate eval covers them all.
+    packets = []
+    for failure_packet in _failure_packets.values():
+        packet_run = _runs.get(failure_packet.run_id)
+        if (
+            failure_packet.project_id == project_id
+            and failure_packet.eval_contract_id == eval_contract_id
+            and packet_run is not None
+            and packet_run.agent_design_id == baseline_run.agent_design_id
+            and packet_run.agent_version_id == baseline_run.agent_version_id
+            and packet_run.scenario_id == baseline_run.scenario_id
+        ):
+            packets.append(failure_packet)
+    return packets
+
+
 def create_comparison_record(
     *,
     project_id: str,
@@ -58,9 +82,10 @@ def create_comparison_record(
     candidate_eval_result: EvalResult,
     now: datetime,
 ) -> Comparison:
-    baseline_packets = failure_packets_for_eval(
+    baseline_packets = baseline_failure_packets(
         project_id=project_id,
-        eval_result_id=baseline_eval_result.id,
+        baseline_run=baseline_run,
+        eval_contract_id=eval_contract_id,
     )
     candidate_packets = failure_packets_for_eval(
         project_id=project_id,

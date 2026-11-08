@@ -871,6 +871,11 @@ artifact_ids
 created_at
 ```
 
+Fixed and remaining failure packets cover every packet on the eval contract
+from any run of the baseline version on the same scenario, not only the
+baseline run's first eval result. A packet is fixed when none of its failed
+checks fail in the candidate eval result.
+
 ## Contract Acceptance
 
 Each Phase 2 API addition should have:
