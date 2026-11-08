@@ -1650,6 +1650,31 @@ dd {
   gap: 8px;
 }
 
+.workflow-evidence-group {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.workflow-evidence-panel .workflow-evidence-group h4 {
+  align-items: baseline;
+  display: flex;
+  font-size: 14px;
+  gap: 8px;
+}
+
+.workflow-evidence-group h4 small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.workflow-evidence-list > .secondary-button {
+  justify-self: start;
+}
+
 .workflow-evidence-row {
   align-items: center;
   display: grid;
