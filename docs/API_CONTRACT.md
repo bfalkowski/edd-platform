@@ -570,6 +570,12 @@ created_at
 updated_at
 ```
 
+A version's `instructions` are sent unchanged as the system prompt (Anthropic)
+or agent instructions (Foundry) on live runs. On create, `instructions` may be
+omitted, and then the agent's intent is used; if sent, they must contain a
+non-whitespace character, or the request returns 422. Surrounding whitespace is
+trimmed.
+
 ### Suite Runs
 
 A suite run executes every test for an agent against one version: each

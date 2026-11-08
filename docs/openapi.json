@@ -854,6 +854,7 @@
           "instructions": {
             "anyOf": [
               {
+                "pattern": "\\S",
                 "type": "string"
               },
               {
