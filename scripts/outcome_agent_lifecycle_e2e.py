@@ -54,39 +54,31 @@ CASES: List[LifecycleCase] = [
     LifecycleCase(
         name="f1_schedule",
         outcome="Deterime where the nexgt 1 race is",
-        expected_allowed_tools=["lookup_event_schedule"],
+        # No approved tool matches F1; every case asserts the draft only gets approved tools.
         forbidden_allowed_tools=["get_weather"],   # cross-domain contamination is the real risk
-        expected_required_tools=["lookup_event_schedule"],
     ),
     LifecycleCase(
         name="f1_last_result",
         outcome="Who won the last F1 race?",
-        expected_allowed_tools=["lookup_event_result"],
         forbidden_allowed_tools=["get_weather"],
-        expected_required_tools=["lookup_event_result"],
     ),
     LifecycleCase(
         name="web_search",
         outcome="Find apartments in Greenwich CT from Zillow.",
         expected_allowed_tools=["browse_webpage"],
-        forbidden_allowed_tools=["lookup_event_schedule", "lookup_event_result", "get_weather"],
+        forbidden_allowed_tools=["get_weather"],
         expected_required_tools=["browse_webpage"],
     ),
     LifecycleCase(
         name="weather_lookup",
         outcome="What is the weather in Boston today?",
         expected_allowed_tools=["get_weather"],
-        forbidden_allowed_tools=["lookup_event_schedule", "lookup_event_result"],
         expected_required_tools=["get_weather"],
     ),
     LifecycleCase(
         name="no_tool_draft",
         outcome="Create a support triage agent that classifies refund escalation emails.",
-        forbidden_allowed_tools=[
-            "get_weather",
-            "lookup_event_schedule",
-            "lookup_event_result",
-        ],
+        forbidden_allowed_tools=["get_weather"],
         run_baseline=False,
         run_full_loop=False,
     ),
@@ -126,6 +118,10 @@ class ApiClient:
             raise RuntimeError(f"{method} {url} → {exc.reason}") from exc
 
     # --- agent lifecycle ---
+
+    def list_approved_tool_names(self) -> List[str]:
+        tools = self.request("GET", f"/projects/{self.project_id}/tools")
+        return [t["name"] for t in tools if t["status"] == "approved"]
 
     def create_from_outcome(self, outcome: str) -> JsonObject:
         return self.request("POST", f"/projects/{self.project_id}/agent-designs/from-outcome", {"outcome": outcome})
@@ -236,12 +232,14 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def assert_draft(case: LifecycleCase, draft: JsonObject) -> None:
+def assert_draft(case: LifecycleCase, draft: JsonObject, approved_tools: List[str]) -> None:
     agent = draft["agent"]
     contract = draft["eval_contract"]
     allowed = agent["allowed_tool_names"]
     draft_tools = [t["name"] for t in draft.get("draft_tools", [])]
 
+    for tool in allowed:
+        require(tool in approved_tools, f"allowed tool is not an approved project tool: {tool}")
     for tool in case.expected_allowed_tools:
         require(tool in allowed, f"missing allowed tool: {tool}")
     for tool in case.forbidden_allowed_tools:
@@ -277,7 +275,7 @@ def run_case(
         draft = client.create_from_outcome(case.outcome)
         agent = draft["agent"]
         agent_id = agent["id"]
-        assert_draft(case, draft)
+        assert_draft(case, draft, client.list_approved_tool_names())
         step("draft", {"agent": agent["name"], "allowed_tools": agent["allowed_tool_names"]})
 
         if not case.run_baseline:
