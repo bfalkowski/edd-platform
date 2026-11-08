@@ -423,7 +423,7 @@ export function ProofLoopTab({
     const storedChange = eddFlow.fixProposal.proposed_changes[0]?.change;
     const instructionsToUse: string | null =
       generatedInstructions ?? (typeof storedChange === "string" ? storedChange : null);
-    if (!instructionsToUse) return;
+    if (!instructionsToUse?.trim()) return;
     setError(null);
     setActivity("Creating the next version.");
     setIsFlowBusy(true);

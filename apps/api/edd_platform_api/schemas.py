@@ -206,7 +206,8 @@ class GateDecision(BaseModel):
 class AgentVersionCreate(BaseModel):
     version_label: Optional[str] = None
     parent_version_id: Optional[str] = None
-    instructions: Optional[str] = None
+    # Sent unchanged as the live system prompt, so it must not be blank.
+    instructions: Optional[str] = Field(default=None, pattern=r"\S")
     tool_policy: Dict[str, object] = Field(default_factory=dict)
     source_fix_proposal_id: Optional[str] = None
     status: str = "candidate"

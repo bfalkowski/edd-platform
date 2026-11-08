@@ -1501,6 +1501,27 @@ def test_create_scenario_live_syncs_langfuse_dataset_refs(monkeypatch) -> None:
     assert {ref["metadata"]["dataset_name"] for ref in scenario_refs} == {dataset_name}
 
 
+def test_agent_version_rejects_blank_instructions() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Blank Instructions Agent", "intent": "Answer billing questions."},
+    ).json()["agent"]
+    versions_path = f"/api/projects/project_default/agent-designs/{agent['id']}/versions"
+
+    for blank in ["", "   ", "\n\t"]:
+        response = client.post(versions_path, json={"instructions": blank})
+        assert response.status_code == 422, blank
+
+    omitted = client.post(versions_path, json={"version_label": "v0"})
+    assert omitted.status_code == 201
+    assert omitted.json()["instructions"] == "Answer billing questions."
+
+    padded = client.post(versions_path, json={"instructions": "  Be brief.  "})
+    assert padded.status_code == 201
+    assert padded.json()["instructions"] == "Be brief."
+
+
 def test_eval_contract_fields_generate_deterministic_checks() -> None:
     client = TestClient(app)
     create_response = client.post(
