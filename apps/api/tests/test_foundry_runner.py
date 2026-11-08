@@ -135,6 +135,28 @@ def test_run_foundry_agent_core_returns_completed_response() -> None:
     assert any("Foundry Agent Service" in item for item in result.evidence)
 
 
+def test_run_foundry_agent_core_sends_version_instructions_unchanged() -> None:
+    completed_run = ThreadRun(
+        id="run_fake", object="thread.run", created_at=0,
+        thread_id="thread_fake", agent_id="agent_fake", status=RunStatus.COMPLETED,
+    )
+    client = FakeAgentsClient(
+        run_sequence=[completed_run],
+        response_messages=[assistant_message("Recommended a rollback.")],
+    )
+
+    result = run_foundry_agent_core(
+        agent=FOUNDRY_AGENT,
+        scenario=FOUNDRY_SCENARIO,
+        config=FOUNDRY_CONFIG,
+        tool_definitions=[],
+        client=client,
+    )
+
+    assert client.create_agent_calls[0]["instructions"] == FOUNDRY_AGENT.intent
+    assert result.system_prompt == FOUNDRY_AGENT.intent
+
+
 def test_run_foundry_agent_core_executes_tool_calls() -> None:
     tool_call = RequiredFunctionToolCall(
         id="call_1",

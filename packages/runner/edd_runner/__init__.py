@@ -927,12 +927,7 @@ def run_foundry_agent_core(
 
     active_client = client or foundry_client_from_config(config)
     tool_specs, dispatch = build_foundry_tools(tool_definitions or [])
-    instructions = (
-        "You are the candidate agent being designed in an eval-driven workflow. "
-        "Stay inside the design intent, gather or cite relevant evidence from the scenario, "
-        "state assumptions clearly, and recommend a safe next action.\n\n"
-        f"Agent name: {agent.name}\nDesign intent: {agent.intent}"
-    )
+    instructions = agent.intent
 
     created_agent = active_client.create_agent(
         model=config.model,
@@ -998,6 +993,7 @@ def run_foundry_agent_core(
         scenario_input=scenario.input,
         response=response_text,
         model=config.model,
+        system_prompt=instructions,
         tool_calls=tool_calls
         or [
             RunnerToolCall(name="foundry.agent", input=scenario.input, output=config.model),
