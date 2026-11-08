@@ -530,7 +530,12 @@ function App() {
         applyTestToEditor(flow.scenario, flow.contract);
       })
       .catch((err: Error) => setError(err.message))
-      .finally(() => setIsLoadingContext(false));
+      .finally(() => {
+        // A load superseded by another agent's must not end that one's loading state.
+        if (isCurrent) {
+          setIsLoadingContext(false);
+        }
+      });
     // Loaded on its own so the test list never delays the rest of the agent's context.
     setSavedTests([]);
     if (selectedAgent) {
@@ -1320,6 +1325,7 @@ function App() {
                   activity={activity}
                   error={error}
                   evidenceArtifacts={evidenceArtifacts}
+                  isLoadingContext={isLoadingContext}
                   setError={setError}
                   setActivity={setActivity}
                   refreshContext={refreshContext}

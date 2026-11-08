@@ -32,6 +32,7 @@ type ErrorAnalysisTabProps = {
   activity: string | null;
   error: string | null;
   evidenceArtifacts: ArtifactRecord[];
+  isLoadingContext: boolean;
   setError: (message: string | null) => void;
   setActivity: (message: string | null) => void;
   refreshContext: () => Promise<void>;
@@ -51,6 +52,7 @@ export function ErrorAnalysisTab({
   activity,
   error,
   evidenceArtifacts,
+  isLoadingContext,
   setError,
   setActivity,
   refreshContext,
@@ -356,7 +358,7 @@ export function ErrorAnalysisTab({
                 className="secondary-button"
                 type="button"
                 onClick={handleAddCurrentEvidenceToCorpus}
-                disabled={isDiscoveryBusy}
+                disabled={isDiscoveryBusy || isLoadingContext}
               >
                 Pull in new runs
               </button>

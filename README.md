@@ -332,6 +332,29 @@ Run all local checks:
 This runs: secret scan, API tests, Langfuse adapter tests, OpenAPI contract
 lint, and React build.
 
+Run the browser end-to-end suite (Playwright, no provider keys needed; CI runs
+it on every pull request):
+
+```bash
+cd apps/web
+npm ci
+npx playwright install chromium   # first time only
+npm run test:e2e
+```
+
+The suite starts its own API, web, and stub-provider servers on ports 8091,
+5183, and 8092. If one of those is taken, the run fails rather than testing
+whatever is already there. Pick other ports with `EDD_E2E_API_PORT`,
+`EDD_E2E_WEB_PORT`, and `EDD_E2E_STUB_PORT`, for example when running beside
+another session:
+
+```bash
+EDD_E2E_API_PORT=8191 EDD_E2E_WEB_PORT=5283 EDD_E2E_STUB_PORT=8192 npm run test:e2e
+```
+
+Set `EDD_E2E_REUSE_SERVERS=1` to reuse servers you already started on those
+ports.
+
 Seed demo data after the app is running:
 
 ```bash
