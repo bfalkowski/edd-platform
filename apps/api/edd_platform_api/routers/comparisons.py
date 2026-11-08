@@ -36,14 +36,14 @@ def find_eval_result_for_run(
     run_id: str,
     eval_contract_id: str,
 ) -> Optional[EvalResult]:
-    for eval_result in _eval_results.values():
-        if (
-            eval_result.project_id == project_id
-            and eval_result.run_id == run_id
-            and eval_result.eval_contract_id == eval_contract_id
-        ):
-            return eval_result
-    return None
+    matches = [
+        eval_result
+        for eval_result in _eval_results.values()
+        if eval_result.project_id == project_id
+        and eval_result.run_id == run_id
+        and eval_result.eval_contract_id == eval_contract_id
+    ]
+    return max(matches, key=lambda eval_result: eval_result.created_at, default=None)
 
 
 def failure_packets_for_eval(

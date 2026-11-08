@@ -1012,6 +1012,9 @@ artifact_ids
 created_at
 ```
 
+When a run has been evaluated more than once against the contract, the
+comparison uses that run's newest eval result (by `created_at`).
+
 A suite comparison compares two versions over every active test:
 
 ```text
