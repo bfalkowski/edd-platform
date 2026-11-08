@@ -530,7 +530,11 @@ function App() {
         applyDiscoveryState(discoveryState);
         applyTestToEditor(flow.scenario, flow.contract);
       })
-      .catch((err: Error) => setError(err.message))
+      .catch((err: Error) => {
+        if (isCurrent) {
+          setError(err.message);
+        }
+      })
       .finally(() => {
         // A load superseded by another agent's must not end that one's loading state.
         if (isCurrent) {
