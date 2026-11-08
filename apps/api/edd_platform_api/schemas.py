@@ -321,6 +321,17 @@ class AgentRunCreate(BaseModel):
     url: Optional[str] = None
 
 
+class ModelOption(BaseModel):
+    id: str
+    label: str
+
+
+class ModelCatalog(BaseModel):
+    provider: str
+    default_model: str
+    models: List[ModelOption]
+
+
 class RunCreate(BaseModel):
     agent_design_id: str = Field(min_length=1)
     agent_version_id: Optional[str] = None

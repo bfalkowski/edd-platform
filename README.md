@@ -277,8 +277,9 @@ Then start:
 ./scripts/dev.sh
 ```
 
-The default model is Claude Haiku (`claude-haiku-4-5-20251001`, as set in
-`.env.example`). Override with `EDD_ANTHROPIC_MODEL`.
+The default model is Claude Haiku 5.5 (`claude-haiku-5-5`, set by
+`DEFAULT_ANTHROPIC_MODEL` in `packages/runner`). Override with
+`EDD_ANTHROPIC_MODEL`. `GET /api/models` lists the models the console offers.
 
 ## Langfuse
 

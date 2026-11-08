@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import edd_platform_api.main as api_main
 from edd_platform_api import service_status
 from edd_runner import (
+    DEFAULT_ANTHROPIC_MODEL,
     AnthropicRunnerConfig,
     RunnerAgentDesign,
     RunnerResult,
@@ -1151,7 +1152,7 @@ def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> Non
     )
 
     assert response_text.startswith("PASS")
-    assert model == "claude-haiku-4-5-20251001"
+    assert model == DEFAULT_ANTHROPIC_MODEL
     assert token_usage == {
         "input_tokens": 20,
         "output_tokens": 6,
@@ -1159,7 +1160,7 @@ def test_live_judge_records_langfuse_generation_on_run_trace(monkeypatch) -> Non
     assert generation_starts[0]["trace_context"] == {"trace_id": "trace_fake"}
     assert generation_starts[0]["as_type"] == "generation"
     assert generation_starts[0]["name"] == "anthropic.messages.judge"
-    assert generation_starts[0]["model"] == "claude-haiku-4-5-20251001"
+    assert generation_starts[0]["model"] == DEFAULT_ANTHROPIC_MODEL
     assert generation_updates[0]["output"] == response_text
     assert generation_updates[0]["usage_details"] == {
         "input_tokens": 20,

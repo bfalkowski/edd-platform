@@ -62,6 +62,9 @@ test("Evidence tab lists every run output, eval result and judge output", async 
   await expect(evidenceRows(page, "Run output")).toHaveCount(3);
   await expect(evidenceRows(page, "Eval result")).toHaveCount(3);
   await expect(evidenceRows(page, "Judge output")).toHaveCount(3);
+  // Each live run output names the model that answered and how long it took.
+  await expect(page.locator(".workflow-evidence-meta")).toHaveCount(3);
+  await expect(page.locator(".workflow-evidence-meta").first()).toHaveText(/^stub-model · \d+\.\ds$/);
 });
 
 test("Pull in new runs adds one review item per live run, once", async ({ page, request }) => {

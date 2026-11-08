@@ -851,6 +851,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         version=version,
         contract_id=payload.eval_contract_id,
     )
+    started_at = datetime.now(timezone.utc)
     runner_result, artifact, tool_artifacts, provider = run_agent_with_runner(
         project_id=project_id,
         agent=agent,
@@ -870,13 +871,13 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         eval_contract_id=payload.eval_contract_id,
         mode=runner_result.mode,
         provider=provider,
-        model=None,
+        model=runner_result.model,
         input=runner_result.scenario_input,
         system_prompt=runner_result.system_prompt,
         output=runner_result.response,
         status="completed",
         artifact_ids=[artifact.id] + [tool_artifact.id for tool_artifact in tool_artifacts],
-        started_at=runner_result.created_at,
+        started_at=started_at,
         completed_at=runner_result.created_at,
     )
     _runs[run.id] = run

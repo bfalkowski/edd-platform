@@ -45,6 +45,7 @@ type FixGenerated = {
 };
 
 type FailurePacket = { id: string };
+type ModelCatalog = { default_model: string; models: Array<{ id: string; label: string }> };
 
 type Comparison = { id: string; summary: string };
 
@@ -59,7 +60,7 @@ export type WizardState = {
   preview: GuidedSetupPreview | null;
   previewEdits: GuidedSetupPreview | null; // user-edited version
 
-  // model override (set in review step, used for all runs)
+  // model override (set in review step, used for all runs); "" means the API default
   model: string;
 
   // step 3 — confirmed agent
@@ -98,7 +99,7 @@ function initialState(projectId: string): WizardState {
     description: "",
     preview: null,
     previewEdits: null,
-    model: "claude-haiku-4-5-20251001",
+    model: "",
     agent: null,
     baselineRun: null,
     baselineEval: null,
@@ -146,6 +147,10 @@ async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${apiBase}${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
+}
+
+async function fetchModels(): Promise<ModelCatalog> {
+  return apiGet("/models");
 }
 
 export async function fetchAgentWizardState(projectId: string, agentId: string): Promise<OutcomeAgentResponse> {
@@ -434,12 +439,22 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [models, setModels] = useState<ModelCatalog["models"]>([]);
   const retryRef = useRef<(() => void) | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     topRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [state.step]);
+
+  useEffect(() => {
+    fetchModels()
+      .then((catalog) => {
+        setModels(catalog.models);
+        setState((s) => (s.model ? s : { ...s, model: catalog.default_model }));
+      })
+      .catch(() => setModels([]));
+  }, []);
 
   function update(patch: Partial<WizardState>) {
     setState((s) => ({ ...s, ...patch }));
@@ -693,9 +708,11 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
               value={state.model}
               onChange={(e) => update({ model: e.target.value })}
             >
-              <option value="claude-haiku-4-5-20251001">Haiku (fast, cheap)</option>
-              <option value="claude-sonnet-4-6">Sonnet (balanced)</option>
-              <option value="claude-opus-4-8">Opus (most capable)</option>
+              {models.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>

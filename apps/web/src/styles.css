@@ -1705,6 +1705,12 @@ dd {
   white-space: nowrap;
 }
 
+.workflow-evidence-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  grid-column: 1 / -1;
+}
+
 .next-action-panel {
   align-items: center;
   background: var(--surface);
