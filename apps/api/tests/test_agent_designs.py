@@ -2069,6 +2069,93 @@ def test_gate_decision_passes_after_comparison_fixes_failure_packet() -> None:
     assert f"Ignored as fixed by {comparison['id']}: {v0_packet['id']}" in decision["rationale"]
 
 
+def test_gate_decision_passes_after_fix_when_baseline_run_was_evaluated_twice() -> None:
+    client = TestClient(app)
+    loop = _fix_loop_for_gate(client, "Twice Evaluated Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence and include fixed phrase.", v0["id"])
+    v0_run, _ = loop["run_and_evaluate"](v0["id"])
+    second_eval = client.post(
+        f"/api/projects/project_default/runs/{v0_run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    ).json()
+    assert second_eval["passed"] is False
+    v1_run, v1_eval = loop["run_and_evaluate"](v1["id"])
+    assert v1_eval["passed"] is True
+    v0_packet_ids = sorted(packet["id"] for packet in loop["packets"]())
+    assert len(v0_packet_ids) == 2
+
+    comparison = loop["compare"](v0_run, v1_run)
+    assert sorted(comparison["fixed_failure_packet_ids"]) == v0_packet_ids
+
+    decision = loop["decide"](
+        eval_result_id=v1_eval["id"], comparison_id=comparison["id"]
+    )
+
+    assert decision["decision"] == "passed"
+    assert decision["blocking_failure_packet_ids"] == []
+
+
+def test_gate_decision_passes_after_fix_when_baseline_version_failed_twice() -> None:
+    loop = _fix_loop_for_gate(TestClient(app), "Twice Failing Baseline Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence and include fixed phrase.", v0["id"])
+    v0_run, _ = loop["run_and_evaluate"](v0["id"])
+    loop["run_and_evaluate"](v0["id"])
+    v1_run, v1_eval = loop["run_and_evaluate"](v1["id"])
+    v0_packet_ids = sorted(packet["id"] for packet in loop["packets"]())
+    assert len(v0_packet_ids) == 2
+
+    comparison = loop["compare"](v0_run, v1_run)
+    assert sorted(comparison["fixed_failure_packet_ids"]) == v0_packet_ids
+
+    decision = loop["decide"](
+        eval_result_id=v1_eval["id"], comparison_id=comparison["id"]
+    )
+
+    assert decision["decision"] == "passed"
+
+
+def test_comparison_keeps_packets_without_candidate_evidence_remaining() -> None:
+    client = TestClient(app)
+    loop = _fix_loop_for_gate(client, "Unproven Fix Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence and include fixed phrase.", v0["id"])
+    v0_run, v0_eval = loop["run_and_evaluate"](v0["id"])
+    [old_check_packet] = loop["packets"]()
+    hand_filed_packet = client.post(
+        "/api/projects/project_default/failure-packets",
+        json={
+            "agent_design_id": v0_run["agent_design_id"],
+            "agent_version_id": v0["id"],
+            "run_id": v0_run["id"],
+            "eval_result_id": v0_eval["id"],
+            "eval_contract_id": v0_eval["eval_contract_id"],
+            "title": "Hand-filed failure",
+            "diagnosis": "Reviewer saw a problem no check covers.",
+        },
+    ).json()
+    assert hand_filed_packet["failed_check_ids"] == []
+    checks_response = client.patch(
+        f"/api/projects/project_default/eval-contracts/{v0_eval['eval_contract_id']}/checks",
+        json={
+            "checks": [
+                {"id": "requires_new_phrase", "type": "output_contains", "value": "fixed phrase"}
+            ]
+        },
+    )
+    assert checks_response.status_code == 200
+    v1_run, v1_eval = loop["run_and_evaluate"](v1["id"])
+    assert v1_eval["passed"] is True
+
+    comparison = loop["compare"](v0_run, v1_run)
+
+    assert comparison["fixed_failure_packet_ids"] == []
+    assert sorted(comparison["remaining_failure_packet_ids"]) == sorted(
+        [old_check_packet["id"], hand_filed_packet["id"]]
+    )
+
+
 def test_gate_decision_rejects_eval_and_comparison_for_different_versions() -> None:
     client = TestClient(app)
     loop = _fix_loop_for_gate(client, "Mismatched Gate Agent")
