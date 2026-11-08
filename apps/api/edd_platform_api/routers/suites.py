@@ -123,25 +123,33 @@ def run_version_suite(
     if not tests:
         raise HTTPException(status_code=400, detail="Agent has no active tests to run.")
     # One test at a time; parallel or queued execution is out of scope.
+    # A test that fails to run or evaluate is recorded and the suite carries on.
+    errors = {}
     for scenario, contract in tests:
-        run = _runs_router.create_run(
-            project_id,
-            RunCreate(
-                agent_design_id=agent_id,
-                agent_version_id=version.id,
-                scenario_id=scenario.id,
-                eval_contract_id=contract.id,
-                mode=payload.mode,
-                provider=payload.provider,
-                model=payload.model,
-            ),
-        )
-        _runs_router.evaluate_run(
-            project_id,
-            run.id,
-            RunEvaluateCreate(eval_contract_id=contract.id, judge_mode=payload.judge_mode),
-        )
-    return suite_result_for_version(project_id, version)
+        try:
+            run = _runs_router.create_run(
+                project_id,
+                RunCreate(
+                    agent_design_id=agent_id,
+                    agent_version_id=version.id,
+                    scenario_id=scenario.id,
+                    eval_contract_id=contract.id,
+                    mode=payload.mode,
+                    provider=payload.provider,
+                    model=payload.model,
+                ),
+            )
+            _runs_router.evaluate_run(
+                project_id,
+                run.id,
+                RunEvaluateCreate(eval_contract_id=contract.id, judge_mode=payload.judge_mode),
+            )
+        except HTTPException as exc:
+            errors[scenario.id] = str(exc.detail)
+    result = suite_result_for_version(project_id, version)
+    for test in result.tests:
+        test.error = errors.get(test.scenario_id)
+    return result
 
 
 @router.get(

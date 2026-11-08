@@ -2,7 +2,10 @@ from typing import List
 
 from fastapi.testclient import TestClient
 
+from edd_platform_api import main as api_main
 from edd_platform_api.main import app
+
+import edd_runner  # noqa: E402  (importable once main has put the runner on sys.path)
 
 P = "/api/projects/project_default"
 
@@ -290,3 +293,45 @@ def test_gate_accepts_a_suite_rows_candidate_eval_result() -> None:
     assert accepted.status_code == 201
     assert accepted.json()["decision"] == "passed"
     assert rejected.status_code == 400
+
+
+def test_suite_run_records_a_test_error_and_runs_the_remaining_tests(monkeypatch) -> None:
+    client = TestClient(app)
+    setup = _suite_agent(client, "Suite Error Agent", ["alpha", "beta", "gamma"])
+    agent = setup["agent"]
+    v0 = _version(client, agent, "v0", "Always say alpha and gamma.")
+    calls = []
+
+    def flaky_runner(runner_agent, runner_scenario, _config, _tools):
+        calls.append(runner_scenario)
+        if len(calls) == 2:
+            raise RuntimeError("Provider timed out.")
+        return edd_runner.run_mock_agent(runner_agent, runner_scenario)
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(api_main, "run_anthropic_agent", flaky_runner)
+
+    response = client.post(
+        f"{P}/agent-designs/{agent['id']}/versions/{v0['id']}/suite-runs",
+        json={"mode": "live", "provider": "anthropic", "judge_mode": "deterministic"},
+    )
+
+    assert response.status_code == 201, response.text
+    result = response.json()
+    assert len(calls) == 3
+    assert [test["error"] for test in result["tests"]] == [None, "Provider timed out.", None]
+    assert [test["eval_result"] is not None for test in result["tests"]] == [True, False, True]
+    assert result["passed"] == 2
+    assert result["total"] == 3
+    runs = [
+        run
+        for run in client.get(f"{P}/runs", params={"agent_design_id": agent["id"]}).json()
+        if run["agent_version_id"] == v0["id"]
+    ]
+    assert len(runs) == 2
+    evals = [
+        client.get(f"{P}/eval-results", params={"eval_contract_id": test["contract"]["id"]}).json()
+        for test in setup["tests"]
+    ]
+    assert [len(items) for items in evals] == [1, 0, 1]
+    assert {evals[0][0]["run_id"], evals[2][0]["run_id"]} == {run["id"] for run in runs}

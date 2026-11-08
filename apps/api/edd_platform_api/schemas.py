@@ -984,6 +984,8 @@ class SuiteTestResult(BaseModel):
     scenario_id: str
     eval_contract_id: str
     eval_result: Optional[EvalResult] = None
+    # Set only on a suite run's response, when this test failed to run or evaluate.
+    error: Optional[str] = None
 
 
 class SuiteResult(BaseModel):
