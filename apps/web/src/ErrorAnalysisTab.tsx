@@ -124,31 +124,43 @@ export function ErrorAnalysisTab({
     try {
       const corpus = await ensureReviewCorpus();
       const existingSourceIds = new Set(reviewItems.map((item) => item.source_id));
+      const traceArtifactByRunId = new Map(
+        evidenceArtifacts
+          .filter((artifact) => artifact.artifact_type === "TRACE_REF")
+          .flatMap((artifact) => {
+            const runId = artifact.body.match(/Run\n(.+)/)?.[1]?.trim();
+            return runId ? [[runId, artifact] as const] : [];
+          }),
+      );
       const nextArtifacts = liveRunArtifacts.filter(
         (artifact) => !existingSourceIds.has(artifact.id),
       );
       await Promise.all(
-        nextArtifacts.map((artifact) =>
-          createReviewItem(projectId, {
+        nextArtifacts.map((artifact) => {
+          // The trace link lives on the run's TRACE_REF artifact, not on the RUN_RESULT.
+          const trace = traceArtifactByRunId.get(artifact.artifact_id);
+          const traceUrl = trace ? traceUrlFromArtifact(trace) : null;
+          return createReviewItem(projectId, {
             corpus_id: corpus.id,
             source_kind: "artifact",
             source_id: artifact.id,
             title: artifact.title,
             content: artifact.body,
-            langfuse_ref: traceUrlFromArtifact(artifact)
-              ? {
-                  trace_id: artifact.external_refs.find((ref) => ref.ref_type === "trace")?.external_id ?? null,
-                  observation_id: null,
-                  object_type: "TRACE",
-                  url: traceUrlFromArtifact(artifact),
-                  queue_id: null,
-                  score_ids: [],
-                  metadata: { artifact_type: artifact.artifact_type },
-                }
-              : null,
+            langfuse_ref:
+              trace && traceUrl
+                ? {
+                    trace_id: trace.external_refs.find((ref) => ref.ref_type === "trace")?.external_id ?? null,
+                    observation_id: null,
+                    object_type: "TRACE",
+                    url: traceUrl,
+                    queue_id: null,
+                    score_ids: [],
+                    metadata: { artifact_type: artifact.artifact_type },
+                  }
+                : null,
             metadata: { artifact_type: artifact.artifact_type },
-          }),
-        ),
+          });
+        }),
       );
       await refreshDiscoveryState();
       setActivity(

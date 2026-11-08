@@ -12,7 +12,7 @@ async function postJson<T>(request: APIRequestContext, path: string, data: objec
 async function seedAgent(
   request: APIRequestContext,
   runs: { live: number; mock: number },
-): Promise<{ name: string; id: string }> {
+): Promise<{ name: string; id: string; liveRunIds: string[] }> {
   const name = `Evidence Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {
     name,
@@ -30,6 +30,7 @@ async function seedAgent(
     checks: [{ id: "next_action", type: "output_contains", value: "next action" }],
   });
   const modes = [...Array(runs.live).fill("live"), ...Array(runs.mock).fill("mock")];
+  const liveRunIds: string[] = [];
   for (const mode of modes) {
     const run = await postJson<{ id: string }>(request, "/runs", {
       agent_design_id: agent.id,
@@ -38,8 +39,9 @@ async function seedAgent(
       mode,
     });
     await postJson(request, `/runs/${run.id}/evaluate`, { judge_mode: "deterministic" });
+    if (mode === "live") liveRunIds.push(run.id);
   }
-  return { name, id: agent.id };
+  return { name, id: agent.id, liveRunIds };
 }
 
 async function openAgent(page: Page, name: string) {
@@ -64,6 +66,14 @@ test("Evidence tab lists every run output, eval result and judge output", async 
 
 test("Pull in new runs adds one review item per live run, once", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 3, mock: 1 });
+  // A Langfuse-traced run: the trace link lives on a separate TRACE_REF artifact.
+  const tracedRunId = agent.liveRunIds[0];
+  await postJson(request, "/trace-refs", {
+    provider: "langfuse",
+    external_trace_id: "trace-e2e-1",
+    run_id: tracedRunId,
+    url: "http://langfuse.local/trace/trace-e2e-1",
+  });
   await openAgent(page, agent.name);
 
   await page.getByRole("tab", { name: "Error analysis" }).click();
@@ -82,6 +92,12 @@ test("Pull in new runs adds one review item per live run, once", async ({ page, 
     await request.get(`${PROJECT}/review-items?corpus_id=${corpora[0].id}`)
   ).json();
   expect(items).toHaveLength(3);
+  const traced = items.filter(
+    (item: { langfuse_ref: { trace_id: string } | null }) => item.langfuse_ref !== null,
+  );
+  expect(traced).toHaveLength(1);
+  expect(traced[0].langfuse_ref.trace_id).toBe("trace-e2e-1");
+  expect(traced[0].langfuse_ref.url).toBe("http://langfuse.local/trace/trace-e2e-1");
 });
 
 test("No live runs: the message shows on Error analysis only", async ({ page, request }) => {
