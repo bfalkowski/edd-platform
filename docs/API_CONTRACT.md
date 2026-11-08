@@ -892,8 +892,9 @@ follow the result:
 - Judge failed, reviewer overrules: the judge's open packets move to
   `overruled`. Agreeing later reopens them.
 - Judge passed, reviewer overrules: a packet titled "Reviewer overruled judge"
-  is opened with the reason. Agreeing later moves it to `withdrawn`;
-  overruling again reopens it with the new reason.
+  is opened with the reason. Agreeing later moves it to `withdrawn`.
+  Overruling again reopens it, and each overrule writes its reason into the
+  packet's diagnosis.
 
 Gates block on `open` packets by default, so `overruled` and `withdrawn`
 packets stop blocking unless a gate lists those statuses in

@@ -95,9 +95,11 @@ def review_judge_output(
             now=now,
         )
 
-    # Packets on a result the judge failed are the judge's; a reviewer overrule
-    # closes them as "overruled". Packets on a result the judge passed came from
-    # a reviewer overrule; agreeing with the judge closes them as "withdrawn".
+    # Evaluation opens packets only on a result the judge failed, so those are
+    # treated as the judge's: an overrule closes them as "overruled". Packets on
+    # a result the judge passed are treated as a reviewer overrule's: agreeing
+    # with the judge closes them as "withdrawn". A packet added by hand through
+    # POST /failure-packets is treated the same way as the others on its result.
     closed_status = "withdrawn" if judge_passed else "overruled"
     diagnosis = f"A reviewer overruled the judge's pass. Reason: {payload.reason}"
     failure_packet: Optional[FailurePacket] = None
@@ -107,10 +109,12 @@ def review_judge_output(
         update: dict = {}
         if passed and packet.status == "open":
             update = {"status": closed_status}
-        elif not passed and packet.status == closed_status:
+        elif not passed and packet.status in (closed_status, "open"):
             update = {"status": "open"}
             if judge_passed:
+                # The packet carries the latest overrule's reason.
                 update["diagnosis"] = diagnosis
+        update = {key: value for key, value in update.items() if getattr(packet, key) != value}
         if update:
             packet = packet.model_copy(update={**update, "updated_at": now})
             _failure_packets[packet.id] = packet
