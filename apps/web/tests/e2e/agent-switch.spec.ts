@@ -72,3 +72,45 @@ test("an error shown for one agent is cleared when switching to another", async 
   await expect(page.getByRole("heading", { name: otherAgent.name })).toBeVisible();
   await expect(page.locator(".error-text")).toHaveCount(0);
 });
+
+test("a failed saved-tests load for a previously selected agent shows no error on the new one", async ({
+  page,
+  request,
+}) => {
+  const oldAgent = await createAgent(request, "Superseded Tests Agent");
+  const newAgent = await createAgent(request, "Current Tests Agent");
+
+  // Hold the old agent's eval contract requests (the saved-tests list needs them)
+  // until the person has moved on, then fail them.
+  let releaseOldLoad: () => void = () => {};
+  const oldLoadReleased = new Promise<void>((resolve) => {
+    releaseOldLoad = resolve;
+  });
+  let oldLoadStarted: () => void = () => {};
+  const oldLoadSeen = new Promise<void>((resolve) => {
+    oldLoadStarted = resolve;
+  });
+  await page.route(`**/eval-contracts?agent_design_id=${oldAgent.id}`, async (route) => {
+    oldLoadStarted();
+    await oldLoadReleased;
+    await route.fulfill({ status: 500, json: { detail: "Old saved tests load failed" } });
+  });
+
+  await page.goto("/");
+  const agents = page.getByRole("region", { name: "Agent designs" });
+  await agents.getByText(oldAgent.name).click();
+  await oldLoadSeen;
+
+  await agents.getByText(newAgent.name).click();
+  await page.getByRole("tab", { name: "Agent" }).click();
+  await expect(page.getByRole("heading", { name: newAgent.name })).toBeVisible();
+
+  const failedResponse = page.waitForResponse(`**/eval-contracts?agent_design_id=${oldAgent.id}`);
+  releaseOldLoad();
+  await failedResponse;
+  // Give the rejected load time to reach the page before checking nothing was shown.
+  await page.waitForTimeout(500);
+
+  await expect(page.getByRole("heading", { name: newAgent.name })).toBeVisible();
+  await expect(page.locator(".error-text")).toHaveCount(0);
+});

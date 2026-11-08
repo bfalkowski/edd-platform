@@ -561,7 +561,11 @@ function App() {
             setSavedTests(tests);
           }
         })
-        .catch((err: Error) => setError(err.message));
+        .catch((err: Error) => {
+          if (isCurrent) {
+            setError(err.message);
+          }
+        });
     }
     return () => {
       isCurrent = false;
