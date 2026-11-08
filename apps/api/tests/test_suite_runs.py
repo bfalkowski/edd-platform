@@ -483,3 +483,95 @@ def test_a_default_contract_of_another_agent_is_not_a_test() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Agent has no active tests to run."
+
+
+def _open_packet_ids(client: TestClient, agent: dict, version: dict) -> List[str]:
+    return sorted(
+        packet["id"]
+        for packet in client.get(
+            f"{P}/failure-packets", params={"agent_design_id": agent["id"]}
+        ).json()
+        if packet["agent_version_id"] == version["id"] and packet["status"] == "open"
+    )
+
+
+def test_gate_ignores_open_packets_from_a_version_outside_the_comparison() -> None:
+    client = TestClient(app)
+    setup = _suite_agent(client, "Older Packets Agent", ["alpha", "beta"])
+    agent = setup["agent"]
+    v1 = _version(client, agent, "v1", "Say nothing useful.")
+    v2 = _version(client, agent, "v2", "Always say alpha.")
+    v3 = _version(client, agent, "v3", "Always say alpha and beta.")
+    for version in (v1, v2, v3):
+        _run_suite(client, agent, version)
+    v1_packet_ids = _open_packet_ids(client, agent, v1)
+    assert len(v1_packet_ids) == 2
+
+    comparison = _compare_suites(client, v2, v3)
+    decision = _decide(client, setup["gate"], comparison)
+
+    assert _outcomes(comparison, setup) == ["still_passing", "fixed"]
+    assert decision["decision"] == "passed"
+    assert decision["blocking_failure_packet_ids"] == []
+    for packet_id in v1_packet_ids:
+        assert packet_id not in decision["rationale"]
+
+
+def test_gate_blocks_on_an_open_packet_from_the_candidate_version() -> None:
+    client = TestClient(app)
+    setup = _suite_agent(client, "Candidate Packet Agent", ["alpha", "beta"])
+    agent = setup["agent"]
+    v2 = _version(client, agent, "v2", "Always say alpha and beta.")
+    v3 = _version(client, agent, "v3", "Always say alpha.")
+    _run_suite(client, agent, v2)
+    _run_suite(client, agent, v3)
+    [v3_packet_id] = _open_packet_ids(client, agent, v3)
+
+    decision = _decide(client, setup["gate"], _compare_suites(client, v2, v3))
+
+    assert decision["decision"] == "blocked"
+    assert decision["blocking_failure_packet_ids"] == [v3_packet_id]
+    assert v3_packet_id in decision["rationale"]
+
+
+def test_gate_leaves_a_later_version_packet_out_of_an_earlier_comparison() -> None:
+    client = TestClient(app)
+    setup = _suite_agent(client, "Later Packet Agent", ["alpha", "beta"])
+    agent = setup["agent"]
+    v1 = _version(client, agent, "v1", "Say nothing useful.")
+    v2 = _version(client, agent, "v2", "Always say alpha and beta.")
+    v3 = _version(client, agent, "v3", "Always say alpha.")
+    for version in (v1, v2, v3):
+        _run_suite(client, agent, version)
+    [v3_packet_id] = _open_packet_ids(client, agent, v3)
+
+    decision = _decide(client, setup["gate"], _compare_suites(client, v1, v2))
+
+    assert decision["decision"] == "passed"
+    assert v3_packet_id not in decision["blocking_failure_packet_ids"]
+    assert v3_packet_id not in decision["rationale"]
+
+
+def test_gate_on_an_eval_result_blocks_on_that_versions_open_packets() -> None:
+    client = TestClient(app)
+    setup = _suite_agent(client, "Eval Result Packet Agent", ["alpha", "beta"])
+    agent = setup["agent"]
+    v1 = _version(client, agent, "v1", "Always say alpha.")
+    v2 = _version(client, agent, "v2", "Always say beta.")
+    v1_result = _run_suite(client, agent, v1)
+    _run_suite(client, agent, v2)
+    [v1_packet_id] = _open_packet_ids(client, agent, v1)
+    [v2_packet_id] = _open_packet_ids(client, agent, v2)
+    v1_alpha_eval = v1_result["tests"][0]["eval_result"]
+    assert v1_alpha_eval["passed"] is True
+
+    response = client.post(
+        f"{P}/gates/{setup['gate']['id']}/decisions",
+        json={"eval_result_id": v1_alpha_eval["id"]},
+    )
+    assert response.status_code == 201, response.text
+    decision = response.json()
+
+    assert decision["decision"] == "blocked"
+    assert decision["blocking_failure_packet_ids"] == [v1_packet_id]
+    assert v2_packet_id not in decision["rationale"]
