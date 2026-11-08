@@ -27,8 +27,7 @@ Each agent gets five tabs: **Agent**, **Proof loop**, **Error analysis**,
 
 ### Agent tab
 
-Define the agent's name, core instruction, and enabled tools. The warm card
-layout keeps the design surface clean against the sidebar.
+Define the agent's name, core instruction, and enabled tools.
 
 ### Proof loop tab
 
