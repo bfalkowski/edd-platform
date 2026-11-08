@@ -60,6 +60,7 @@ import {
   listToolDefinitions,
   loadArtifact,
   loadArtifactLinks,
+  loadRun,
   runAgentDesign,
   updateAgentDesignToolAllowlist,
   updateScenario,
@@ -119,6 +120,12 @@ function App() {
   const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
   const [reviewArtifact, setReviewArtifact] = useState<ArtifactRecord | null>(null);
   const [reviewLinks, setReviewLinks] = useState<ArtifactLink[]>([]);
+  // The system prompt sent on the reviewed run, keyed by its run output artifact.
+  const [reviewRunPrompt, setReviewRunPrompt] = useState<{
+    artifactId: string;
+    systemPrompt: string | null;
+    loadError: string | null;
+  } | null>(null);
   const initialProofLoopCtx: ProofLoopCtx = {
     judgeOutputText: null,
     analysisNoteText: "",
@@ -332,6 +339,8 @@ function App() {
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
   const reviewExternalRefs = reviewArtifact?.external_refs ?? [];
+  const reviewPrompt =
+    reviewArtifact && reviewRunPrompt?.artifactId === reviewArtifact.id ? reviewRunPrompt : null;
   const generatedVersionArtifact = selectedGeneratedDesign
     ? artifactByRecordKey.get(`AGENT_VERSION:${selectedGeneratedDesign.version.id}`)
     : undefined;
@@ -1021,8 +1030,22 @@ function App() {
         loadArtifact(project.id, artifactId),
         loadArtifactLinks(project.id, artifactId),
       ]);
+      // A run output artifact records its run's id as artifact_id. The system
+      // prompt lives on the run, not in the artifact body that evals read.
+      // Ad hoc and Call URL results have no run record: loadRun returns null.
+      // Any other failure still opens the panel, and says the prompt is unknown.
+      let systemPrompt: string | null = null;
+      let loadError: string | null = null;
+      if (artifact.artifact_type === "RUN_RESULT") {
+        try {
+          systemPrompt = (await loadRun(project.id, artifact.artifact_id))?.system_prompt ?? null;
+        } catch (err) {
+          loadError = err instanceof Error ? err.message : "Unable to load run.";
+        }
+      }
       setReviewArtifact(artifact);
       setReviewLinks(links);
+      setReviewRunPrompt({ artifactId: artifact.id, systemPrompt, loadError });
       setToolsPanelOpen(false);
       setScratchPanelOpen(false);
       setScenarioEditorOpen(false);
@@ -1771,6 +1794,16 @@ function App() {
                 </a>
               ) : null}
             </section>
+            {reviewPrompt?.systemPrompt || reviewPrompt?.loadError ? (
+              <section aria-labelledby="review-system-prompt-heading">
+                <h3 id="review-system-prompt-heading">System prompt</h3>
+                {reviewPrompt.systemPrompt ? (
+                  <pre className="agent-output">{reviewPrompt.systemPrompt}</pre>
+                ) : (
+                  <p className="error-text">Could not load the system prompt: {reviewPrompt.loadError}</p>
+                )}
+              </section>
+            ) : null}
             {reviewExternalRefs.length > 0 ? (
               <section>
                 <h3>External evidence</h3>

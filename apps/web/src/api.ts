@@ -941,6 +941,18 @@ export async function listRuns(projectId: string, agentDesignId: string): Promis
   return response.json();
 }
 
+/** The run, or null when no run record exists (ad hoc and Call URL results). */
+export async function loadRun(projectId: string, runId: string): Promise<RunRecord | null> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/runs/${runId}`);
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load run.");
+  }
+  return response.json();
+}
+
 export async function listGateDefinitions(
   projectId: string,
   agentDesignId: string,
