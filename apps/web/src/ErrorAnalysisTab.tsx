@@ -159,22 +159,30 @@ export function ErrorAnalysisTab({
     try {
       const corpus = await ensureReviewCorpus();
       const existingSourceIds = new Set(reviewItems.map((item) => item.source_id));
-      const traceArtifactByRunId = new Map(
-        evidenceArtifacts
-          .filter((artifact) => artifact.artifact_type === "TRACE_REF")
-          .flatMap((artifact) => {
-            const runId = artifact.body.match(/Run\n(.+)/)?.[1]?.trim();
-            return runId ? [[runId, artifact] as const] : [];
-          }),
-      );
+      // Only Langfuse traces become a review item's langfuse_ref; trace refs
+      // from other providers are skipped. The first Langfuse trace for a run wins.
+      const langfuseTraceByRunId = new Map<
+        string,
+        { artifact: ArtifactRecord; traceId: string }
+      >();
+      for (const artifact of evidenceArtifacts) {
+        if (artifact.artifact_type !== "TRACE_REF") continue;
+        const langfuseTrace = artifact.external_refs.find(
+          (ref) => ref.provider === "langfuse" && ref.ref_type === "trace",
+        );
+        const runId = artifact.body.match(/Run\n(.+)/)?.[1]?.trim();
+        if (langfuseTrace && runId && !langfuseTraceByRunId.has(runId)) {
+          langfuseTraceByRunId.set(runId, { artifact, traceId: langfuseTrace.external_id });
+        }
+      }
       const nextArtifacts = liveRunArtifacts.filter(
         (artifact) => !existingSourceIds.has(artifact.id),
       );
       await Promise.all(
         nextArtifacts.map((artifact) => {
           // The trace link lives on the run's TRACE_REF artifact, not on the RUN_RESULT.
-          const trace = traceArtifactByRunId.get(artifact.artifact_id);
-          const traceUrl = trace ? traceUrlFromArtifact(trace) : null;
+          const trace = langfuseTraceByRunId.get(artifact.artifact_id);
+          const traceUrl = trace ? traceUrlFromArtifact(trace.artifact) : null;
           return createReviewItem(projectId, {
             corpus_id: corpus.id,
             source_kind: "artifact",
@@ -184,7 +192,7 @@ export function ErrorAnalysisTab({
             langfuse_ref:
               trace && traceUrl
                 ? {
-                    trace_id: trace.external_refs.find((ref) => ref.ref_type === "trace")?.external_id ?? null,
+                    trace_id: trace.traceId,
                     observation_id: null,
                     object_type: "TRACE",
                     url: traceUrl,

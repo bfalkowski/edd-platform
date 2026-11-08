@@ -130,6 +130,47 @@ test("Pull in new runs adds one review item per live run, once", async ({ page, 
   expect(traced[0].langfuse_ref.url).toBe("http://langfuse.local/trace/trace-e2e-1");
 });
 
+test("Pull in new runs takes langfuse_ref only from Langfuse trace refs", async ({ page, request }) => {
+  const agent = await seedAgent(request, { live: 2, mock: 0 });
+  const [otherOnlyRunId, mixedRunId] = agent.liveRunIds;
+  // A run traced only by another provider gets no langfuse_ref.
+  await postJson(request, "/trace-refs", {
+    provider: "otel",
+    external_trace_id: "otel-only-1",
+    run_id: otherOnlyRunId,
+    url: "http://otel.local/trace/otel-only-1",
+  });
+  // A run with a Langfuse trace and a later trace from another provider keeps the Langfuse one.
+  await postJson(request, "/trace-refs", {
+    provider: "langfuse",
+    external_trace_id: "trace-e2e-mixed",
+    run_id: mixedRunId,
+    url: "http://langfuse.local/trace/trace-e2e-mixed",
+  });
+  await postJson(request, "/trace-refs", {
+    provider: "otel",
+    external_trace_id: "otel-mixed-1",
+    run_id: mixedRunId,
+    url: "http://otel.local/trace/otel-mixed-1",
+  });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: "Error analysis" }).click();
+  await page.getByRole("button", { name: "Pull in new runs" }).click();
+  await expect(page.getByText("Added 2 runs to the review set.")).toBeVisible();
+
+  const corpora = await (
+    await request.get(`${PROJECT}/review-corpora?agent_design_id=${agent.id}`)
+  ).json();
+  const items: { title: string; content: string; langfuse_ref: { trace_id: string; url: string } | null }[] =
+    await (await request.get(`${PROJECT}/review-items?corpus_id=${corpora[0].id}`)).json();
+  expect(items).toHaveLength(2);
+  const traced = items.filter((item) => item.langfuse_ref !== null);
+  expect(traced).toHaveLength(1);
+  expect(traced[0].langfuse_ref?.trace_id).toBe("trace-e2e-mixed");
+  expect(traced[0].langfuse_ref?.url).toBe("http://langfuse.local/trace/trace-e2e-mixed");
+});
+
 test("No live runs: the message shows on Error analysis only", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 0, mock: 1 });
   await openAgent(page, agent.name);
