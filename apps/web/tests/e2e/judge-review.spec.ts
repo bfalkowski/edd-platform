@@ -88,6 +88,15 @@ test("A reviewer agrees with one judge verdict, overrules another, and sees the 
 
 test("Judge agreement shows the five newest verdicts and pages older ones", async ({ page, request }) => {
   const seeded = await seedJudgedAgent(request, 7);
+  // Review the oldest verdict up front, so it can be told apart from the newer ones.
+  const judgeOutputs: { id: string; eval_result_id: string }[] = await (
+    await request.get(`${PROJECT}/judge-outputs`)
+  ).json();
+  const oldest = judgeOutputs.find((output) => output.eval_result_id === seeded.evalResultIds[0]);
+  await postJson(request, `/judge-outputs/${oldest!.id}/review`, {
+    verdict: "agree",
+    reason: "Oldest verdict, reviewed first.",
+  });
   await page.goto(`/?agent=${seeded.id}`);
   await page.getByRole("tab", { name: /Evidence/ }).click();
 
@@ -96,8 +105,11 @@ test("Judge agreement shows the five newest verdicts and pages older ones", asyn
     .getByRole("group", { name: "One fix per ticket" });
   const rows = contract.getByTestId("judge-review-row");
   await expect(rows).toHaveCount(5);
+  await expect(contract.getByText("Oldest verdict, reviewed first.")).toHaveCount(0);
 
   await contract.getByRole("button", { name: "Show older verdicts (2 more)" }).click();
   await expect(rows).toHaveCount(7);
+  // The oldest verdict is last, behind the button.
+  await expect(rows.nth(6).getByText("Oldest verdict, reviewed first.")).toBeVisible();
   await expect(contract.getByRole("button", { name: /Show older verdicts/ })).toHaveCount(0);
 });
