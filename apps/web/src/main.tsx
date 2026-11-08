@@ -516,6 +516,8 @@ function App() {
       return;
     }
     let isCurrent = true;
+    // An error from the last agent's context does not belong to this one.
+    setError(null);
     setEddFlow({ failurePackets: [] });
     resetProofLoopCtx();
     setIsLoadingContext(true);

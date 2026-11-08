@@ -50,3 +50,25 @@ test("a failed load for a previously selected agent shows no error on the new on
   await expect(page.getByRole("heading", { name: newAgent.name })).toBeVisible();
   await expect(page.locator(".error-text")).toHaveCount(0);
 });
+
+test("an error shown for one agent is cleared when switching to another", async ({ page, request }) => {
+  const failingAgent = await createAgent(request, "Failing Agent");
+  const otherAgent = await createAgent(request, "Other Agent");
+
+  await page.route(`**/gates?agent_design_id=${failingAgent.id}`, (route) =>
+    route.fulfill({ status: 500, json: { detail: "Failing agent load failed" } }),
+  );
+
+  await page.goto("/");
+  const agents = page.getByRole("region", { name: "Agent designs" });
+  // Pick the tab first: changing tabs clears the error on its own.
+  await agents.getByText(otherAgent.name).click();
+  await page.getByRole("tab", { name: "Agent" }).click();
+  await agents.getByText(failingAgent.name).click();
+  await expect(page.getByRole("heading", { name: failingAgent.name })).toBeVisible();
+  await expect(page.locator(".error-text")).toContainText("Failing agent load failed");
+
+  await agents.getByText(otherAgent.name).click();
+  await expect(page.getByRole("heading", { name: otherAgent.name })).toBeVisible();
+  await expect(page.locator(".error-text")).toHaveCount(0);
+});
