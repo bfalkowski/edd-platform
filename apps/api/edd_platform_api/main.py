@@ -5,8 +5,19 @@ import os
 import sys
 
 from dotenv import find_dotenv, load_dotenv
-load_dotenv(find_dotenv(raise_error_if_not_found=False))
-load_dotenv(find_dotenv(".env.local", raise_error_if_not_found=False), override=True)
+
+
+def load_env_files() -> None:
+    # find_dotenv walks up parent folders, so from a worktree under
+    # .worktrees/ it finds the main checkout's .env.local. E2E runs set
+    # EDD_PLATFORM_E2E=1 so their stub env is never replaced by real keys.
+    if os.environ.get("EDD_PLATFORM_E2E") == "1":
+        return
+    load_dotenv(find_dotenv(raise_error_if_not_found=False))
+    load_dotenv(find_dotenv(".env.local", raise_error_if_not_found=False), override=True)
+
+
+load_env_files()
 from base64 import b64encode
 from datetime import datetime, timezone
 from pathlib import Path
