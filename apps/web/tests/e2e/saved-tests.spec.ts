@@ -173,3 +173,46 @@ test("Editing a test replaces its entry instead of adding one", async ({ page, r
   await expect(page.getByRole("list", { name: "Saved tests" })).toContainText("Deploy rollback advice");
   await expect(rows.filter({ hasText: "Deploy rollback advice" })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("An agent whose passed test was saved as a draft opens the workspace, not the wizard", async ({
+  page,
+  request,
+}) => {
+  // The old console saved every test as a draft scenario.
+  const name = `Legacy Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {
+    name,
+    intent: "Answer support questions with a safe next action.",
+  });
+  const version = await postJson<{ id: string }>(request, `/agent-designs/${agent.id}/versions`, {
+    version_label: "v0",
+    instructions: "Answer support questions with a safe next action.",
+    status: "baseline",
+  });
+  const scenario = await postJson<{ id: string }>(request, "/scenarios", {
+    agent_design_id: agent.id,
+    name: "Legacy test",
+    input: "A deployment failed. What should I do?",
+  });
+  const contract = await postJson<{ id: string }>(request, "/eval-contracts", {
+    agent_design_id: agent.id,
+    name: "Required phrase",
+    scenario_id: scenario.id,
+    checks: [{ id: "includes_required_phrase", type: "output_contains", value: "next action" }],
+  });
+  const run = await postJson<{ id: string }>(request, "/runs", {
+    agent_design_id: agent.id,
+    agent_version_id: version.id,
+    scenario_id: scenario.id,
+    eval_contract_id: contract.id,
+    mode: "live",
+  });
+  const verdict = await postJson<{ passed: boolean }>(request, `/runs/${run.id}/evaluate`, {
+    judge_mode: "deterministic",
+  });
+  expect(verdict.passed).toBe(true);
+
+  await openAgent(page, name);
+  await page.waitForLoadState("networkidle");
+  await expect(page.locator(".wizard-heading")).toHaveCount(0);
+});

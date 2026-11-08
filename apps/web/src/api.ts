@@ -1033,7 +1033,11 @@ export async function listSavedTests(projectId: string, agentDesignId: string): 
   );
 }
 
-/** Load the proof loop for one saved test: the given one, else the newest. */
+/**
+ * Load the proof loop for one test: the given scenario, else the newest saved
+ * test. A given scenario is honoured even when it is not listed (a legacy draft
+ * or a superseded revision), so wizard resume reads the wizard's own test.
+ */
 export async function hydrateEddFlow(
   projectId: string,
   agent: AgentDesign,
@@ -1050,9 +1054,13 @@ export async function hydrateEddFlow(
       listComparisons(projectId, agent.id),
     ]);
 
+  const requestedScenario = scenarios.find((item) => item.id === scenarioId);
+  const requestedContract = contracts.find((item) => item.scenario_id === scenarioId);
   const tests = pairActiveTests(scenarios, contracts);
   const selectedTest =
-    tests.find((test) => test.scenario.id === scenarioId) ?? tests[tests.length - 1];
+    requestedScenario && requestedContract
+      ? { scenario: requestedScenario, contract: requestedContract }
+      : tests[tests.length - 1];
   const scenario = selectedTest?.scenario;
   const contract = selectedTest?.contract;
   const runsById = new Map(runs.map((run) => [run.id, run]));
@@ -1088,7 +1096,7 @@ export async function hydrateEddFlow(
     candidateRun,
     baselineEval: baselineEvalResults[0],
     candidateEval: candidateEvalResults[0],
-    failurePackets,
+    failurePackets: failurePackets.filter((packet) => packet.eval_contract_id === contract?.id),
     fixProposal: fixProposals.find(
       (proposal) => contract && proposal.validation_contract_ids.includes(contract.id),
     ),
