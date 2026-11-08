@@ -99,8 +99,10 @@ def review_judge_output(
     # treated as the judge's: an overrule closes them as "overruled". Packets on
     # a result the judge passed are treated as a reviewer overrule's: agreeing
     # with the judge closes them as "withdrawn". A packet added by hand through
-    # POST /failure-packets is treated the same way as the others on its result.
+    # POST /failure-packets changes status like the others on its result, but
+    # only the reviewer's own packet takes the overrule reason as its diagnosis.
     closed_status = "withdrawn" if judge_passed else "overruled"
+    reviewer_title_prefix = "Reviewer overruled judge:"
     diagnosis = f"A reviewer overruled the judge's pass. Reason: {payload.reason}"
     failure_packet: Optional[FailurePacket] = None
     for packet in list(_failure_packets.values()):
@@ -111,8 +113,8 @@ def review_judge_output(
             update = {"status": closed_status}
         elif not passed and packet.status in (closed_status, "open"):
             update = {"status": "open"}
-            if judge_passed:
-                # The packet carries the latest overrule's reason.
+            if judge_passed and packet.title.startswith(reviewer_title_prefix):
+                # The reviewer packet carries the latest overrule's reason.
                 update["diagnosis"] = diagnosis
         update = {key: value for key, value in update.items() if getattr(packet, key) != value}
         if update:
@@ -130,7 +132,7 @@ def review_judge_output(
             eval_result_id=eval_result.id,
             eval_contract_id=contract.id,
             failed_check_ids=[check.check_id for check in eval_result.checks],
-            title=f"Reviewer overruled judge: {contract.name}",
+            title=f"{reviewer_title_prefix} {contract.name}",
             diagnosis=diagnosis,
             severity="medium",
             evidence_artifact_ids=[*eval_result.artifact_ids, review_artifact.id],

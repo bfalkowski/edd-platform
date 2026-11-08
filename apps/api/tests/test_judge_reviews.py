@@ -174,6 +174,32 @@ def test_second_overrule_updates_the_packet_reason() -> None:
     assert packet["diagnosis"].endswith("Reason B.")
 
 
+def test_overrule_keeps_the_diagnosis_of_a_packet_added_by_hand() -> None:
+    client = TestClient(app)
+    agent_id, scenario_id, contract_id = create_contract(client, judge_passes=True)
+    eval_result = evaluate(client, agent_id, scenario_id, contract_id)
+    response = client.post(
+        f"{PROJECT}/failure-packets",
+        json={
+            "agent_design_id": agent_id,
+            "run_id": eval_result["run_id"],
+            "eval_result_id": eval_result["id"],
+            "eval_contract_id": contract_id,
+            "title": "Found by hand",
+            "diagnosis": "Hand-written diagnosis.",
+        },
+    )
+    assert response.status_code == 201, response.text
+
+    review(client, eval_result, "overrule", "Reason A.")
+    review(client, eval_result, "agree", "Fine after all.")
+    review(client, eval_result, "overrule", "Reason B.")
+
+    [packet] = packets_for(client, agent_id, eval_result["id"])
+    assert packet["status"] == "open"
+    assert packet["diagnosis"] == "Hand-written diagnosis."
+
+
 def test_gate_follows_reviews_in_both_directions() -> None:
     client = TestClient(app)
     for judge_passes, expected in (
