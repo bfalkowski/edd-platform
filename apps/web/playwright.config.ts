@@ -38,6 +38,11 @@ export default defineConfig({
         ANTHROPIC_BASE_URL: `http://127.0.0.1:${STUB_ANTHROPIC_PORT}`,
         LANGFUSE_PUBLIC_KEY: "",
         LANGFUSE_SECRET_KEY: "",
+        // Blank provider settings a developer's shell may export.
+        LANGFUSE_HOST: "",
+        LANGFUSE_BASE_URL: "",
+        AZURE_AI_FOUNDRY_PROJECT_ENDPOINT: "",
+        EDD_FOUNDRY_MODEL: "",
       },
       timeout: 30_000,
     },
