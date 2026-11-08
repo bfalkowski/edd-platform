@@ -145,7 +145,9 @@ three input shapes:
 - `trace_replay`: selected or pasted prior spans/messages/evidence used as the
   starting context for a replay.
 
-The API keeps this shape in `setup_context` while the runner executes `input`.
+The API keeps this shape in `setup_context` as a `test_shape:` tag line. A run
+sends the agent the rest of the setup context, followed by `input`; the run's
+`input` and its `RUN_RESULT` artifact record that full text.
 Future trace replay work can replace pasted replay seeds with first-class trace
 span selection without changing the core `Scenario -> Run -> EvalResult` loop.
 

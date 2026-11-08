@@ -50,6 +50,7 @@ from edd_platform_api.schemas import (
     RunCreate,
     RunEvaluateCreate,
     RunRecord,
+    Scenario,
     TraceRef,
     TraceRefCreate,
 )
@@ -786,6 +787,23 @@ def list_runs(
     return sorted(runs, key=lambda run: run.completed_at, reverse=True)
 
 
+# Tag lines the platform writes into setup_context for its own use (the
+# console's test shape, the outcome draft's origin). They are not for the agent.
+_SETUP_CONTEXT_TAG_PREFIXES = ("test_shape:", "origin:")
+
+
+def agent_input_for_scenario(scenario: Scenario) -> str:
+    """Text the agent receives for a scenario: setup context, then the input."""
+    setup_context = "\n".join(
+        line
+        for line in scenario.setup_context.splitlines()
+        if not line.strip().startswith(_SETUP_CONTEXT_TAG_PREFIXES)
+    ).strip()
+    if not setup_context:
+        return scenario.input
+    return f"Setup context:\n{setup_context}\n\nInput:\n{scenario.input.strip()}"
+
+
 @router.post("/api/projects/{project_id}/runs", status_code=201)
 def create_run(project_id: str, payload: RunCreate) -> RunRecord:
     get_project_or_404(project_id)
@@ -830,7 +848,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         project_id=project_id,
         agent=agent,
         instructions=instructions,
-        scenario_input=scenario.input,
+        scenario_input=agent_input_for_scenario(scenario),
         mode=payload.mode,
         provider=payload.provider,
         prompt_refs=prompt_refs,
