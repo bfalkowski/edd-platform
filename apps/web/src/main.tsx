@@ -14,7 +14,6 @@ import type {
   AgentSuggestion,
   ArtifactLink,
   ArtifactRecord,
-  ContextPack,
   EddFlowState,
   EvalMethod,
   FailureMode,
@@ -33,7 +32,6 @@ import type {
   ToolDefinition,
 } from "./types";
 import {
-  buildContextPack,
   createAgentDesign,
   createAgentDesignFromOutcome,
   createAgentVersion,
@@ -44,6 +42,7 @@ import {
   evaluateArtifact,
   getReviewSamplingPlan,
   hydrateEddFlow,
+  listAgentArtifacts,
   listAgentDesigns,
   listAgentSuggestions,
   listFailureModes,
@@ -106,7 +105,7 @@ function App() {
   const [workspaceTab, setWorkspaceTab] = useState<
     "agent" | "proof" | "error-analysis" | "evidence" | "readiness"
   >("proof");
-  const [contextPack, setContextPack] = useState<ContextPack | null>(null);
+  const [agentArtifacts, setAgentArtifacts] = useState<ArtifactRecord[]>([]);
   const [eddFlow, setEddFlow] = useState<EddFlowState>({ failurePackets: [] });
   const [generatedDesign, setGeneratedDesign] = useState<GeneratedDesignSummary | null>(null);
   const [gates, setGates] = useState<GateDefinition[]>([]);
@@ -289,17 +288,17 @@ function App() {
   const latestGate = gates[0] ?? null;
   const latestGateDecision = gateDecisions[0] ?? null;
   const artifactsById = useMemo(() => {
-    return new Map((contextPack?.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
-  }, [contextPack]);
+    return new Map(agentArtifacts.map((artifact) => [artifact.id, artifact]));
+  }, [agentArtifacts]);
   const artifactByRecordKey = useMemo(() => {
     return new Map(
-      (contextPack?.artifacts ?? []).map((artifact) => [
+      agentArtifacts.map((artifact) => [
         `${artifact.artifact_type}:${artifact.artifact_id}`,
         artifact,
       ]),
     );
-  }, [contextPack]);
-  const visibleArtifacts = contextPack?.artifacts ?? [];
+  }, [agentArtifacts]);
+  const visibleArtifacts = agentArtifacts;
   const currentProofArtifactIds = proofArtifactIds(eddFlow);
   const currentProofRunIdSet = new Set(proofRunIds(eddFlow));
   const currentProofArtifacts = currentProofArtifactIds
@@ -487,7 +486,7 @@ function App() {
 
   useEffect(() => {
     if (!project) {
-      setContextPack(null);
+      setAgentArtifacts([]);
       setGates([]);
       setGateDecisions([]);
       return;
@@ -497,7 +496,7 @@ function App() {
     resetProofLoopCtx();
     setIsLoadingContext(true);
     Promise.all([
-      buildContextPack(project.id, selectedId ?? undefined),
+      listAgentArtifacts(project.id, selectedId ?? undefined),
       selectedAgent
         ? hydrateEddFlow(project.id, selectedAgent)
         : Promise.resolve({ failurePackets: [] } as EddFlowState),
@@ -505,11 +504,11 @@ function App() {
       selectedAgent ? listGateDecisions(project.id, selectedAgent.id) : Promise.resolve([]),
       loadDiscoveryState(project.id, selectedAgent),
     ])
-      .then(([pack, flow, loadedGates, loadedGateDecisions, discoveryState]) => {
+      .then(([artifacts, flow, loadedGates, loadedGateDecisions, discoveryState]) => {
         if (!isCurrent) {
           return;
         }
-        setContextPack(pack);
+        setAgentArtifacts(artifacts);
         setEddFlow(flow);
         setGates(loadedGates);
         setGateDecisions(loadedGateDecisions);
@@ -666,7 +665,7 @@ function App() {
       if (selectedId === deleteCandidate.id) {
         setSelectedId(null);
         setGeneratedDesign(null);
-        setContextPack(null);
+        setAgentArtifacts([]);
         setReviewArtifact(null);
         setReviewLinks([]);
         setToolsPanelOpen(false);
@@ -683,6 +682,12 @@ function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete agent design.");
     }
+  }
+
+  function selectWorkspaceTab(tab: typeof workspaceTab) {
+    setError(null);
+    setActivity(null);
+    setWorkspaceTab(tab);
   }
 
   function handleToggleSidebar() {
@@ -805,7 +810,7 @@ function App() {
       setAgents((items) =>
         items.map((agent) => (agent.id === updated.id ? updated : agent)),
       );
-      setContextPack(await buildContextPack(project.id, updated.id));
+      setAgentArtifacts(await listAgentArtifacts(project.id, updated.id));
       setActivity("Tool policy updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update agent tools.");
@@ -834,7 +839,7 @@ function App() {
       setAgents((items) =>
         items.map((agent) => (agent.id === updatedAgent.id ? updatedAgent : agent)),
       );
-      setContextPack(await buildContextPack(project.id, updatedAgent.id));
+      setAgentArtifacts(await listAgentArtifacts(project.id, updatedAgent.id));
       setActivity(`Approved and assigned ${approved.name}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to approve tool.");
@@ -899,18 +904,11 @@ function App() {
         scratchTarget === "url" ? scratchUrl.trim() : undefined,
       );
       setActivity("Ad hoc evidence saved.");
-      setContextPack((pack) =>
-        pack
-          ? {
-              ...pack,
-              artifacts: [
-                run.artifact,
-                ...(run.trace_artifact ? [run.trace_artifact] : []),
-                ...pack.artifacts,
-              ],
-            }
-          : pack,
-      );
+      setAgentArtifacts((artifacts) => [
+        run.artifact,
+        ...(run.trace_artifact ? [run.trace_artifact] : []),
+        ...artifacts,
+      ]);
       setScratchArtifact(run.artifact);
       setScratchTraceUrl(run.trace_url);
       setScratchActivity("Ad hoc run saved.");
@@ -932,11 +930,7 @@ function App() {
     try {
       const evalResult = await evaluateArtifact(project.id, artifact.id);
       setActivity("Stored eval evidence.");
-      setContextPack((pack) =>
-        pack
-          ? { ...pack, artifacts: [evalResult.artifact, ...pack.artifacts] }
-          : pack,
-      );
+      setAgentArtifacts((artifacts) => [evalResult.artifact, ...artifacts]);
       await handleReviewArtifact(evalResult.artifact.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to evaluate run artifact.");
@@ -997,8 +991,7 @@ function App() {
     if (!project) {
       return;
     }
-    const pack = await buildContextPack(project.id, selectedId ?? undefined);
-    setContextPack(pack);
+    setAgentArtifacts(await listAgentArtifacts(project.id, selectedId ?? undefined));
   }
 
   async function refreshReadiness() {
@@ -1143,7 +1136,7 @@ function App() {
                     type="button"
                     role="tab"
                     aria-selected={workspaceTab === "agent"}
-                    onClick={() => setWorkspaceTab("agent")}
+                    onClick={() => selectWorkspaceTab("agent")}
                   >
                     Agent
                   </button>
@@ -1152,7 +1145,7 @@ function App() {
                     type="button"
                     role="tab"
                     aria-selected={workspaceTab === "proof"}
-                    onClick={() => setWorkspaceTab("proof")}
+                    onClick={() => selectWorkspaceTab("proof")}
                   >
                     Proof loop
                   </button>
@@ -1163,7 +1156,7 @@ function App() {
                     type="button"
                     role="tab"
                     aria-selected={workspaceTab === "error-analysis"}
-                    onClick={() => setWorkspaceTab("error-analysis")}
+                    onClick={() => selectWorkspaceTab("error-analysis")}
                   >
                     Error analysis
                   </button>
@@ -1172,7 +1165,7 @@ function App() {
                     type="button"
                     role="tab"
                     aria-selected={workspaceTab === "evidence"}
-                    onClick={() => setWorkspaceTab("evidence")}
+                    onClick={() => selectWorkspaceTab("evidence")}
                   >
                     Evidence
                     <span>{evidenceArtifacts.length}</span>
@@ -1182,7 +1175,7 @@ function App() {
                     type="button"
                     role="tab"
                     aria-selected={workspaceTab === "readiness"}
-                    onClick={() => setWorkspaceTab("readiness")}
+                    onClick={() => selectWorkspaceTab("readiness")}
                   >
                     Readiness
                   </button>
@@ -1252,7 +1245,7 @@ function App() {
                   setReviewLinks={setReviewLinks}
                   onOpenNewScenarioEditor={openNewScenarioEditor}
                   onOpenScenarioEditor={openScenarioEditor}
-                  onViewEvidence={() => setWorkspaceTab("evidence")}
+                  onViewEvidence={() => selectWorkspaceTab("evidence")}
                 />
               ) : null}
 
@@ -1267,6 +1260,7 @@ function App() {
                   agentSuggestions={agentSuggestions}
                   selectedReviewItemId={selectedReviewItemId}
                   setSelectedReviewItemId={setSelectedReviewItemId}
+                  activity={activity}
                   error={error}
                   evidenceArtifacts={evidenceArtifacts}
                   setError={setError}
