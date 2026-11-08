@@ -120,6 +120,21 @@ test("Run all tests on v0 and v1, then compare them per test, before and after a
   await page.getByRole("button", { name: "Create gate" }).click();
   await page.getByRole("button", { name: "Run gate" }).click();
   await expect(page.getByRole("heading", { name: "Ready" })).toBeVisible();
+  await expect(page.getByText("Gate evidence: v0 → v1")).toBeVisible();
+
+  // A rerun after the comparison makes it out of date; the gate waits for a new one.
+  await page.getByRole("tab", { name: "Proof loop" }).click();
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  const stale = "Out of date: tests or results changed since this comparison. Compare all tests again.";
+  await expect(page.getByText(stale)).toBeVisible();
+  await page.getByRole("tab", { name: "Readiness" }).click();
+  await expect(page.getByText(stale)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run again" })).toBeDisabled();
+  await page.getByRole("tab", { name: "Proof loop" }).click();
+  await page.getByRole("button", { name: "Compare all tests" }).click();
+  await expect(page.getByText(stale)).toHaveCount(0);
+  await page.getByRole("tab", { name: "Readiness" }).click();
+  await expect(page.getByRole("button", { name: "Run again" })).toBeEnabled();
 });
 
 test("A test that passed on v0 and fails on v1 is marked as a regression and blocks the gate", async ({

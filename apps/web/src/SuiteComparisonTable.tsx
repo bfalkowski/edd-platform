@@ -20,6 +20,9 @@ type SuiteComparisonTableProps = {
   savedTests: SavedTest[];
   baselineLabel: string;
   candidateLabel: string;
+  // False once tests or results changed after the comparison; undefined while loading.
+  isCurrent: boolean | undefined;
+  eyebrow?: string;
 };
 
 /** Each test's outcome between two versions, with a warning for any regression. */
@@ -28,6 +31,8 @@ export function SuiteComparisonTable({
   savedTests,
   baselineLabel,
   candidateLabel,
+  isCurrent,
+  eyebrow = "All tests",
 }: SuiteComparisonTableProps) {
   const rows = comparison.tests ?? [];
   const totals = comparison.totals;
@@ -44,7 +49,7 @@ export function SuiteComparisonTable({
     <section className="suite-comparison" aria-label="Test comparison">
       <div className="suite-comparison-header">
         <p className="artifact-type">
-          {baselineLabel} → {candidateLabel}, all tests
+          {eyebrow}: {baselineLabel} → {candidateLabel}
         </p>
         {totals ? (
           <p className="suite-comparison-totals">
@@ -53,6 +58,11 @@ export function SuiteComparisonTable({
           </p>
         ) : null}
       </div>
+      {isCurrent === false ? (
+        <p className="suite-stale-note">
+          Out of date: tests or results changed since this comparison. Compare all tests again.
+        </p>
+      ) : null}
       {regressed > 0 ? (
         <p className="suite-regression-warning" role="alert">
           {regressed === 1 ? "1 test regressed" : `${regressed} tests regressed`}. A regression blocks

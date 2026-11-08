@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { createGateDecision, createGateDefinition } from "./api";
+import { suiteComparisonIsCurrent } from "./suite";
 import { SuiteComparisonTable } from "./SuiteComparisonTable";
+import { useSuiteResults } from "./useSuiteResults";
 import type { AgentDesign, EddFlowState, GateDecision, GateDefinition, SavedTest } from "./types";
 
 type ReadinessTabProps = {
@@ -51,16 +53,34 @@ export function ReadinessTab({
     }
   }
 
-  // A suite comparison judges every test, so the gate uses it when there is one.
+  const suiteVersions = [eddFlow.baselineVersion, eddFlow.candidateVersion].filter(
+    (version): version is NonNullable<typeof version> => Boolean(version),
+  );
+  const [suiteResults] = useSuiteResults(
+    projectId,
+    selectedAgent.id,
+    suiteVersions,
+    savedTests,
+    setError,
+  );
+  // A suite comparison judges every test, so the gate uses it when there is one,
+  // but only while it still matches the saved tests and their latest results.
   const suiteComparison = eddFlow.suiteComparison;
-  const suiteRows = suiteComparison?.tests ?? [];
+  const suiteRow =
+    suiteComparison?.tests?.find((row) => row.scenario_id === eddFlow.scenario?.id) ??
+    suiteComparison?.tests?.[0];
+  const suiteIsCurrent =
+    suiteComparison && eddFlow.baselineVersion && eddFlow.candidateVersion
+      ? suiteComparisonIsCurrent(
+          suiteComparison,
+          suiteResults[eddFlow.baselineVersion.id],
+          suiteResults[eddFlow.candidateVersion.id],
+        )
+      : undefined;
   const gateEvidence = suiteComparison
-    ? {
-        comparison_id: suiteComparison.id,
-        eval_result_id: (
-          suiteRows.find((row) => row.scenario_id === eddFlow.scenario?.id) ?? suiteRows[0]
-        ).candidate_eval_result_id,
-      }
+    ? suiteRow && suiteIsCurrent
+      ? { comparison_id: suiteComparison.id, eval_result_id: suiteRow.candidate_eval_result_id }
+      : null
     : eddFlow.candidateEval && eddFlow.comparison
       ? { comparison_id: eddFlow.comparison.id, eval_result_id: eddFlow.candidateEval.id }
       : null;
@@ -132,6 +152,8 @@ export function ReadinessTab({
           savedTests={savedTests}
           baselineLabel={eddFlow.baselineVersion.version_label}
           candidateLabel={eddFlow.candidateVersion.version_label}
+          isCurrent={suiteIsCurrent}
+          eyebrow="Gate evidence"
         />
       ) : null}
     </section>

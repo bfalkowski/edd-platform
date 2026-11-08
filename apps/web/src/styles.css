@@ -3460,3 +3460,12 @@ dd {
 .suite-outcome.still_passing {
   color: var(--text-muted);
 }
+
+.suite-comparison .suite-stale-note {
+  background: var(--surface2);
+  border-radius: 6px;
+  color: var(--text);
+  font-weight: 700;
+  margin: 0;
+  padding: 8px 12px;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   createAgentVersion,
   createComparison,
@@ -9,14 +9,14 @@ import {
   diagnoseFailure,
   evaluateRun,
   generateFixProposal,
-  getSuiteResult,
   listFailurePackets,
   runSuite,
 } from "./api";
 import { checkLabel } from "./checkLabel";
 import { proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
-import { suiteIsComplete, suiteTestResult } from "./suite";
+import { suiteComparisonIsCurrent, suiteIsComplete, suiteTestResult } from "./suite";
 import { SuiteComparisonTable } from "./SuiteComparisonTable";
+import { useSuiteResults } from "./useSuiteResults";
 import { failurePacketsForEval, renderScenarioInput, testShapeFromSetupContext, testShapeLabels } from "./helpers";
 import type {
   AgentDesign,
@@ -28,7 +28,6 @@ import type {
   GeneratedToolState,
   ProofLoopCtx,
   SavedTest,
-  SuiteResult,
 } from "./types";
 
 const runMode = "live" as const;
@@ -149,8 +148,6 @@ export function ProofLoopTab({
     generatedRationale,
   } = proofLoopCtx;
 
-  // Each loop version's latest result on every test, read from saved runs.
-  const [suiteResults, setSuiteResults] = useState<Record<string, SuiteResult>>({});
   const [suiteVersionId, setSuiteVersionId] = useState<string | null>(null);
   const suiteVersions = [eddFlow.baselineVersion, eddFlow.candidateVersion].filter(
     (version): version is NonNullable<typeof version> => Boolean(version),
@@ -159,7 +156,13 @@ export function ProofLoopTab({
     suiteVersions.find((version) => version.id === suiteVersionId) ??
     eddFlow.candidateVersion ??
     eddFlow.baselineVersion;
-  const suiteVersionKey = suiteVersions.map((version) => version.id).join(",");
+  const [suiteResults, setSuiteResult] = useSuiteResults(
+    projectId,
+    selectedAgent.id,
+    suiteVersions,
+    savedTests,
+    setError,
+  );
   const selectedSuite = suiteVersion ? suiteResults[suiteVersion.id] : undefined;
   const suiteJudgeMode = savedTests.some((test) =>
     test.contract.checks.some((check) => check.type === "rubric_judge"),
@@ -173,30 +176,6 @@ export function ProofLoopTab({
       suiteIsComplete(suiteResults[eddFlow.candidateVersion.id]),
   );
 
-  // savedTests is reloaded after every run and check, so this keeps the results current.
-  useEffect(() => {
-    let isCurrent = true;
-    setSuiteResults({});
-    if (savedTests.length === 0) {
-      return;
-    }
-    Promise.all(
-      suiteVersions.map((version) => getSuiteResult(projectId, selectedAgent.id, version.id)),
-    )
-      .then((results) => {
-        if (isCurrent) {
-          setSuiteResults(
-            Object.fromEntries(results.map((result) => [result.agent_version_id, result])),
-          );
-        }
-      })
-      .catch((err: Error) => setError(err.message));
-    return () => {
-      isCurrent = false;
-    };
-    // suiteVersionKey stands for suiteVersions, which is a new array on every render.
-  }, [projectId, selectedAgent.id, suiteVersionKey, savedTests]);
-
   async function handleRunSuite() {
     if (!suiteVersion) {
       return;
@@ -206,7 +185,7 @@ export function ProofLoopTab({
     setIsFlowBusy(true);
     try {
       const result = await runSuite(projectId, selectedAgent.id, suiteVersion.id, suiteJudgeMode);
-      setSuiteResults((results) => ({ ...results, [result.agent_version_id]: result }));
+      setSuiteResult(result);
       setActivity(
         `${suiteVersion.version_label} passed ${result.passed} of ${result.total} tests.`,
       );
@@ -976,6 +955,11 @@ export function ProofLoopTab({
           savedTests={savedTests}
           baselineLabel={eddFlow.baselineVersion.version_label}
           candidateLabel={eddFlow.candidateVersion.version_label}
+          isCurrent={suiteComparisonIsCurrent(
+            eddFlow.suiteComparison,
+            suiteResults[eddFlow.baselineVersion.id],
+            suiteResults[eddFlow.candidateVersion.id],
+          )}
         />
       ) : null}
       {showNextActionPanel ? (
