@@ -19,3 +19,14 @@ def test_load_env_files_lets_env_local_override_outside_e2e(monkeypatch):
     main.load_env_files()
 
     assert calls == [{}, {"override": True}]
+
+
+def test_pytest_session_does_not_load_env_files(monkeypatch):
+    # conftest.py must keep the dev .env.local (found by walking up from a
+    # worktree) out of the test process.
+    calls = []
+    monkeypatch.setattr(main, "load_dotenv", lambda *args, **kwargs: calls.append(kwargs))
+
+    main.load_env_files()
+
+    assert calls == []
