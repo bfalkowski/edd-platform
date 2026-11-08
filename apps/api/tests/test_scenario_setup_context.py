@@ -137,3 +137,17 @@ def test_platform_tags_in_setup_context_are_not_sent_to_agent(monkeypatch) -> No
     tagged_content = bodies[1]["messages"][0]["content"]
     assert SETUP_CONTEXT in tagged_content
     assert "test_shape" not in tagged_content
+
+
+def test_user_lines_that_look_like_tags_are_sent_to_agent(monkeypatch) -> None:
+    client = TestClient(app)
+    bodies = capture_anthropic_bodies(monkeypatch)
+    agent, scenario = create_agent_and_scenario(
+        client, "test_shape:single_turn\norigin: customer is in the EU"
+    )
+
+    create_run(client, agent, scenario, "live")
+
+    content = bodies[0]["messages"][0]["content"]
+    assert "origin: customer is in the EU" in content
+    assert "test_shape" not in content

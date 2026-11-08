@@ -499,9 +499,10 @@ model stable while letting the UI distinguish isolated prompts, conversation
 turns, and future trace-replay starts.
 
 A run sends the agent the scenario's setup context followed by its `input`.
-Tag lines the platform writes (`test_shape:` and `origin:`) are left out, and a
-scenario with no other setup context sends `input` alone. The run's `input`
-field records the full text the agent received.
+Exact tag lines the platform writes (`test_shape:{value}` and
+`origin:outcome_draft`) are left out, and a scenario with no other setup context
+sends `input` alone. The run's `input` field records the full text the agent
+received.
 
 ```text
 GET    /api/projects/{project_id}/scenarios

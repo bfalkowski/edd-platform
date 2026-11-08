@@ -789,7 +789,12 @@ def list_runs(
 
 # Tag lines the platform writes into setup_context for its own use (the
 # console's test shape, the outcome draft's origin). They are not for the agent.
-_SETUP_CONTEXT_TAG_PREFIXES = ("test_shape:", "origin:")
+_SETUP_CONTEXT_TAGS = {
+    "test_shape:single_turn",
+    "test_shape:conversation",
+    "test_shape:trace_replay",
+    "origin:outcome_draft",
+}
 
 
 def agent_input_for_scenario(scenario: Scenario) -> str:
@@ -797,11 +802,11 @@ def agent_input_for_scenario(scenario: Scenario) -> str:
     setup_context = "\n".join(
         line
         for line in scenario.setup_context.splitlines()
-        if not line.strip().startswith(_SETUP_CONTEXT_TAG_PREFIXES)
+        if line.strip() not in _SETUP_CONTEXT_TAGS
     ).strip()
     if not setup_context:
         return scenario.input
-    return f"Setup context:\n{setup_context}\n\nInput:\n{scenario.input.strip()}"
+    return f"Setup context:\n{setup_context}\n\nInput:\n{scenario.input}"
 
 
 @router.post("/api/projects/{project_id}/runs", status_code=201)
