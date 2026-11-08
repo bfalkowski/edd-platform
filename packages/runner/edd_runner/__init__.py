@@ -58,13 +58,31 @@ class RunnerResult(BaseModel):
     trace_id: Optional[str] = None
     trace_url: Optional[str] = None
     system_prompt: Optional[str] = None
+    # The model the provider says answered, or the requested one when it does
+    # not say. None for mock runs, which use no model.
+    model: Optional[str] = None
     created_at: datetime
+
+
+# The one list of Anthropic models the platform offers, as (id, label). The API
+# serves it to the console's model picker. Keep it current.
+ANTHROPIC_MODELS: List[tuple[str, str]] = [
+    ("claude-haiku-5-5", "Haiku 5.5 (fast, cheap)"),
+    ("claude-sonnet-5-5", "Sonnet 5.5 (balanced)"),
+    ("claude-opus-5-5", "Opus 5.5 (most capable)"),
+]
+DEFAULT_ANTHROPIC_MODEL = ANTHROPIC_MODELS[0][0]
+
+
+def default_anthropic_model() -> str:
+    """The default model: EDD_ANTHROPIC_MODEL when set, else DEFAULT_ANTHROPIC_MODEL."""
+    return os.environ.get("EDD_ANTHROPIC_MODEL", "").strip() or DEFAULT_ANTHROPIC_MODEL
 
 
 @dataclass(frozen=True)
 class AnthropicRunnerConfig:
     api_key: str
-    model: str = "claude-sonnet-4-6"
+    model: str = DEFAULT_ANTHROPIC_MODEL
 
 
 @dataclass(frozen=True)
@@ -367,7 +385,7 @@ def anthropic_config_from_env() -> AnthropicRunnerConfig:
         raise RuntimeError("ANTHROPIC_API_KEY is required for live Anthropic runs.")
     return AnthropicRunnerConfig(
         api_key=api_key,
-        model=os.environ.get("EDD_ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip() or "claude-haiku-4-5-20251001",
+        model=default_anthropic_model(),
     )
 
 
@@ -597,12 +615,14 @@ def run_anthropic_agent_core(
                 },
             )
 
+    reported_model = payload.get("model")
     return RunnerResult(
         id=f"run_{uuid4().hex[:12]}",
         agent_design_id=agent.id,
         mode="live",
         scenario_input=scenario.input,
         response=response_text,
+        model=reported_model if isinstance(reported_model, str) and reported_model else config.model,
         tool_calls=[
             RunnerToolCall(
                 name="anthropic.messages",
@@ -661,6 +681,7 @@ def run_langchain_agent(
     )
     messages = result.get("messages", [])
     response_text = ""
+    reported_model = None
     tool_calls: List[RunnerToolCall] = []
 
     for message in messages:
@@ -676,6 +697,9 @@ def run_langchain_agent(
             text = message_text(message).strip()
             if text:
                 response_text = text
+            model_name = (getattr(message, "response_metadata", None) or {}).get("model_name")
+            if isinstance(model_name, str) and model_name:
+                reported_model = model_name
 
     if not response_text:
         raise RuntimeError("LangGraph agent did not return a final response.")
@@ -686,6 +710,7 @@ def run_langchain_agent(
         mode="live",
         scenario_input=scenario.input,
         response=response_text,
+        model=reported_model or config.model,
         tool_calls=tool_calls or [
             RunnerToolCall(
                 name="langchain.agent",
@@ -972,6 +997,7 @@ def run_foundry_agent_core(
         mode="live",
         scenario_input=scenario.input,
         response=response_text,
+        model=config.model,
         tool_calls=tool_calls
         or [
             RunnerToolCall(name="foundry.agent", input=scenario.input, output=config.model),
@@ -985,7 +1011,10 @@ def run_foundry_agent_core(
 
 
 __all__ = [
+    "ANTHROPIC_MODELS",
     "AnthropicRunnerConfig",
+    "DEFAULT_ANTHROPIC_MODEL",
+    "default_anthropic_model",
     "FoundryRunnerConfig",
     "RunnerAgentDesign",
     "RunnerResult",

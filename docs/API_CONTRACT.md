@@ -594,6 +594,12 @@ Foundry Agent Service thread (function-tool calls resolved against the same
 approved tool set). The response `provider` field reflects which runner
 actually executed the run (`mock`, `anthropic`, or `foundry`).
 
+An optional `model` picks the live model for one run; without it the run uses
+the default from `GET /api/models`. The response `model` is the model ID the
+provider reported, or the requested ID when the provider reports none, and is
+`null` for mock runs. `started_at` is when the runner was called and
+`completed_at` when it returned, so their difference is the run's duration.
+
 Minimum response fields:
 
 ```text
@@ -616,6 +622,33 @@ artifact_ids
 
 The existing agent-scoped run endpoint can remain temporarily as a convenience,
 but the project-scoped run contract is the canonical direction.
+
+### Models
+
+The models a live run can use. Platform configuration, not project data, so
+the route is not project-scoped (like `GET /api/services`).
+
+```text
+GET /api/models
+```
+
+Response:
+
+```json
+{
+  "provider": "anthropic",
+  "default_model": "claude-haiku-5-5",
+  "models": [
+    { "id": "claude-haiku-5-5", "label": "Haiku 5.5 (fast, cheap)" },
+    { "id": "claude-sonnet-5-5", "label": "Sonnet 5.5 (balanced)" },
+    { "id": "claude-opus-5-5", "label": "Opus 5.5 (most capable)" }
+  ]
+}
+```
+
+The list is `ANTHROPIC_MODELS` in `packages/runner`. `default_model` is
+`EDD_ANTHROPIC_MODEL` when set, else the first listed model; a default that is
+not in the list is added to the front of `models`.
 
 ### Trace References
 

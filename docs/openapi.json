@@ -4007,6 +4007,50 @@
         "title": "LangfuseReviewItemsImportResult",
         "type": "object"
       },
+      "ModelCatalog": {
+        "properties": {
+          "default_model": {
+            "title": "Default Model",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelOption"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "default_model",
+          "models"
+        ],
+        "title": "ModelCatalog",
+        "type": "object"
+      },
+      "ModelOption": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ModelOption",
+        "type": "object"
+      },
       "OutcomeAgentCreate": {
         "properties": {
           "name": {
@@ -6102,6 +6146,25 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/models": {
+      "get": {
+        "description": "Models a live run can use, and the one used when a run names none.",
+        "operationId": "list_models_api_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Models"
+      }
+    },
     "/api/projects": {
       "get": {
         "operationId": "list_projects_api_projects_get",

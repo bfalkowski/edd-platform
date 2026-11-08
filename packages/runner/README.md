@@ -13,8 +13,10 @@ Current slice:
 - `run_mock_agent` executes a deterministic scenario — no model-provider
   keys required, used by CI and tests.
 - Live execution calls Anthropic directly (`AnthropicRunnerConfig`) via a
-  LangChain/LangGraph-backed agent loop when tools are involved. The default
-  live model is Claude Haiku; override with `EDD_ANTHROPIC_MODEL`.
+  LangChain/LangGraph-backed agent loop when tools are involved. `ANTHROPIC_MODELS`
+  is the one list of offered models; the default live model is
+  `DEFAULT_ANTHROPIC_MODEL` (Claude Haiku 5.5), overridden by
+  `EDD_ANTHROPIC_MODEL`.
   `ANTHROPIC_API_KEY` is required for live runs.
 - Live execution can instead target Azure AI Foundry Agent Service
   (`FoundryRunnerConfig`, `run_foundry_agent`), selected per-run via

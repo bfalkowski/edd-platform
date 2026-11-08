@@ -21,7 +21,8 @@ database service.
 
 Run requests default to deterministic `mock` mode (no provider credentials
 required). To run live, set `ANTHROPIC_API_KEY` and send `"mode": "live"` to
-the run endpoint. The default live model is Claude Haiku; override with
-`EDD_ANTHROPIC_MODEL`. The console never sends `mock` — see
+the run endpoint. The default live model is Claude Haiku 5.5; override with
+`EDD_ANTHROPIC_MODEL`, or send `"model"` with one run. `GET /api/models` lists
+the offered models and the default. The console never sends `mock` — see
 [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)'s Runtime Modes
 section for the console/API boundary.
