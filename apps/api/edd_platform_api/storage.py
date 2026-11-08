@@ -113,6 +113,6 @@ def create_store_from_env() -> JsonStore:
 
     database_url = os.getenv(
         "EDD_PLATFORM_DATABASE_URL",
-        "postgresql://edd_platform:edd_platform@127.0.0.1:5432/edd_platform",
+        "postgresql://edd_platform:edd_platform@127.0.0.1:15432/edd_platform",
     )
     return PostgresJsonStore(database_url)
