@@ -2043,6 +2043,7 @@ def _fix_loop_for_gate(client: TestClient, name: str) -> dict:
         "compare": compare,
         "packets": packets,
         "decide": decide,
+        "gate": gate,
     }
 
 
@@ -2064,8 +2065,30 @@ def test_gate_decision_passes_after_comparison_fixes_failure_packet() -> None:
 
     assert decision["decision"] == "passed"
     assert decision["blocking_failure_packet_ids"] == []
-    assert v1["id"] in decision["rationale"]
+    assert f"Judged version v1 ({v1['id']})." in decision["rationale"]
     assert f"Ignored as fixed by {comparison['id']}: {v0_packet['id']}" in decision["rationale"]
+
+
+def test_gate_decision_rejects_eval_and_comparison_for_different_versions() -> None:
+    client = TestClient(app)
+    loop = _fix_loop_for_gate(client, "Mismatched Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence and include fixed phrase.", v0["id"])
+    v2 = loop["version"]("v2", "Answer with evidence only, again.", v1["id"])
+    v0_run, _ = loop["run_and_evaluate"](v0["id"])
+    v1_run, _ = loop["run_and_evaluate"](v1["id"])
+    _, v2_eval = loop["run_and_evaluate"](v2["id"])
+    comparison = loop["compare"](v0_run, v1_run)
+
+    response = client.post(
+        f"/api/projects/project_default/gates/{loop['gate']['id']}/decisions",
+        json={"eval_result_id": v2_eval["id"], "comparison_id": comparison["id"]},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Gate decision eval result must be the comparison's candidate eval result."
+    )
 
 
 def test_gate_decision_blocks_when_candidate_still_fails() -> None:
