@@ -417,13 +417,14 @@ export function ProofLoopTab({
     }
   }
 
+  const storedChange = eddFlow.fixProposal?.proposed_changes[0]?.change;
+  const instructionsToUse: string | null =
+    generatedInstructions ?? (typeof storedChange === "string" ? storedChange : null);
+
   async function handleCreateCandidate() {
     if (!eddFlow.baselineVersion || !eddFlow.fixProposal) {
       return;
     }
-    const storedChange = eddFlow.fixProposal.proposed_changes[0]?.change;
-    const instructionsToUse: string | null =
-      generatedInstructions ?? (typeof storedChange === "string" ? storedChange : null);
     if (!instructionsToUse?.trim()) return;
     setError(null);
     setActivity("Creating the next version.");
@@ -650,7 +651,7 @@ export function ProofLoopTab({
       detail: "Apply the saved fix to create a new agent version.",
       label: "Create version",
       onClick: handleCreateCandidate,
-      disabled: isFlowBusy || (!generatedInstructions && !eddFlow.fixProposal?.proposed_changes[0]?.change),
+      disabled: isFlowBusy || !instructionsToUse?.trim(),
     },
     run_candidate: {
       eyebrow: "Next action",
