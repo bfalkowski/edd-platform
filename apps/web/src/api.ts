@@ -32,6 +32,7 @@ import type {
   SavedTest,
   Scenario,
   ServiceStatus,
+  SuiteResult,
   ServiceStatusResponse,
   TestShape,
   ToolDefinition,
@@ -846,6 +847,60 @@ export async function createComparison(
   return response.json();
 }
 
+/** Run and check every active test against one version, one at a time. */
+export async function runSuite(
+  projectId: string,
+  agentDesignId: string,
+  versionId: string,
+  judgeMode: "deterministic" | "live",
+): Promise<SuiteResult> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}/versions/${versionId}/suite-runs`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "live", judge_mode: judgeMode }),
+    },
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to run all tests.");
+  }
+  return response.json();
+}
+
+export async function getSuiteResult(
+  projectId: string,
+  agentDesignId: string,
+  versionId: string,
+): Promise<SuiteResult> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}/versions/${versionId}/suite-result`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load test results.");
+  }
+  return response.json();
+}
+
+export async function createSuiteComparison(
+  projectId: string,
+  baselineVersionId: string,
+  candidateVersionId: string,
+): Promise<Comparison> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/comparisons/suite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      baseline_version_id: baselineVersionId,
+      candidate_version_id: candidateVersionId,
+    }),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to compare versions.");
+  }
+  return response.json();
+}
+
 export async function listAgentVersions(projectId: string, agentDesignId: string): Promise<AgentVersion[]> {
   const response = await fetch(
     `${apiBase}/projects/${projectId}/agent-designs/${agentDesignId}/versions`,
@@ -1136,7 +1191,7 @@ export async function hydrateEddFlow(
   const contract = selectedTest?.contract;
   const runsById = new Map(runs.map((run) => [run.id, run]));
   const comparison = comparisons.find(
-    (item) => runsById.get(item.baseline_run_id)?.scenario_id === scenario?.id,
+    (item) => runsById.get(item.baseline_run_id ?? "")?.scenario_id === scenario?.id,
   );
   const baselineVersion =
     versions.find((version) => version.id === comparison?.baseline_version_id) ??
@@ -1172,5 +1227,11 @@ export async function hydrateEddFlow(
       (proposal) => contract && proposal.validation_contract_ids.includes(contract.id),
     ),
     comparison,
+    suiteComparison: comparisons.find(
+      (item) =>
+        Boolean(item.tests?.length) &&
+        item.baseline_version_id === baselineVersion?.id &&
+        item.candidate_version_id === candidateVersion?.id,
+    ),
   };
 }

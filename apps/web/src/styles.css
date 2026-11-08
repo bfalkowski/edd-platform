@@ -3394,3 +3394,103 @@ dd {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.suite-bar {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 0 10px;
+}
+
+.suite-pass-count {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.suite-bar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.suite-comparison {
+  display: grid;
+  gap: 8px;
+}
+
+.readiness-panel {
+  flex-wrap: wrap;
+}
+
+/* Wrapping is for the comparison below; the decision text still shares a line with its button. */
+.readiness-panel > div:first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.readiness-panel .suite-comparison {
+  flex-basis: 100%;
+}
+
+.suite-comparison-header {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.suite-comparison-header p {
+  margin: 0;
+}
+
+.suite-comparison-totals {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.suite-comparison .suite-regression-warning {
+  background: #fdf7f7;
+  border: 1px solid #e8c0c0;
+  border-radius: 6px;
+  color: var(--error);
+  font-weight: 700;
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.suite-comparison .discovery-corpus-row {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1fr);
+}
+
+.suite-row-regressed {
+  background: #fdf7f7;
+}
+
+.suite-outcome {
+  font-weight: 700;
+}
+
+.suite-outcome.fixed {
+  color: var(--success);
+}
+
+.suite-outcome.regressed,
+.suite-outcome.still_failing {
+  color: var(--error);
+}
+
+.suite-outcome.still_passing {
+  color: var(--text-muted);
+}
+
+.suite-comparison .suite-stale-note {
+  background: var(--surface2);
+  border-radius: 6px;
+  color: var(--text);
+  font-weight: 700;
+  margin: 0;
+  padding: 8px 12px;
+}

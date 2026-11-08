@@ -438,16 +438,49 @@ export type Comparison = {
   agent_design_id: string;
   baseline_version_id: string | null;
   candidate_version_id: string | null;
-  baseline_run_id: string;
-  candidate_run_id: string;
-  baseline_eval_result_id: string;
-  candidate_eval_result_id: string;
+  // Set on a single-test comparison; a suite comparison keeps them in `tests`.
+  baseline_run_id: string | null;
+  candidate_run_id: string | null;
+  baseline_eval_result_id: string | null;
+  candidate_eval_result_id: string | null;
   fixed_failure_packet_ids: string[];
   new_failure_packet_ids: string[];
   remaining_failure_packet_ids: string[];
   summary: string;
   artifact_ids: string[];
   created_at: string;
+  // Set on a suite comparison: one row per test, plus totals.
+  tests?: ComparisonTestRow[];
+  totals?: ComparisonTotals | null;
+};
+
+export type SuiteTestOutcome = "fixed" | "regressed" | "still_passing" | "still_failing";
+
+export type ComparisonTestRow = {
+  scenario_id: string;
+  eval_contract_id: string;
+  baseline_run_id: string;
+  candidate_run_id: string;
+  baseline_eval_result_id: string;
+  candidate_eval_result_id: string;
+  outcome: SuiteTestOutcome;
+};
+
+export type ComparisonTotals = {
+  total: number;
+  fixed: number;
+  regressed: number;
+  still_passing: number;
+  still_failing: number;
+};
+
+/** A version's latest eval on each active test; rebuilt from saved runs, not stored. */
+export type SuiteResult = {
+  agent_design_id: string;
+  agent_version_id: string;
+  passed: number;
+  total: number;
+  tests: { scenario_id: string; eval_contract_id: string; eval_result: EvalResult | null }[];
 };
 
 export type GateDefinition = {
@@ -499,6 +532,8 @@ export type EddFlowState = {
   failurePackets: FailurePacket[];
   fixProposal?: FixProposal;
   comparison?: Comparison;
+  // The newest suite comparison of baselineVersion with candidateVersion.
+  suiteComparison?: Comparison;
 };
 
 export type GeneratedDesignSummary = {

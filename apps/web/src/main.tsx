@@ -1346,6 +1346,7 @@ function App() {
                   latestGate={latestGate}
                   latestGateDecision={latestGateDecision}
                   eddFlow={eddFlow}
+                  savedTests={savedTests}
                   setGates={setGates}
                   setGateDecisions={setGateDecisions}
                   setError={setError}
