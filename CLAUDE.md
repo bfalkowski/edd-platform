@@ -118,11 +118,13 @@ ones above where they differ:
   a way that cannot be rolled back, or changing these rules.
 - **File other work, do not do it.** When you find work outside your ticket,
   file it with the ticket command your brief names, and carry on.
-- **Use the office board, not Beads.** Do not create, update or close Beads
-  tasks, and do not change files in `.beads/` in your pull request. Parallel
-  branches would conflict on its JSONL files, and the Beads git hook writes the
-  shared Beads database into the main folder's `.beads/` on every commit. You
-  may read Beads (`bd ready`, `bd show`) for context. Update
+- **Use the office board, not Beads.** Beads stays the tracker for anyone
+  working without an office. In an office session, do not create, update or
+  close Beads tasks, and do not change files in `.beads/` in your pull request,
+  since parallel branches would conflict on its JSONL files. You may read Beads
+  (`bd ready`, `bd show`) for context. The Beads git hooks in `.beads/hooks`
+  exit at once when `OFFICE_TICKET_TOKEN` is set, so an office commit never
+  writes the shared Beads database into the main folder. Update
   `docs/WORK_PLAN.md` when a milestone moves, as before.
 - **Show evidence.** In the pull request, say what you ran, what you checked
   by hand, what you could not check, and what else the change can affect. For
