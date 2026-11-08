@@ -41,7 +41,7 @@ The main workspace uses five tabs per agent:
 |---|---|
 | Agent | View and edit agent name and core instruction |
 | Proof loop | Run the agent against a test, evaluate, iterate |
-| Error analysis | Guided wizard: build review set → sync Langfuse comments → assign failure modes |
+| Error analysis | Guided wizard: build review set → write notes and name failure modes → confirm modes |
 | Evidence | Inspect all evidence artifacts for this agent |
 | Readiness | Gate decisions and promotion status |
 
@@ -185,19 +185,25 @@ CSS classes: `.discovery-corpus-table`, `.discovery-corpus-row`,
 
 ## Langfuse Integration Pattern
 
-Error analysis depends on Langfuse as the source of truth for trace comments:
+Langfuse is optional for error analysis. Every step works with Langfuse offline:
 
-1. User reviews a trace in Langfuse and adds comments there.
-2. Platform syncs those comments via "Sync Langfuse comments" button →
-   `POST /projects/{id}/review-corpora/{corpus_id}/sync-langfuse-comments`.
-3. Synced comments appear as `ReviewAnnotation` records (status: accepted,
-   metadata includes `langfuse_comment_id` for deduplication).
-4. User assigns each annotation to a failure mode using the inline dropdown.
-5. Failure modes are promoted to the confirmed taxonomy in step 3.
+1. In Review & code, each expanded item shows the run's input, the agent's
+   output and the judge's verdict, with a note field under it. A note is saved
+   as a `ReviewAnnotation` (author `human`, status `accepted`,
+   `metadata.source: "in_app"`).
+2. The "New failure mode" form creates a `FailureMode` (status `candidate`).
+   The user assigns notes to it with the inline dropdown.
+3. In Confirm modes, the user confirms (status `confirmed`) or dismisses
+   (status `dismissed`) each mode.
 
-The platform does **not** duplicate Langfuse's note-writing UI. The "Reviewer
-notes" free-text form has been removed. Writing happens in Langfuse; categorization
-happens in the platform.
+When Langfuse is configured, two things are added on top:
+
+- "Open trace" links each item to its Langfuse trace.
+- "Sync Langfuse comments" →
+  `POST /projects/{id}/review-corpora/{corpus_id}/sync-langfuse-comments`
+  imports trace comments as `ReviewAnnotation` records (metadata includes
+  `langfuse_comment_id` for deduplication). They are listed next to the
+  in-app notes and labeled "Langfuse".
 
 ## Evidence UI
 
@@ -239,6 +245,7 @@ Avoid long instructional paragraphs or placeholder language that looks unfinishe
 | Error analysis wizard | `ErrorAnalysisTab.tsx` (discoveryStep state) |
 | Workspace tab panel | `main.tsx` (workspaceTab state, 5 tabs) |
 | Proof loop test card | `main.tsx` (selectedGeneratedDesign, scenario-test-summary) |
+| In-app note | `ErrorAnalysisTab.tsx` handleAddNote → `POST .../review-annotations` |
 | Langfuse comment sync | `POST .../sync-langfuse-comments` + handleSyncLangfuseComments |
 | Review set data table | `.discovery-corpus-table` pattern |
 | Dismissible intro card | `showDiscoveryIntro` + localStorage key `edd.discoveryIntroDismissed` |

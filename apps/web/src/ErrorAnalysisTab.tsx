@@ -1,14 +1,17 @@
 import { useState } from "react";
 import {
   createAgentSuggestion,
+  createFailureMode,
   createReviewAnnotation,
   createReviewCorpus,
   createReviewItem,
+  markReviewItemReviewed,
   syncLangfuseComments,
   updateAgentSuggestionStatus,
+  updateFailureModeStatus,
   updateReviewAnnotation,
 } from "./api";
-import { traceUrlFromArtifact } from "./helpers";
+import { parseArtifactFields, traceUrlFromArtifact } from "./helpers";
 import type {
   AgentDesign,
   AgentSuggestion,
@@ -66,6 +69,9 @@ export function ErrorAnalysisTab({
     () => typeof window !== "undefined" && !window.localStorage.getItem("edd.discoveryIntroDismissed"),
   );
   const [syncResult, setSyncResult] = useState<{ imported: number } | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [modeName, setModeName] = useState("");
+  const [modeDescription, setModeDescription] = useState("");
 
   const selectedReviewItem =
     reviewItems.find((item) => item.id === selectedReviewItemId) ?? reviewItems[0] ?? null;
@@ -73,6 +79,33 @@ export function ErrorAnalysisTab({
   const acceptedAnnotationCount = reviewAnnotations.filter(
     (annotation) => annotation.status === "accepted",
   ).length;
+  const confirmedModeCount = failureModes.filter((mode) => mode.status === "confirmed").length;
+
+  /** The run's input and output, and the latest judge verdict on that run. */
+  function reviewItemDetails(item: ReviewItem): { label: string; value: string }[] {
+    const runArtifact = evidenceArtifacts.find((artifact) => artifact.id === item.source_id);
+    const runFields = parseArtifactFields(item.content);
+    const field = (fields: { label: string; value: string }[], label: string) =>
+      fields.find((candidate) => candidate.label === label)?.value ?? "";
+    const evalArtifact = runArtifact
+      ? evidenceArtifacts
+          .filter(
+            (artifact) =>
+              artifact.artifact_type === "EVAL_RESULT" &&
+              artifact.body.match(/Run\n(.+)/)?.[1]?.trim() === runArtifact.artifact_id,
+          )
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+      : undefined;
+    const evalFields = evalArtifact ? parseArtifactFields(evalArtifact.body) : [];
+    const verdict = evalArtifact
+      ? [field(evalFields, "Result"), field(evalFields, "Checks")].filter(Boolean).join("\n")
+      : "Not judged yet.";
+    return [
+      { label: "Input", value: field(runFields, "Scenario") || "Not recorded." },
+      { label: "Agent output", value: field(runFields, "Response") || item.content },
+      { label: "Judge verdict", value: verdict },
+    ];
+  }
 
   function dismissDiscoveryIntro() {
     setShowDiscoveryIntro(false);
@@ -189,6 +222,69 @@ export function ErrorAnalysisTab({
       setSyncResult({ imported: result.imported_count });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sync Langfuse comments.");
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleAddNote(item: ReviewItem) {
+    const body = noteDraft.trim();
+    if (!body) return;
+    setError(null);
+    setIsDiscoveryBusy(true);
+    try {
+      await createReviewAnnotation(projectId, {
+        review_item_id: item.id,
+        body,
+        author: "human",
+        status: "accepted",
+        metadata: { source: "in_app" },
+      });
+      if (item.status !== "reviewed") {
+        await markReviewItemReviewed(projectId, item.id);
+      }
+      await refreshDiscoveryState();
+      setNoteDraft("");
+      setActivity("Note added.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to add note.");
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleCreateFailureMode() {
+    const name = modeName.trim();
+    const description = modeDescription.trim();
+    if (!name || !description) return;
+    setError(null);
+    setIsDiscoveryBusy(true);
+    try {
+      await createFailureMode(projectId, selectedAgent.id, {
+        name,
+        description,
+        severity: "medium",
+      });
+      await refreshDiscoveryState();
+      setModeName("");
+      setModeDescription("");
+      setActivity(`Failure mode "${name}" created.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create failure mode.");
+    } finally {
+      setIsDiscoveryBusy(false);
+    }
+  }
+
+  async function handleResolveFailureMode(mode: FailureMode, status: "confirmed" | "dismissed") {
+    setError(null);
+    setIsDiscoveryBusy(true);
+    try {
+      await updateFailureModeStatus(projectId, mode.id, status);
+      await refreshDiscoveryState();
+      setActivity(status === "confirmed" ? `Confirmed "${mode.name}".` : `Dismissed "${mode.name}".`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update failure mode.");
     } finally {
       setIsDiscoveryBusy(false);
     }
@@ -451,18 +547,48 @@ export function ErrorAnalysisTab({
                 : "No new comments found. Make sure review items have a linked Langfuse trace and that Langfuse is running."}
             </p>
           ) : null}
+          {activity ? <p className="activity-text">{activity}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
+
+          <form
+            className="discovery-mode-form"
+            aria-label="New failure mode"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleCreateFailureMode();
+            }}
+          >
+            <input
+              aria-label="Failure mode name"
+              placeholder="Failure mode name"
+              value={modeName}
+              onChange={(event) => setModeName(event.target.value)}
+            />
+            <input
+              aria-label="What it looks like"
+              placeholder="What it looks like"
+              value={modeDescription}
+              onChange={(event) => setModeDescription(event.target.value)}
+            />
+            <button
+              className="secondary-button"
+              type="submit"
+              disabled={isDiscoveryBusy || !modeName.trim() || !modeDescription.trim()}
+            >
+              Add failure mode
+            </button>
+          </form>
 
           <div className="discovery-corpus-table" role="table" aria-label="Review items">
             <div className="discovery-corpus-row discovery-corpus-head" role="row">
               <span role="columnheader">Trace</span>
               <span role="columnheader">Status</span>
-              <span role="columnheader">Comments</span>
+              <span role="columnheader">Notes</span>
               <span role="columnheader"></span>
             </div>
             {reviewItems.length === 0 ? (
               <p className="muted-copy" style={{ padding: "12px 16px" }}>
-                No items yet — sync Langfuse comments to populate.
+                No items yet. Go back and pull in runs.
               </p>
             ) : null}
             {reviewItems.map((item) => {
@@ -480,9 +606,10 @@ export function ErrorAnalysisTab({
                     <button
                       className="discovery-row-title"
                       type="button"
-                      onClick={() =>
-                        setSelectedReviewItemId(isExpanded ? null : item.id)
-                      }
+                      onClick={() => {
+                        setNoteDraft("");
+                        setSelectedReviewItemId(isExpanded ? null : item.id);
+                      }}
                     >
                       {item.title}
                     </button>
@@ -513,14 +640,27 @@ export function ErrorAnalysisTab({
                   </div>
                   {isExpanded ? (
                     <div className="discovery-annotation-rows">
+                      <dl className="discovery-item-details">
+                        {reviewItemDetails(item).map((detail) => (
+                          <div key={detail.label}>
+                            <dt>{detail.label}</dt>
+                            <dd>{detail.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
                       {itemAnnotations.length === 0 ? (
-                        <p className="muted-copy">
-                          No comments synced yet — add a comment in Langfuse then sync.
-                        </p>
+                        <p className="muted-copy">No notes yet.</p>
                       ) : (
                         itemAnnotations.map((annotation) => (
                           <div className="discovery-annotation-row" key={annotation.id}>
-                            <p className="discovery-annotation-body">{annotation.body}</p>
+                            <p className="discovery-annotation-body">
+                              <span className="discovery-note-source">
+                                {annotation.metadata.import_source === "langfuse_comment_sync"
+                                  ? "Langfuse"
+                                  : "In app"}
+                              </span>
+                              {annotation.body}
+                            </p>
                             <select
                               className="discovery-mode-select"
                               value={annotation.failure_mode_id ?? ""}
@@ -541,6 +681,27 @@ export function ErrorAnalysisTab({
                           </div>
                         ))
                       )}
+                      <form
+                        className="discovery-note-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void handleAddNote(item);
+                        }}
+                      >
+                        <textarea
+                          aria-label="Note"
+                          placeholder="What went wrong in this run?"
+                          value={noteDraft}
+                          onChange={(event) => setNoteDraft(event.target.value)}
+                        />
+                        <button
+                          className="secondary-button"
+                          type="submit"
+                          disabled={isDiscoveryBusy || !noteDraft.trim()}
+                        >
+                          Add note
+                        </button>
+                      </form>
                     </div>
                   ) : null}
                 </div>
@@ -560,6 +721,8 @@ export function ErrorAnalysisTab({
               Finish review
             </button>
           </div>
+          {activity ? <p className="activity-text">{activity}</p> : null}
+          {error ? <p className="error-text">{error}</p> : null}
 
           <section className="axial-code-panel">
             <div className="section-title-row">
@@ -581,7 +744,7 @@ export function ErrorAnalysisTab({
             </p>
             <div className="failure-mode-table">
               {failureModes.length === 0 ? (
-                <p className="muted-copy">No failure modes yet.</p>
+                <p className="muted-copy">No failure modes yet. Add one on the Review &amp; code step.</p>
               ) : null}
               {failureModes.map((mode) => (
                 <div className="failure-mode-row" key={mode.id}>
@@ -597,6 +760,26 @@ export function ErrorAnalysisTab({
                     notes
                   </em>
                   <small>{mode.langfuse_score_name ?? "EDD"}</small>
+                  <div className="analysis-run-actions">
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      aria-label={`Dismiss ${mode.name}`}
+                      onClick={() => handleResolveFailureMode(mode, "dismissed")}
+                      disabled={isDiscoveryBusy || mode.status === "dismissed"}
+                    >
+                      Dismiss
+                    </button>
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      aria-label={`Confirm ${mode.name}`}
+                      onClick={() => handleResolveFailureMode(mode, "confirmed")}
+                      disabled={isDiscoveryBusy || mode.status === "confirmed"}
+                    >
+                      Confirm
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -658,7 +841,7 @@ export function ErrorAnalysisTab({
               notes
             </span>
             <span>
-              <strong>{failureModes.length}</strong>
+              <strong>{confirmedModeCount}</strong>
               modes confirmed
             </span>
           </div>
