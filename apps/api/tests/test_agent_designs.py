@@ -3936,6 +3936,26 @@ def test_wizard_state_returns_outcome_agent_after_failed_baseline_analysis(monke
     assert body["artifact"]["artifact_id"] == agent_id
 
 
+def test_wizard_state_recreates_missing_agent_design_artifact(monkeypatch) -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    created = _outcome_agent_with_evaluated_baseline(client, monkeypatch)
+    agent_id = created["agent"]["id"]
+    missing = api_main.find_agent_design_artifact(agent_id)
+    api_main._artifacts.pop(missing.id)
+    before = datetime.now(timezone.utc)
+
+    response = client.get(f"/api/projects/project_default/agent-designs/{agent_id}/wizard-state")
+
+    assert response.status_code == 200
+    body = response.json()
+    _assert_matches_wizard_state_schema(client, body)
+    assert body["artifact"]["id"] != missing.id
+    assert body["artifact"]["artifact_type"] == "AGENT_DESIGN"
+    assert body["artifact"]["artifact_id"] == agent_id
+    assert datetime.fromisoformat(body["artifact"]["created_at"]) >= before
+    assert api_main.find_agent_design_artifact(agent_id).id == body["artifact"]["id"]
+
+
 def test_wizard_state_without_baseline_returns_404() -> None:
     client = TestClient(app)
 

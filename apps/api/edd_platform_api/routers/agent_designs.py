@@ -495,7 +495,7 @@ def get_agent_wizard_state(project_id: str, agent_id: str) -> OutcomeAgentCreate
         raise HTTPException(status_code=404, detail="Agent has no baseline version, scenario, or eval contract yet.")
 
     artifact = api_main.find_agent_design_artifact(agent.id) or api_main.sync_agent_design_artifact(
-        agent, agent.updated_at
+        agent, datetime.now(timezone.utc)
     )
 
     return OutcomeAgentCreated(
