@@ -107,15 +107,6 @@ export type OutcomeAgentResponse = NewAgentResponse & {
   draft_tools: ToolDefinition[];
 };
 
-export type ContextPack = {
-  id: string;
-  project_id: string;
-  purpose: string;
-  agent_design_id: string | null;
-  artifacts: ArtifactRecord[];
-  created_at: string;
-};
-
 export type AgentRunResult = {
   id: string;
   project_id: string;

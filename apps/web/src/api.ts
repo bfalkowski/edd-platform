@@ -6,7 +6,6 @@ import type {
   ArtifactLink,
   ArtifactRecord,
   Comparison,
-  ContextPack,
   DiscoveryPromotionResult,
   EddFlowState,
   EvalContract,
@@ -196,17 +195,14 @@ export async function updateAgentDesignToolAllowlist(
   return updateAgentDesign(projectId, agentDesignId, { allowed_tool_names: allowedToolNames });
 }
 
-export async function buildContextPack(projectId: string, agentDesignId?: string): Promise<ContextPack> {
-  const response = await fetch(`${apiBase}/projects/${projectId}/context-packs`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      purpose: "AGENT_PROMPT_REVIEW",
-      agent_design_id: agentDesignId ?? null,
-    }),
-  });
+export async function listAgentArtifacts(
+  projectId: string,
+  agentDesignId?: string,
+): Promise<ArtifactRecord[]> {
+  const query = agentDesignId ? `?agent_design_id=${encodeURIComponent(agentDesignId)}` : "";
+  const response = await fetch(`${apiBase}/projects/${projectId}/artifacts${query}`);
   if (!response.ok) {
-    throw await responseError(response, "Unable to build evidence context.");
+    throw await responseError(response, "Unable to load evidence.");
   }
   return response.json();
 }

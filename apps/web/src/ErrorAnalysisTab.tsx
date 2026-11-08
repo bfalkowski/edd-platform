@@ -29,6 +29,7 @@ type ErrorAnalysisTabProps = {
   agentSuggestions: AgentSuggestion[];
   selectedReviewItemId: string | null;
   setSelectedReviewItemId: (value: string | null) => void;
+  activity: string | null;
   error: string | null;
   evidenceArtifacts: ArtifactRecord[];
   setError: (message: string | null) => void;
@@ -47,6 +48,7 @@ export function ErrorAnalysisTab({
   agentSuggestions,
   selectedReviewItemId,
   setSelectedReviewItemId,
+  activity,
   error,
   evidenceArtifacts,
   setError,
@@ -102,15 +104,18 @@ export function ErrorAnalysisTab({
   }
 
   async function handleAddCurrentEvidenceToCorpus() {
-    const reviewableArtifactTypes = new Set(["RUN_RESULT", "TRACE_REF", "EVAL_RESULT", "JUDGE_OUTPUT"]);
-    const reviewableArtifacts = evidenceArtifacts.filter(
+    // One review item per live run. Mock runs (tests, seed scripts) are never reviewed.
+    const liveRunArtifacts = evidenceArtifacts.filter(
       (artifact) =>
         artifact.agent_design_id === selectedAgent.id &&
-        reviewableArtifactTypes.has(artifact.artifact_type) &&
+        artifact.artifact_type === "RUN_RESULT" &&
         !artifact.source.includes(":mock"),
     );
-    if (reviewableArtifacts.length === 0) {
-      setError("Run a live agent before adding evidence to the review corpus — mock runs aren't reviewed.");
+    if (liveRunArtifacts.length === 0) {
+      setActivity(null);
+      setError(
+        "This agent has no live runs yet. Run a test with a live model on the Proof loop tab, then pull in new runs. Mock runs aren't reviewed.",
+      );
       return;
     }
     setError(null);
@@ -119,9 +124,9 @@ export function ErrorAnalysisTab({
     try {
       const corpus = await ensureReviewCorpus();
       const existingSourceIds = new Set(reviewItems.map((item) => item.source_id));
-      const nextArtifacts = reviewableArtifacts
-        .filter((artifact) => !existingSourceIds.has(artifact.id))
-        .slice(0, 8);
+      const nextArtifacts = liveRunArtifacts.filter(
+        (artifact) => !existingSourceIds.has(artifact.id),
+      );
       await Promise.all(
         nextArtifacts.map((artifact) =>
           createReviewItem(projectId, {
@@ -148,8 +153,8 @@ export function ErrorAnalysisTab({
       await refreshDiscoveryState();
       setActivity(
         nextArtifacts.length > 0
-          ? `Added ${nextArtifacts.length} evidence item${nextArtifacts.length === 1 ? "" : "s"}.`
-          : "Current evidence is already in the review corpus.",
+          ? `Added ${nextArtifacts.length} run${nextArtifacts.length === 1 ? "" : "s"} to the review set.`
+          : "All live runs are already in the review set.",
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to add evidence to corpus.");
@@ -384,6 +389,8 @@ export function ErrorAnalysisTab({
               No items yet. Create a review set or pull in evidence from past runs to begin.
             </p>
           )}
+          {activity ? <p className="activity-text">{activity}</p> : null}
+          {error ? <p className="error-text">{error}</p> : null}
 
           <div className="discovery-step-actions">
             <button
