@@ -5973,6 +5973,17 @@
       },
       "SuiteTestResult": {
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "eval_contract_id": {
             "title": "Eval Contract Id",
             "type": "string"
