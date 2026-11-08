@@ -192,9 +192,13 @@ uv run scripts/outcome_agent_lifecycle_e2e.py
 
 Expected result:
 
-- All cases pass through: draft → baseline run → evaluate → diagnose →
-  generate fix → create v1 → run v1 → compare.
-- 5 passed, 0 failed.
+- Every case drafts an agent whose allowed tools are all approved project
+  tools. All cases except `no_tool_draft` (draft only) go on through:
+  baseline run → evaluate → diagnose → generate fix → create v1 → run v1 →
+  compare.
+- 5 passed, 0 failed, with the default mock run and deterministic judge
+  modes and no provider keys, against an API on `127.0.0.1:8001`
+  (`npm run api:dev`).
 
 The Anthropic jobs E2E exercises live browsing and single-call discipline:
 

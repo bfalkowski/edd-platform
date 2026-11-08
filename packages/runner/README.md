@@ -27,8 +27,8 @@ Current slice:
   stateless. Requires `AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` and
   `EDD_FOUNDRY_MODEL` (a deployed model/agent name in the target Foundry
   project); auth uses `azure-identity`'s `DefaultAzureCredential`.
-- `get_weather`, `lookup_event_schedule`, `lookup_event_result`, and
-  `browse_webpage` are available as deterministic/live tool fixtures.
+- `get_weather`, `call_http_api`, and `browse_webpage` are available as
+  deterministic/live tool fixtures.
 - The API stores the result as a `RUN_RESULT` artifact, plus a `TRACE_REF`
   artifact when Langfuse is configured.
 
