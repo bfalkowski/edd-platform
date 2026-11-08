@@ -27,6 +27,9 @@ const RUN_ROW_ORDER = [
 // Artifact types whose body names their run on a "Run" line.
 const RUN_LINE_TYPES = new Set(["TOOL_CALL", "TOOL_RESULT", "TRACE_REF", "EVAL_RESULT"]);
 
+// Artifact types saved in the same request as the eval result they come from.
+const SAVED_WITH_EVAL_TYPES = new Set(["JUDGE_OUTPUT", "FAILURE_PACKET"]);
+
 /** Map each artifact id that belongs to a run onto that run's id, from the run-owned records. */
 export function evidenceRunIndex(
   runs: RunRecord[],
@@ -66,10 +69,21 @@ export function groupEvidence(
   artifacts: ArtifactRecord[],
   runIndex: Map<string, string>,
 ): GroupedEvidence {
+  // One evaluate request saves the eval, judge and failure artifacts with the same timestamp,
+  // so before the eval and failure records load, a judge or failure joins its eval's run.
+  const evalRunByCreatedAt = new Map<string, string>();
+  for (const artifact of artifacts) {
+    const runId = artifact.artifact_type === "EVAL_RESULT" ? runIdOf(artifact, runIndex) : null;
+    if (runId) evalRunByCreatedAt.set(artifact.created_at, runId);
+  }
   const agentArtifacts: ArtifactRecord[] = [];
   const byRun = new Map<string, ArtifactRecord[]>();
   for (const artifact of artifacts) {
-    const runId = runIdOf(artifact, runIndex);
+    const runId =
+      runIdOf(artifact, runIndex) ??
+      (SAVED_WITH_EVAL_TYPES.has(artifact.artifact_type)
+        ? (evalRunByCreatedAt.get(artifact.created_at) ?? null)
+        : null);
     if (runId === null) {
       agentArtifacts.push(artifact);
       continue;

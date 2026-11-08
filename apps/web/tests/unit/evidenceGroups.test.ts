@@ -65,3 +65,20 @@ test("before the run records load, run outputs and Run lines still group by run"
     ],
   );
 });
+
+test("before the eval and failure records load, judge and failure rows join the run of the eval saved with them", () => {
+  const evaluatedAt = "2026-11-04T00:00:00Z";
+  const rows = [
+    artifact("run_c", "RUN_RESULT", "2026-11-04T00:00:00Z", { artifact_id: "run_c_id" }),
+    artifact("eval_c", "EVAL_RESULT", evaluatedAt, { body: "Contract\nNames a next action\n\nRun\nrun_c_id" }),
+    artifact("judge_c", "JUDGE_OUTPUT", evaluatedAt),
+    artifact("failure_c", "FAILURE_PACKET", evaluatedAt),
+    artifact("judge_orphan", "JUDGE_OUTPUT", "2026-11-05T00:00:00Z"),
+  ];
+  const grouped = groupEvidence(rows, new Map());
+  assert.deepEqual(
+    grouped.runGroups.map((group) => [group.runId, ids(group.artifacts)]),
+    [["run_c_id", ["run_c", "eval_c", "judge_c", "failure_c"]]],
+  );
+  assert.deepEqual(ids(grouped.agentArtifacts), ["judge_orphan"]);
+});
