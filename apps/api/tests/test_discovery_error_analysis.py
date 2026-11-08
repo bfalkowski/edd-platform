@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from edd_platform_api.main import app
+from edd_platform_api.routers import runs as runs_router
 
 
 def create_agent(client: TestClient) -> dict:
@@ -717,3 +718,59 @@ def test_langfuse_comment_sync_does_not_duplicate_in_app_notes(
         "Tone is too casual.",
     ]
     assert note["id"] in {annotation["id"] for annotation in annotations}
+
+
+def test_run_on_promoted_scenario_does_not_send_provenance(monkeypatch) -> None:
+    client = TestClient(app)
+    agent = create_agent(client)
+    corpus = client.post(
+        "/api/projects/project_default/review-corpora",
+        json={"agent_design_id": agent["id"], "name": "Provenance corpus"},
+    ).json()
+    item = client.post(
+        "/api/projects/project_default/review-items",
+        json={
+            "corpus_id": corpus["id"],
+            "source_kind": "trace",
+            "source_id": "trace_provenance",
+            "title": "Provenance check",
+            "content": "Can I get a refund on my annual plan?",
+            "langfuse_ref": {"trace_id": "trace_provenance", "object_type": "TRACE"},
+        },
+    ).json()
+    annotation = client.post(
+        "/api/projects/project_default/review-annotations",
+        json={
+            "review_item_id": item["id"],
+            "body": "Answered without checking the refund policy.",
+            "author": "human",
+            "status": "accepted",
+        },
+    ).json()
+    promotion = client.post(
+        f"/api/projects/project_default/review-annotations/{annotation['id']}/promote",
+        json={"create_eval_case": True},
+    ).json()
+    scenario = promotion["scenario"]
+    sent: list = []
+    real_run_mock_agent = runs_router.run_mock_agent
+
+    def spy_run_mock_agent(agent_design, runner_scenario):
+        sent.append(runner_scenario.input)
+        return real_run_mock_agent(agent_design, runner_scenario)
+
+    monkeypatch.setattr("edd_platform_api.routers.runs.run_mock_agent", spy_run_mock_agent)
+
+    response = client.post(
+        "/api/projects/project_default/runs",
+        json={"agent_design_id": agent["id"], "scenario_id": scenario["id"], "mode": "mock"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert sent == ["Can I get a refund on my annual plan?"]
+    finding = client.get(
+        f"/api/projects/project_default/artifacts/{scenario['fixture_refs'][0]}"
+    ).json()
+    assert item["id"] in finding["body"]
+    assert corpus["id"] in finding["body"]
+    assert "trace_provenance" in finding["body"]
