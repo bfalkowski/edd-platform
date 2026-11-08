@@ -22,7 +22,7 @@ type GuidedSetupPreview = {
 type OutcomeAgentResponse = {
   agent: { id: string; name: string; intent: string; allowed_tool_names: string[] };
   version: { id: string; version_label: string; instructions: string };
-  scenario: { id: string; input: string };
+  scenario: { id: string; input: string; status: string };
   eval_contract: { id: string; output_requirements: string[]; checks: Array<{ id: string; type: string; value?: string }> };
 };
 

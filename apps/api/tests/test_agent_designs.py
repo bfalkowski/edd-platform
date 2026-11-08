@@ -3947,3 +3947,53 @@ def test_wizard_state_without_baseline_returns_404() -> None:
     assert response.json()["detail"] == (
         "Agent has no baseline version, scenario, or eval contract yet."
     )
+
+
+def test_scenario_name_defaults_to_start_of_input_and_can_be_patched() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Naming Agent", "intent": "Answer billing questions."},
+    ).json()["agent"]
+
+    unnamed = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "input": "Customer: Why was I charged twice this month for the same subscription plan?\nAgent: Let me check.",
+        },
+    )
+    assert unnamed.status_code == 201
+    assert unnamed.json()["name"] == "Customer: Why was I charged twice this month for the same…"
+
+    short = client.post(
+        "/api/projects/project_default/scenarios",
+        json={"agent_design_id": agent["id"], "name": "  ", "input": "Refund my order"},
+    ).json()
+    assert short["name"] == "Refund my order"
+
+    patched = client.patch(
+        f"/api/projects/project_default/scenarios/{short['id']}",
+        json={"name": "Refund request", "status": "superseded"},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["name"] == "Refund request"
+    assert patched.json()["status"] == "superseded"
+    stored = client.get(f"/api/projects/project_default/scenarios/{short['id']}").json()
+    assert stored["status"] == "superseded"
+
+    missing = client.patch(
+        "/api/projects/project_default/scenarios/scenario_missing",
+        json={"status": "superseded"},
+    )
+    assert missing.status_code == 404
+
+
+def test_outcome_draft_names_its_test_after_the_prompt() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/projects/project_default/agent-designs/from-outcome",
+        json={"outcome": "Summarize open support tickets by severity."},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["scenario"]["name"] == "Summarize open support tickets by severity."

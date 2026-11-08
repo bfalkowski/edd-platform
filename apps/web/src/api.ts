@@ -27,6 +27,7 @@ import type {
   ReviewNote,
   ReviewSamplingPlan,
   RunRecord,
+  SavedTest,
   Scenario,
   ServiceStatus,
   ServiceStatusResponse,
@@ -34,7 +35,7 @@ import type {
   ToolDefinition,
   ToolDefinitionCreate,
 } from "./types";
-import { setupContextFromTestShape, testShapeLabels } from "./helpers";
+import { setupContextFromTestShape } from "./helpers";
 
 const apiBase = "/api";
 
@@ -282,19 +283,38 @@ export async function createScenario(
   agentDesignId: string,
   input: string,
   shape: TestShape,
+  name: string,
 ): Promise<Scenario> {
   const response = await fetch(`${apiBase}/projects/${projectId}/scenarios`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       agent_design_id: agentDesignId,
-      name: `${testShapeLabels[shape]} test`,
+      // A blank name makes the API name the test after the start of its input.
+      name,
       input,
       setup_context: setupContextFromTestShape(shape),
+      status: "active",
     }),
   });
   if (!response.ok) {
     throw await responseError(response, "Unable to create scenario.");
+  }
+  return response.json();
+}
+
+export async function updateScenario(
+  projectId: string,
+  scenarioId: string,
+  payload: { name?: string; status?: string },
+): Promise<Scenario> {
+  const response = await fetch(`${apiBase}/projects/${projectId}/scenarios/${scenarioId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw await responseError(response, "Unable to update scenario.");
   }
   return response.json();
 }
@@ -910,6 +930,19 @@ export async function listEvalResults(projectId: string, runId: string): Promise
   return response.json();
 }
 
+async function listEvalResultsForContract(
+  projectId: string,
+  contractId: string,
+): Promise<EvalResult[]> {
+  const response = await fetch(
+    `${apiBase}/projects/${projectId}/eval-results?eval_contract_id=${contractId}`,
+  );
+  if (!response.ok) {
+    throw await responseError(response, "Unable to load eval results.");
+  }
+  return response.json();
+}
+
 export async function updateFixProposal(
   projectId: string,
   fixProposalId: string,
@@ -964,7 +997,52 @@ function latestRunForVersion(
   );
 }
 
-export async function hydrateEddFlow(projectId: string, agent: AgentDesign): Promise<EddFlowState> {
+/**
+ * A saved test is an active scenario paired with its newest eval contract,
+ * oldest first. Draft scenarios (left by earlier edits) and superseded ones
+ * are not tests.
+ */
+function pairActiveTests(
+  scenarios: Scenario[],
+  contracts: EvalContract[],
+): { scenario: Scenario; contract: EvalContract }[] {
+  return scenarios
+    .filter((scenario) => scenario.status === "active")
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .flatMap((scenario) => {
+      const contract = contracts.find((item) => item.scenario_id === scenario.id);
+      return contract ? [{ scenario, contract }] : [];
+    });
+}
+
+export async function listSavedTests(projectId: string, agentDesignId: string): Promise<SavedTest[]> {
+  const [scenarios, contracts] = await Promise.all([
+    listScenarios(projectId, agentDesignId),
+    listEvalContracts(projectId, agentDesignId),
+  ]);
+  return Promise.all(
+    pairActiveTests(scenarios, contracts).map(async (test) => {
+      const [latest] = await listEvalResultsForContract(projectId, test.contract.id);
+      const latestResult: SavedTest["latestResult"] = latest
+        ? latest.passed
+          ? "passed"
+          : "failed"
+        : "not_run";
+      return { ...test, latestResult };
+    }),
+  );
+}
+
+/**
+ * Load the proof loop for one test: the given scenario, else the newest saved
+ * test. A given scenario is honoured even when it is not listed (a legacy draft
+ * or a superseded revision), so wizard resume reads the wizard's own test.
+ */
+export async function hydrateEddFlow(
+  projectId: string,
+  agent: AgentDesign,
+  scenarioId?: string,
+): Promise<EddFlowState> {
   const [versions, scenarios, contracts, runs, failurePackets, fixProposals, comparisons] =
     await Promise.all([
       listAgentVersions(projectId, agent.id),
@@ -976,7 +1054,19 @@ export async function hydrateEddFlow(projectId: string, agent: AgentDesign): Pro
       listComparisons(projectId, agent.id),
     ]);
 
-  const comparison = comparisons[0];
+  const requestedScenario = scenarios.find((item) => item.id === scenarioId);
+  const requestedContract = contracts.find((item) => item.scenario_id === scenarioId);
+  const tests = pairActiveTests(scenarios, contracts);
+  const selectedTest =
+    requestedScenario && requestedContract
+      ? { scenario: requestedScenario, contract: requestedContract }
+      : tests[tests.length - 1];
+  const scenario = selectedTest?.scenario;
+  const contract = selectedTest?.contract;
+  const runsById = new Map(runs.map((run) => [run.id, run]));
+  const comparison = comparisons.find(
+    (item) => runsById.get(item.baseline_run_id)?.scenario_id === scenario?.id,
+  );
   const baselineVersion =
     versions.find((version) => version.id === comparison?.baseline_version_id) ??
     versions.find((version) => version.status === "baseline") ??
@@ -986,10 +1076,6 @@ export async function hydrateEddFlow(projectId: string, agent: AgentDesign): Pro
     versions.find((version) => version.source_fix_proposal_id) ??
     versions.find((version) => version.status === "candidate") ??
     versions.find((version) => version.version_label === "v1");
-  const contract = contracts[0];
-  const scenario =
-    scenarios.find((item) => item.id === contract?.scenario_id) ??
-    scenarios[0];
   const baselineRun =
     runs.find((run) => run.id === comparison?.baseline_run_id) ??
     latestRunForVersion(runs, baselineVersion?.id, scenario?.id, contract?.id);
@@ -1010,8 +1096,10 @@ export async function hydrateEddFlow(projectId: string, agent: AgentDesign): Pro
     candidateRun,
     baselineEval: baselineEvalResults[0],
     candidateEval: candidateEvalResults[0],
-    failurePackets,
-    fixProposal: fixProposals[0],
+    failurePackets: failurePackets.filter((packet) => packet.eval_contract_id === contract?.id),
+    fixProposal: fixProposals.find(
+      (proposal) => contract && proposal.validation_contract_ids.includes(contract.id),
+    ),
     comparison,
   };
 }

@@ -368,7 +368,6 @@ def draft_agent_from_outcome(
         project_id,
         ScenarioCreate(
             agent_design_id=created.agent.id,
-            name="Outcome request",
             input=test_input_override.strip() if test_input_override and test_input_override.strip() else normalized,
             setup_context="test_shape:single_turn\norigin:outcome_draft",
             status="active",

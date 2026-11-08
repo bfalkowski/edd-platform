@@ -9,10 +9,24 @@ from fastapi import APIRouter
 
 from edd_platform_api import main as api_main
 from edd_platform_api.lookups import get_agent_design_or_404, get_eval_contract_or_404, get_project_or_404, get_scenario_or_404
-from edd_platform_api.schemas import ExternalArtifactRef, Scenario, ScenarioCreate
+from edd_platform_api.schemas import ExternalArtifactRef, Scenario, ScenarioCreate, ScenarioUpdate
 from edd_platform_api.state import _scenarios, store
 
 router = APIRouter()
+
+SCENARIO_NAME_MAX_LENGTH = 60
+
+
+def default_scenario_name(scenario_input: str) -> str:
+    """Name a test after the start of its input, so tests can be told apart."""
+    first_line = next((line for line in scenario_input.splitlines() if line.strip()), "")
+    text = " ".join(first_line.split())
+    if len(text) <= SCENARIO_NAME_MAX_LENGTH:
+        return text
+    cut = text[: SCENARIO_NAME_MAX_LENGTH - 1]
+    if " " in cut:
+        cut = cut.rsplit(" ", 1)[0]
+    return f"{cut.rstrip()}…"
 
 
 def planned_langfuse_scenario_refs(
@@ -155,7 +169,7 @@ def create_scenario(project_id: str, payload: ScenarioCreate) -> Scenario:
         id=f"scenario_{uuid4().hex[:12]}",
         project_id=project_id,
         agent_design_id=payload.agent_design_id,
-        name=payload.name.strip(),
+        name=payload.name.strip() or default_scenario_name(payload.input),
         input=payload.input.strip(),
         setup_context=payload.setup_context.strip(),
         fixture_refs=payload.fixture_refs,
@@ -198,3 +212,18 @@ def create_scenario(project_id: str, payload: ScenarioCreate) -> Scenario:
 def get_scenario(project_id: str, scenario_id: str) -> Scenario:
     get_project_or_404(project_id)
     return get_scenario_or_404(project_id, scenario_id)
+
+
+@router.patch("/api/projects/{project_id}/scenarios/{scenario_id}")
+def update_scenario(project_id: str, scenario_id: str, payload: ScenarioUpdate) -> Scenario:
+    get_project_or_404(project_id)
+    scenario = get_scenario_or_404(project_id, scenario_id)
+    changes: Dict[str, object] = {"updated_at": datetime.now(timezone.utc)}
+    if payload.name is not None:
+        changes["name"] = payload.name.strip()
+    if payload.status is not None:
+        changes["status"] = payload.status.strip()
+    updated = scenario.model_copy(update=changes)
+    _scenarios[scenario_id] = updated
+    store.save_record("scenarios", scenario_id, updated)
+    return updated

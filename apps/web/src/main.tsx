@@ -15,6 +15,7 @@ import type {
   ArtifactLink,
   ArtifactRecord,
   EddFlowState,
+  EvalContract,
   EvalMethod,
   FailureMode,
   GateDecision,
@@ -26,6 +27,7 @@ import type {
   ReviewCorpus,
   ReviewItem,
   ReviewSamplingPlan,
+  SavedTest,
   Scenario,
   ServiceStatus,
   TestShape,
@@ -52,12 +54,14 @@ import {
   listReviewAnnotations,
   listReviewCorpora,
   listReviewItems,
+  listSavedTests,
   listServices,
   listToolDefinitions,
   loadArtifact,
   loadArtifactLinks,
   runAgentDesign,
   updateAgentDesignToolAllowlist,
+  updateScenario,
   updateFixProposal,
   updateToolDefinitionStatus,
 } from "./api";
@@ -94,6 +98,7 @@ function App() {
   const [intent, setIntent] = useState("");
   const [manualCreateOpen, setManualCreateOpen] = useState(false);
   const [testShape, setTestShape] = useState<TestShape>("single_turn");
+  const [testName, setTestName] = useState("");
   const [scenarioInput, setScenarioInput] = useState(defaultScenarioInput);
   const [requiredPhrase, setRequiredPhrase] = useState("");
   const [evalMethod, setEvalMethod] = useState<EvalMethod>("rubric");
@@ -107,6 +112,7 @@ function App() {
   >("proof");
   const [agentArtifacts, setAgentArtifacts] = useState<ArtifactRecord[]>([]);
   const [eddFlow, setEddFlow] = useState<EddFlowState>({ failurePackets: [] });
+  const [savedTests, setSavedTests] = useState<SavedTest[]>([]);
   const [generatedDesign, setGeneratedDesign] = useState<GeneratedDesignSummary | null>(null);
   const [gates, setGates] = useState<GateDefinition[]>([]);
   const [gateDecisions, setGateDecisions] = useState<GateDecision[]>([]);
@@ -156,6 +162,7 @@ function App() {
 
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
   const [scenarioEditorOpen, setScenarioEditorOpen] = useState(false);
+  const [scenarioEditorMode, setScenarioEditorMode] = useState<"new" | "edit">("new");
   const [toolSearch, setToolSearch] = useState("");
   const [toolFilter, setToolFilter] = useState<"all" | "enabled" | "available" | "draft">("all");
   const [scratchPanelOpen, setScratchPanelOpen] = useState(false);
@@ -388,33 +395,40 @@ function App() {
     setFixEditText(typeof firstChange === "string" ? firstChange : "");
   }, [reviewFixProposal?.id]);
 
-  const savedExpectedPhrase = eddFlow.contract?.checks.find((check) => check.value)?.value ?? "";
-  const savedRequiredTool = eddFlow.contract?.checks.find((check) => check.tool)?.tool ?? "";
-  const savedScenarioInput = eddFlow.scenario?.input ?? "";
   const canDefineTest =
     !isFlowBusy &&
     Boolean(scenarioInput.trim()) &&
     ((evalMethod === "phrase" && Boolean(requiredPhrase.trim())) ||
       (evalMethod === "tool" && Boolean(requiredToolName)) ||
       (evalMethod === "rubric" && Boolean(rubricText.trim())));
-  const testOutOfSync = Boolean(
-    eddFlow.contract &&
-      (((evalMethod === "phrase" &&
-        requiredPhrase.trim() &&
-        savedExpectedPhrase &&
-        savedExpectedPhrase !== requiredPhrase.trim()) ||
-        (evalMethod === "tool" &&
-          requiredToolName &&
-          savedRequiredTool &&
-          savedRequiredTool !== requiredToolName) ||
-        (evalMethod === "rubric" &&
-          rubricText.trim() &&
-          savedExpectedPhrase &&
-          savedExpectedPhrase !== rubricText.trim())) ||
-        (scenarioInput.trim() &&
-          savedScenarioInput &&
-          savedScenarioInput !== scenarioInput.trim())),
-  );
+
+  /** Fill the test editor from a saved test, or with defaults when there is none. */
+  function applyTestToEditor(scenario: Scenario | undefined, contract: EvalContract | undefined) {
+    setScenarioInput(scenario?.input ?? defaultScenarioInput);
+    setTestShape(testShapeFromSetupContext(scenario?.setup_context));
+    const rubric = contract?.checks.find((check) => check.type === "rubric_judge")?.value;
+    const tool = contract?.checks.find((check) => check.tool)?.tool;
+    const phrase = contract?.checks.find((check) => check.type === "output_contains")?.value;
+    const inferredPhrase = selectedAgent ? inferExpectedResponse(selectedAgent) : "";
+    if (rubric) {
+      setEvalMethod("rubric");
+      setRubricText(rubric);
+    } else if (tool) {
+      setEvalMethod("tool");
+      setRequiredToolName(tool);
+    } else if (phrase && phrase !== "bounded resolution") {
+      setEvalMethod("phrase");
+      setRequiredPhrase(phrase);
+    } else if (inferredPhrase) {
+      setEvalMethod("phrase");
+      setRequiredPhrase(inferredPhrase);
+    } else if (selectedAgent) {
+      setEvalMethod("rubric");
+      setRubricText(defaultRubricText);
+      setRequiredPhrase("");
+      setRequiredToolName("");
+    }
+  }
 
   async function loadDiscoveryState(
     projectId: string,
@@ -513,33 +527,21 @@ function App() {
         setGates(loadedGates);
         setGateDecisions(loadedGateDecisions);
         applyDiscoveryState(discoveryState);
-        setScenarioInput(flow.scenario?.input ?? defaultScenarioInput);
-        setTestShape(testShapeFromSetupContext(flow.scenario?.setup_context));
-        const rubric = flow.contract?.checks.find((check) => check.type === "rubric_judge")?.value;
-        const tool = flow.contract?.checks.find((check) => check.tool)?.tool;
-        const phrase = flow.contract?.checks.find((check) => check.type === "output_contains")?.value;
-        const inferredPhrase = selectedAgent ? inferExpectedResponse(selectedAgent) : "";
-        if (rubric) {
-          setEvalMethod("rubric");
-          setRubricText(rubric);
-        } else if (tool) {
-          setEvalMethod("tool");
-          setRequiredToolName(tool);
-        } else if (phrase && phrase !== "bounded resolution") {
-          setEvalMethod("phrase");
-          setRequiredPhrase(phrase);
-        } else if (inferredPhrase) {
-          setEvalMethod("phrase");
-          setRequiredPhrase(inferredPhrase);
-        } else if (selectedAgent) {
-          setEvalMethod("rubric");
-          setRubricText(defaultRubricText);
-          setRequiredPhrase("");
-          setRequiredToolName("");
-        }
+        applyTestToEditor(flow.scenario, flow.contract);
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setIsLoadingContext(false));
+    // Loaded on its own so the test list never delays the rest of the agent's context.
+    setSavedTests([]);
+    if (selectedAgent) {
+      listSavedTests(project.id, selectedAgent.id)
+        .then((tests) => {
+          if (isCurrent) {
+            setSavedTests(tests);
+          }
+        })
+        .catch((err: Error) => setError(err.message));
+    }
     return () => {
       isCurrent = false;
     };
@@ -719,11 +721,16 @@ function App() {
     setScratchArtifact(null);
     setScratchTraceUrl(null);
     if (project) {
-      Promise.all([fetchAgentWizardState(project.id, agent.id), hydrateEddFlow(project.id, agent)])
+      fetchAgentWizardState(project.id, agent.id)
+        .then(async (agentState) => [
+          agentState,
+          await hydrateEddFlow(project.id, agent, agentState.scenario.id),
+        ] as const)
         .then(([agentState, flow]) => {
           const resumeState = wizardStateFromFlow(project.id, agentState, flow);
-          if (resumeState.step === "done") {
-            // Agent passed — show workspace, not wizard
+          // Show the workspace when the wizard's test passed, or was edited
+          // (the user has moved on from the wizard).
+          if (resumeState.step === "done" || agentState.scenario.status === "superseded") {
             setWizardOpen(false);
           } else {
             // Mid-flow — reopen wizard at the right step
@@ -758,7 +765,7 @@ function App() {
     setOpenAgentMenuId(null);
   }
 
-  function openScenarioEditor() {
+  function showScenarioEditor() {
     setScenarioEditorOpen(true);
     setToolsPanelOpen(false);
     setReviewArtifact(null);
@@ -766,14 +773,41 @@ function App() {
     setScratchPanelOpen(false);
   }
 
+  function openScenarioEditor() {
+    setScenarioEditorMode("edit");
+    setTestName(eddFlow.scenario?.name ?? "");
+    applyTestToEditor(eddFlow.scenario, eddFlow.contract);
+    showScenarioEditor();
+  }
+
   function openNewScenarioEditor() {
+    setScenarioEditorMode("new");
+    setTestName("");
     setTestShape("single_turn");
-    setScenarioInput(defaultScenarioInput);
+    setScenarioInput("");
     setRequiredPhrase("");
     setEvalMethod("rubric");
     setRequiredToolName(enabledToolDefinitions[0]?.name ?? "");
     setRubricText(defaultRubricText);
-    openScenarioEditor();
+    showScenarioEditor();
+  }
+
+  async function handleSelectTest(scenarioId: string) {
+    if (!project || !selectedAgent || scenarioId === eddFlow.scenario?.id) {
+      return;
+    }
+    setError(null);
+    setActivity(null);
+    setScenarioEditorOpen(false);
+    setReviewArtifact(null);
+    setReviewLinks([]);
+    try {
+      const flow = await hydrateEddFlow(project.id, selectedAgent, scenarioId);
+      setEddFlow(flow);
+      resetProofLoopCtx();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load the test.");
+    }
   }
 
   function handleTestShapeChange(nextShape: TestShape) {
@@ -991,7 +1025,12 @@ function App() {
     if (!project) {
       return;
     }
-    setAgentArtifacts(await listAgentArtifacts(project.id, selectedId ?? undefined));
+    const [artifacts, tests] = await Promise.all([
+      listAgentArtifacts(project.id, selectedId ?? undefined),
+      selectedAgent ? listSavedTests(project.id, selectedAgent.id) : Promise.resolve([]),
+    ]);
+    setAgentArtifacts(artifacts);
+    setSavedTests(tests);
   }
 
   async function refreshReadiness() {
@@ -1026,12 +1065,21 @@ function App() {
     setActivity("Saving the scenario and success criteria.");
     setIsFlowBusy(true);
     try {
-      const baselineVersion = await createAgentVersion(project.id, selectedAgent.id, {
-        version_label: "v0",
-        instructions: selectedAgent.intent,
-        status: "baseline",
-      });
-      const scenario = await createScenario(project.id, selectedAgent.id, scenarioInput.trim(), testShape);
+      // A new test runs against the agent's current version; only the first test creates v0.
+      const baselineVersion =
+        eddFlow.baselineVersion ??
+        (await createAgentVersion(project.id, selectedAgent.id, {
+          version_label: "v0",
+          instructions: selectedAgent.intent,
+          status: "baseline",
+        }));
+      const scenario = await createScenario(
+        project.id,
+        selectedAgent.id,
+        scenarioInput.trim(),
+        testShape,
+        testName.trim(),
+      );
       const contract = await createEvalContract(
         project.id,
         selectedAgent.id,
@@ -1043,6 +1091,10 @@ function App() {
           rubric: rubricText.trim(),
         },
       );
+      // Saving an edit keeps the old revision (and its runs) but takes it out of the test list.
+      if (scenarioEditorMode === "edit" && eddFlow.scenario) {
+        await updateScenario(project.id, eddFlow.scenario.id, { status: "superseded" });
+      }
       setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
       resetProofLoopCtx();
       setActivity("Test is ready. Run the current version next.");
@@ -1064,8 +1116,12 @@ function App() {
       : evalMethod === "tool"
         ? requiredToolName || "No tool selected"
         : rubricText || "No rubric set";
-  const currentJudgeMode: "deterministic" | "live" =
-    evalMethod === "rubric" ? "live" : "deterministic";
+  // Judge the saved, selected test, not whatever is open in the editor.
+  const currentJudgeMode: "deterministic" | "live" = eddFlow.contract?.checks.some(
+    (check) => check.type === "rubric_judge",
+  )
+    ? "live"
+    : "deterministic";
 
   return (
     <div
@@ -1223,7 +1279,8 @@ function App() {
                   baselineTraceUrl={baselineTraceUrl}
                   analysisTargetArtifactId={analysisTargetArtifactId}
                   failedBaselineChecks={failedBaselineChecks}
-                  testOutOfSync={testOutOfSync}
+                  savedTests={savedTests}
+                  onSelectTest={handleSelectTest}
                   currentJudgeMode={currentJudgeMode}
                   proofLoopCtx={proofLoopCtx}
                   setProofLoopCtx={setProofLoopCtx}
@@ -1519,7 +1576,7 @@ function App() {
           <div className="review-panel-header">
             <div>
               <p className="eyebrow">Test case</p>
-              <h2>{eddFlow.contract ? "Edit test" : "New test"}</h2>
+              <h2>{scenarioEditorMode === "edit" ? "Edit test" : "New test"}</h2>
             </div>
             <button
               className="icon-button review-toggle-button"
@@ -1532,6 +1589,13 @@ function App() {
           </div>
 
           <div className="review-panel-body">
+            <section className="scenario-editor-section">
+              <label className="compact-label">
+                <span>Name</span>
+                <small>Leave blank to name it after the start of the prompt.</small>
+                <input value={testName} onChange={(event) => setTestName(event.target.value)} />
+              </label>
+            </section>
             <section className="scenario-editor-section">
               <h3>Test shape</h3>
               <div className="eval-method-tabs" aria-label="Test shape">
