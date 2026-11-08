@@ -881,22 +881,73 @@ class ComparisonCreate(BaseModel):
     eval_contract_id: str = Field(min_length=1)
 
 
+class SuiteComparisonCreate(BaseModel):
+    baseline_version_id: str = Field(min_length=1)
+    candidate_version_id: str = Field(min_length=1)
+
+
+SuiteTestOutcome = Literal["fixed", "regressed", "still_passing", "still_failing"]
+
+
+class ComparisonTestRow(BaseModel):
+    scenario_id: str
+    eval_contract_id: str
+    baseline_run_id: str
+    candidate_run_id: str
+    baseline_eval_result_id: str
+    candidate_eval_result_id: str
+    outcome: SuiteTestOutcome
+
+
+class ComparisonTotals(BaseModel):
+    total: int
+    fixed: int
+    regressed: int
+    still_passing: int
+    still_failing: int
+
+
 class Comparison(BaseModel):
     id: str
     project_id: str
     agent_design_id: str
     baseline_version_id: Optional[str] = None
     candidate_version_id: Optional[str] = None
-    baseline_run_id: str
-    candidate_run_id: str
-    baseline_eval_result_id: str
-    candidate_eval_result_id: str
+    # Set on a single-pair comparison; a suite comparison keeps them in `tests`.
+    baseline_run_id: Optional[str] = None
+    candidate_run_id: Optional[str] = None
+    baseline_eval_result_id: Optional[str] = None
+    candidate_eval_result_id: Optional[str] = None
     fixed_failure_packet_ids: List[str]
     new_failure_packet_ids: List[str]
     remaining_failure_packet_ids: List[str]
     summary: str
     artifact_ids: List[str]
     created_at: datetime
+    # Set on a suite comparison: one row per test, plus totals.
+    tests: List[ComparisonTestRow] = Field(default_factory=list)
+    totals: Optional[ComparisonTotals] = None
+
+
+class SuiteRunCreate(BaseModel):
+    mode: Literal["mock", "live"] = "mock"
+    provider: Optional[Literal["anthropic", "foundry"]] = None
+    model: Optional[str] = None
+    judge_mode: Literal["deterministic", "live"] = "deterministic"
+
+
+class SuiteTestResult(BaseModel):
+    scenario_id: str
+    eval_contract_id: str
+    eval_result: Optional[EvalResult] = None
+
+
+class SuiteResult(BaseModel):
+    agent_design_id: str
+    agent_version_id: str
+    passed: int
+    total: int
+    tests: List[SuiteTestResult]
 
 
 class EvalRunResult(BaseModel):

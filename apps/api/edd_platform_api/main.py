@@ -226,6 +226,7 @@ from edd_platform_api.routers import artifacts as _artifacts_router  # noqa: E40
 from edd_platform_api.routers import tools as _tools_router  # noqa: E402
 from edd_platform_api.routers import eval_contracts as _eval_contracts_router  # noqa: E402
 from edd_platform_api.routers import gates as _gates_router  # noqa: E402
+from edd_platform_api.routers import suites as _suites_router  # noqa: E402
 from edd_platform_api.routers import agent_designs as _agent_designs_router  # noqa: E402
 from edd_platform_api.routers import runs as _runs_router  # noqa: E402
 from edd_platform_api.routers import fix_proposals as _fix_proposals_router  # noqa: E402
@@ -239,6 +240,7 @@ app.include_router(_artifacts_router.router)
 app.include_router(_tools_router.router)
 app.include_router(_eval_contracts_router.router)
 app.include_router(_gates_router.router)
+app.include_router(_suites_router.router)
 app.include_router(_agent_designs_router.router)
 app.include_router(_runs_router.router)
 app.include_router(_fix_proposals_router.router)
