@@ -70,7 +70,7 @@ from edd_runner import RunnerAgentDesign, RunnerScenario, RunnerToolDefinition, 
 
 router = APIRouter()
 
-_LIVE_JUDGE_CHECK_TYPES = {"outcome_rubric", "rubric_judge", "llm_judge"}
+_LIVE_JUDGE_CHECK_TYPES = {"rubric_judge", "llm_judge"}
 
 # First word of the judge reply, after markdown emphasis and an optional "Verdict:".
 _LIVE_JUDGE_VERDICT = re.compile(r"^[\s*_#>`]*(?:verdict\s*:[\s*_`]*)?(pass|fail)(?![a-z])", re.IGNORECASE)
