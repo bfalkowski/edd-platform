@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Literal, Optional
 from urllib.error import HTTPError, URLError
@@ -70,6 +71,14 @@ from edd_runner import RunnerAgentDesign, RunnerScenario, RunnerToolDefinition, 
 router = APIRouter()
 
 _LIVE_JUDGE_CHECK_TYPES = {"outcome_rubric", "rubric_judge", "llm_judge"}
+
+# First word of the judge reply, after markdown emphasis and an optional "Verdict:".
+_LIVE_JUDGE_VERDICT = re.compile(r"^[\s*_#>`]*(?:verdict\s*:[\s*_`]*)?(pass|fail)(?![a-z])", re.IGNORECASE)
+
+
+def live_judge_passed(judge_output_text: str) -> bool:
+    match = _LIVE_JUDGE_VERDICT.match(judge_output_text)
+    return match is not None and match.group(1).lower() == "pass"
 
 
 def create_runner_trace_artifact(
@@ -160,7 +169,7 @@ def build_live_judge_prompt(
     # evaluated by the live judge itself and their stub results ("live judge required")
     # would pollute the evidence context.
     deterministic_checks = [
-        c for c in checks if c.check_id not in _LIVE_JUDGE_CHECK_TYPES
+        c for c in checks if c.check_type not in _LIVE_JUDGE_CHECK_TYPES
     ]
     check_lines = "\n".join(
         f"- {check.check_id}: {'pass' if check.passed else 'fail'}; "
@@ -1000,7 +1009,7 @@ def evaluate_run(
             raise HTTPException(status_code=status_code, detail=detail) from exc
         cost_estimate = estimate_live_judge_cost(token_usage)
         if any(check.check_type == "rubric_judge" for check in checks):
-            judge_passed = judge_output_text.strip().lower().startswith("pass")
+            judge_passed = live_judge_passed(judge_output_text)
             checks = [
                 check.model_copy(
                     update={
