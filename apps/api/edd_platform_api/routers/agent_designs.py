@@ -22,7 +22,6 @@ from edd_platform_api.schemas import (
     AgentDesignUpdate,
     AgentVersion,
     AgentVersionCreate,
-    ArtifactRecord,
     EvalContractCreate,
     GuidedSetupPreview,
     GuidedSetupRequest,
@@ -495,9 +494,8 @@ def get_agent_wizard_state(project_id: str, agent_id: str) -> OutcomeAgentCreate
     if not version or not contract or not scenario:
         raise HTTPException(status_code=404, detail="Agent has no baseline version, scenario, or eval contract yet.")
 
-    artifact = next(
-        (a for a in _artifacts.values() if a.artifact_type == "agent_design" and a.project_id == project_id),
-        ArtifactRecord(id="", project_id=project_id, artifact_type="agent_design", content={}, created_at=agent.created_at),
+    artifact = api_main.find_agent_design_artifact(agent.id) or api_main.sync_agent_design_artifact(
+        agent, agent.updated_at
     )
 
     return OutcomeAgentCreated(

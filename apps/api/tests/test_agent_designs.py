@@ -20,6 +20,7 @@ from edd_runner import (
     run_anthropic_agent_with_langfuse,
 )
 from edd_platform_api.main import app  # noqa: E402
+from edd_platform_api.schemas import OutcomeAgentCreated  # noqa: E402
 
 edd_runner = sys.modules["edd_runner"]
 
@@ -3835,4 +3836,114 @@ def test_delete_agent_design_removes_owned_artifacts() -> None:
             f"/api/projects/project_default/artifacts/{run_artifact['id']}"
         ).status_code
         == 404
+    )
+
+
+def _outcome_agent_with_evaluated_baseline(client: TestClient, monkeypatch) -> dict:
+    monkeypatch.setattr(
+        api_main,
+        "_draft_agent_plan_from_llm",
+        lambda outcome, tools: {
+            "name": "Wizard State Agent",
+            "intent": f"Answer the request: {outcome}",
+            "output_focus": "Return a concise answer.",
+            "output_requirements": ["answer"],
+            "allowed_tools": [],
+            "required_tools": [],
+        },
+    )
+    created = client.post(
+        "/api/projects/project_default/agent-designs/from-outcome",
+        json={"outcome": "Summarize the weekly deployment report."},
+    )
+    assert created.status_code == 201
+    created = created.json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": created["agent"]["id"],
+            "agent_version_id": created["version"]["id"],
+            "scenario_id": created["scenario"]["id"],
+            "eval_contract_id": created["eval_contract"]["id"],
+        },
+    )
+    assert run.status_code == 201
+    eval_result = client.post(
+        f"/api/projects/project_default/runs/{run.json()['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    )
+    assert eval_result.status_code == 201
+    return {**created, "eval_result": eval_result.json()}
+
+
+def _assert_matches_wizard_state_schema(client: TestClient, body: dict) -> None:
+    openapi = client.get("/openapi.json").json()
+    route = openapi["paths"]["/api/projects/{project_id}/agent-designs/{agent_id}/wizard-state"]
+    response_schema = route["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert response_schema == {"$ref": "#/components/schemas/OutcomeAgentCreated"}
+    components = openapi["components"]["schemas"]
+    for field in components["OutcomeAgentCreated"]["required"]:
+        assert field in body
+    for field in components["ArtifactRecord"]["required"]:
+        assert field in body["artifact"]
+    OutcomeAgentCreated.model_validate(body)
+
+
+def test_wizard_state_returns_outcome_agent_after_run_and_eval(monkeypatch) -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    created = _outcome_agent_with_evaluated_baseline(client, monkeypatch)
+    agent_id = created["agent"]["id"]
+
+    response = client.get(f"/api/projects/project_default/agent-designs/{agent_id}/wizard-state")
+
+    assert response.status_code == 200
+    body = response.json()
+    _assert_matches_wizard_state_schema(client, body)
+    assert body["agent"]["id"] == agent_id
+    assert body["artifact"]["artifact_type"] == "AGENT_DESIGN"
+    assert body["artifact"]["artifact_id"] == agent_id
+    assert body["version"]["id"] == created["version"]["id"]
+    assert body["scenario"]["id"] == created["scenario"]["id"]
+    assert body["eval_contract"]["id"] == created["eval_contract"]["id"]
+
+
+def test_wizard_state_returns_outcome_agent_after_failed_baseline_analysis(monkeypatch) -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    created = _outcome_agent_with_evaluated_baseline(client, monkeypatch)
+    agent_id = created["agent"]["id"]
+    eval_result = created["eval_result"]
+    assert eval_result["passed"] is False
+    note = client.post(
+        "/api/projects/project_default/review-notes",
+        json={
+            "target_artifact_id": eval_result["artifact_ids"][0],
+            "body": "The baseline did not answer the request.",
+            "metadata": {
+                "failure_mode": "missing answer",
+                "severity": "high",
+                "eval_result_id": eval_result["id"],
+            },
+        },
+    )
+    assert note.status_code == 201
+
+    response = client.get(f"/api/projects/project_default/agent-designs/{agent_id}/wizard-state")
+
+    assert response.status_code == 200
+    body = response.json()
+    _assert_matches_wizard_state_schema(client, body)
+    assert body["agent"]["id"] == agent_id
+    assert body["artifact"]["artifact_id"] == agent_id
+
+
+def test_wizard_state_without_baseline_returns_404() -> None:
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/projects/project_default/agent-designs/agent_apartment_search/wizard-state"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        "Agent has no baseline version, scenario, or eval contract yet."
     )
