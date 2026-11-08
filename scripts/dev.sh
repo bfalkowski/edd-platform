@@ -26,41 +26,32 @@ enable_local_langfuse_if_running() {
   fi
 }
 
-stop_port() {
-  local port="$1"
-  local pids
-  pids="$(lsof -ti "tcp:${port}" 2>/dev/null || true)"
-  if [[ -z "$pids" ]]; then
-    return
-  fi
-
-  echo "Stopping existing process on port ${port}: ${pids//$'\n'/ }"
-  kill $pids >/dev/null 2>&1 || true
-  for _ in {1..20}; do
-    if [[ -z "$(lsof -ti "tcp:${port}" 2>/dev/null || true)" ]]; then
-      return
-    fi
-    sleep 0.25
-  done
-
-  pids="$(lsof -ti "tcp:${port}" 2>/dev/null || true)"
-  if [[ -n "$pids" ]]; then
-    echo "Force stopping process on port ${port}: ${pids//$'\n'/ }"
-    kill -9 $pids >/dev/null 2>&1 || true
+require_free_port() {
+  local port="$1" var="$2"
+  # lsof may be missing or unable to see other users' processes, so also try to connect.
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 \
+    || (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+    echo "Port ${port} is already in use (maybe another worktree's dev server)." >&2
+    echo "Choose another port, for example: ${var}=$((port + 10)) ./scripts/dev.sh" >&2
+    exit 1
   fi
 }
 
 load_env_file
 enable_local_langfuse_if_running
 
-stop_port 8001
-stop_port 5173
+API_PORT="${EDD_API_PORT:-8001}"
+WEB_PORT="${EDD_WEB_PORT:-5173}"
+API_URL="http://127.0.0.1:${API_PORT}"
 
-echo "Starting API on http://127.0.0.1:8001"
+require_free_port "$API_PORT" EDD_API_PORT
+require_free_port "$WEB_PORT" EDD_WEB_PORT
+
+echo "Starting API on ${API_URL}"
 (
   cd "$ROOT_DIR/apps/api"
   export EDD_PLATFORM_DATABASE_URL="${EDD_PLATFORM_DATABASE_URL:-postgresql://edd_platform:edd_platform@127.0.0.1:15432/edd_platform}"
-  uv run uvicorn edd_platform_api.main:app --host 127.0.0.1 --port 8001
+  exec uv run uvicorn edd_platform_api.main:app --host 127.0.0.1 --port "$API_PORT"
 ) &
 API_PID=$!
 
@@ -74,17 +65,18 @@ for _ in {1..30}; do
     echo "API failed to start. Check the error above."
     exit 1
   fi
-  if curl -fsS http://127.0.0.1:8001/health >/dev/null 2>&1; then
+  if curl -fsS "${API_URL}/health" >/dev/null 2>&1; then
     break
   fi
   sleep 0.5
 done
 
-if ! curl -fsS http://127.0.0.1:8001/health >/dev/null 2>&1; then
-  echo "API did not become healthy on http://127.0.0.1:8001."
+if ! curl -fsS "${API_URL}/health" >/dev/null 2>&1; then
+  echo "API did not become healthy on ${API_URL}."
   exit 1
 fi
 
-echo "Starting web on http://127.0.0.1:5173"
+echo "Starting web on http://127.0.0.1:${WEB_PORT} (API proxy -> ${API_URL})"
 cd "$ROOT_DIR/apps/web"
-npm run dev
+export VITE_API_PROXY_TARGET="$API_URL"
+npm exec --no -- vite --host 0.0.0.0 --port "$WEB_PORT" --strictPort

@@ -206,15 +206,25 @@ cd apps/web
 npm install
 ```
 
-Start local Postgres and the app:
+You need [uv](https://docs.astral.sh/uv/) and Node. Docker is only needed for
+Postgres.
+
+### Without Docker (in-memory storage)
+
+```bash
+EDD_PLATFORM_STORAGE_BACKEND=memory ./scripts/dev.sh
+```
+
+The in-memory backend keeps all state in the API process. **Everything is lost
+when the API stops or restarts**, including seeded demo data. Use it for quick
+local runs and parallel worktrees, not for work you want to keep.
+
+### With Postgres
 
 ```bash
 docker compose up -d postgres
 ./scripts/dev.sh
 ```
-
-The API runs on `http://127.0.0.1:8001`. The React console runs on Vite's
-reported local URL, usually `http://localhost:5173`.
 
 Default database:
 
@@ -222,7 +232,30 @@ Default database:
 postgresql://edd_platform:edd_platform@127.0.0.1:15432/edd_platform
 ```
 
-Set `EDD_PLATFORM_DATABASE_URL` to use a different Postgres database.
+Set `EDD_PLATFORM_DATABASE_URL` to use a different Postgres database. The same
+default applies when you start only the API with `npm run api:dev`.
+
+### Ports and parallel worktrees
+
+The API runs on `http://127.0.0.1:8001` and the React console on
+`http://localhost:5173` by default. Choose other ports with `EDD_API_PORT` and
+`EDD_WEB_PORT`. `./scripts/dev.sh` points the console's `/api` proxy at
+`EDD_API_PORT` (overriding any `VITE_API_PROXY_TARGET`). When you start the
+console on its own with `npm run web:dev`, set `VITE_API_PROXY_TARGET` yourself.
+
+`./scripts/dev.sh` never stops processes it did not start. If a port is taken,
+it exits and names the port. To run several worktrees side by side, give each
+its own ports:
+
+```bash
+# worktree A
+EDD_PLATFORM_STORAGE_BACKEND=memory ./scripts/dev.sh
+# worktree B
+EDD_PLATFORM_STORAGE_BACKEND=memory EDD_API_PORT=8011 EDD_WEB_PORT=5183 ./scripts/dev.sh
+```
+
+Copies that share Postgres share its data; use the in-memory backend or a
+separate `EDD_PLATFORM_DATABASE_URL` per worktree to keep them apart.
 
 ## Live Anthropic Runs
 
@@ -244,7 +277,8 @@ Then start:
 ./scripts/dev.sh
 ```
 
-The default model is Claude Haiku. Override with `EDD_ANTHROPIC_MODEL`.
+The default model is Claude Haiku (`claude-haiku-4-5-20251001`, as set in
+`.env.example`). Override with `EDD_ANTHROPIC_MODEL`.
 
 ## Langfuse
 
