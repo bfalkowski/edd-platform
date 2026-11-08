@@ -89,14 +89,6 @@ def capture_langchain_system_prompts(monkeypatch) -> List[str]:
     return prompts
 
 
-def run_artifact_body(client: TestClient, run: dict) -> str:
-    artifact = client.get(
-        f"/api/projects/project_default/artifacts/{run['artifact_ids'][0]}"
-    ).json()
-    assert artifact["artifact_type"] == "RUN_RESULT"
-    return artifact["body"]
-
-
 def test_live_run_sends_version_instructions_as_whole_system_prompt(monkeypatch) -> None:
     client = TestClient(app)
     bodies = capture_anthropic_bodies(monkeypatch)
