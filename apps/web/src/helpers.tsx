@@ -106,64 +106,6 @@ export function testShapeFromSetupContext(setupContext?: string): TestShape {
   }
   return "single_turn";
 }
-export const defaultToolInputSchema = `{
-  "type": "object",
-  "properties": {
-    "ticket_id": {
-      "type": "string",
-      "description": "External ticket identifier."
-    },
-    "customer_since": {
-      "type": "string",
-      "format": "date",
-      "description": "ISO date, for example 2026-06-04."
-    },
-    "retry_count": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "confidence": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1
-    },
-    "priority": {
-      "type": "string",
-      "enum": ["low", "medium", "high"]
-    },
-    "include_history": {
-      "type": "boolean"
-    }
-  },
-  "required": ["ticket_id"]
-}`;
-export const defaultToolOutputSchema = `{
-  "type": "object",
-  "properties": {
-    "summary": {
-      "type": "string"
-    },
-    "status": {
-      "type": "string",
-      "enum": ["open", "blocked", "resolved"]
-    },
-    "age_days": {
-      "type": "integer"
-    },
-    "last_updated": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "recommended_actions": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    }
-  },
-  "required": ["summary", "status"]
-}`;
-
 export function traceUrlFromArtifact(artifact: ArtifactRecord): string | null {
   if (artifact.artifact_type !== "TRACE_REF") {
     return null;
@@ -207,23 +149,6 @@ export function externalRefDetail(ref: ExternalArtifactRef): string {
     return `${metadataLabel.trim()} · ${ref.external_id}`;
   }
   return ref.external_id;
-}
-
-export function parseJsonObject(value: string, label: string): Record<string, unknown> {
-  const parsed = JSON.parse(value);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`${label} must be a JSON object.`);
-  }
-  return parsed as Record<string, unknown>;
-}
-
-export function toolImplementationKey(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-  return `mock.${slug || "tool"}`;
 }
 
 export function parseArtifactFields(body: string): { label: string; value: string }[] {

@@ -185,6 +185,38 @@ status alongside Anthropic/Langfuse. CI stays provider-key-free — tests
 inject a fake Azure Agents client built from real `azure-ai-agents` SDK
 model classes rather than requiring live credentials.
 
+### Remove Fake/Mocked Frontend Paths
+
+Complete (`edd-nt0`).
+
+Three places let the live product silently fabricate data instead of doing
+real work, all removed:
+
+- The web app's tool composer ("New tool draft") always created
+  `implementation_kind: "mock"` tools with a canned response — there was no
+  way to build a real custom tool from the UI. Composer removed
+  (`main.tsx`, `helpers.tsx`); tool creation is now backend/script-only.
+- `Sentiment Observer`, wired to 3 mock tools (`score_conversation_sentiment`,
+  `detect_escalation_risk`, `summarize_conversation_signals`), was
+  auto-seeded into `project_default` on every API boot — a live run against
+  it silently returned canned tool output. Auto-seed removed (`main.py`,
+  `seed_data.py`); the opt-in walkthrough script that depended on it
+  (`scripts/seed_sentiment_observer_demo.py`) is deleted as orphaned.
+- The Wizard's "draft agent from outcome" flow special-cased Formula
+  1/motorsport-themed descriptions: it silently created two hardcoded mock
+  tools (`lookup_event_schedule`, `lookup_event_result`) with a fixed race
+  calendar and wired them into the drafted agent's required tools. Removed
+  from `draft_agent_from_outcome` (`routers/agent_designs.py`); the flow
+  now falls through to its existing generic path (LLM-drafted plan
+  restricted to already-approved real tools).
+
+Frontend `mode`/run-mode parameters that were always called with `"live"`
+are now typed as the `"live"` literal instead of `"mock" | "live"`, so no
+frontend code path can select mock execution even by accident. Backend
+`mode: "mock"` and the mock runner stay intact as an internal test double —
+CI/tests keep running without live provider credentials, per this repo's
+existing no-provider-keys-in-CI guardrail.
+
 ## Beads Queue At Last Reconciliation
 
 Use `bd ready` and `bd list` for the source of truth. At the last

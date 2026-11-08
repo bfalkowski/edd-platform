@@ -13,7 +13,6 @@ test("app loads with sidebar, services, and seeded agents", async ({ page }) => 
 
   const agentList = page.getByRole("region", { name: "Agent designs" });
   await expect(agentList).toBeVisible();
-  await expect(agentList.getByText("Sentiment Observer")).toBeVisible();
   await expect(agentList.getByText("Apartment Search Agent")).toBeVisible();
 
   expect(errors).toEqual([]);

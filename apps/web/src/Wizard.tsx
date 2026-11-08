@@ -172,7 +172,7 @@ async function commitAgent(
 async function runAgent(
   projectId: string,
   agent: OutcomeAgentResponse,
-  mode: "mock" | "live",
+  mode: "live",
   model?: string,
 ): Promise<RunRecord> {
   return apiPost(
@@ -262,7 +262,7 @@ async function runCandidateVersion(
   projectId: string,
   agent: OutcomeAgentResponse,
   candidateVersionId: string,
-  mode: "mock" | "live",
+  mode: "live",
   model?: string,
 ): Promise<RunRecord> {
   return apiPost(

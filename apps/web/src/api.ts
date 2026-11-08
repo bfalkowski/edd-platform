@@ -231,7 +231,7 @@ export async function runAgentDesign(
   projectId: string,
   agentDesignId: string,
   scenarioInput: string,
-  mode: "mock" | "live",
+  mode: "live",
   target: "agent" | "url" = "agent",
   url?: string,
 ): Promise<AgentRunResult> {
@@ -379,7 +379,7 @@ export async function createProjectRun(
     agent_version_id?: string;
     scenario_id: string;
     eval_contract_id: string;
-    mode: "mock" | "live";
+    mode: "live";
   },
 ): Promise<RunRecord> {
   const response = await fetch(`${apiBase}/projects/${projectId}/runs`, {

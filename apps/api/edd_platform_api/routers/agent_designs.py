@@ -15,7 +15,6 @@ from edd_platform_api.lookups import (
 from edd_platform_api.routers import eval_contracts as _eval_contracts_router
 from edd_platform_api.routers import scenarios as _scenarios_router
 from edd_platform_api.routers import tools as _tools_router
-from edd_platform_api.seed_data import RESULT_TOOL_MOCK_RESPONSE, SCHEDULE_TOOL_MOCK_RESPONSE
 from edd_platform_api.schemas import (
     AgentDesign,
     AgentDesignCreate,
@@ -31,7 +30,6 @@ from edd_platform_api.schemas import (
     OutcomeAgentCreated,
     ScenarioCreate,
     ToolDefinition,
-    ToolDefinitionCreate,
 )
 from edd_platform_api.state import (
     _agent_designs,
@@ -54,35 +52,6 @@ from edd_platform_api.state import (
 )
 
 router = APIRouter()
-
-
-def find_project_tool_by_name(project_id: str, name: str) -> Optional[ToolDefinition]:
-    normalized = name.strip()
-    return next(
-        (
-            tool
-            for tool in _tool_definitions.values()
-            if tool.project_id == project_id and tool.name == normalized
-        ),
-        None,
-    )
-
-
-def approve_generated_tool(tool: ToolDefinition, mock_response: str) -> ToolDefinition:
-    now = datetime.now(timezone.utc)
-    updated = tool.model_copy(
-        update={
-            "implementation_kind": "mock",
-            "implementation_key": f"mock.{tool.name}",
-            "mock_response": mock_response,
-            "status": "approved",
-            "updated_at": now,
-        }
-    )
-    _tool_definitions[updated.id] = updated
-    store.save_record("tool_definitions", updated.id, updated)
-    api_main.upsert_tool_definition_artifact(updated, now)
-    return updated
 
 
 def validate_allowed_tool_names(project_id: str, allowed_tool_names: List[str]) -> None:
@@ -355,140 +324,6 @@ def draft_agent_from_outcome(
 
     draft_tools: List[ToolDefinition] = []
 
-    lowered = normalized.lower()
-    _motorsport_terms = ["grand prix", "formula 1", "formula one", "formula1", "f1", "nexgt 1", "nxt 1"]
-    _is_motorsport = any(term in lowered for term in _motorsport_terms) or (
-        "race" in lowered and any(term in lowered for term in ["nexgt", "nxt"])
-    )
-    is_schedule_task = _is_motorsport and any(
-        term in lowered for term in ["next", "upcoming", "schedule", "when", "nexgt", "nxt"]
-    )
-    is_result_task = _is_motorsport and any(
-        term in lowered for term in ["last", "latest", "won", "winner", "result"]
-    )
-
-    schedule_tool = find_project_tool_by_name(project_id, "lookup_event_schedule")
-    result_tool = find_project_tool_by_name(project_id, "lookup_event_result")
-    schedule_tool_response = SCHEDULE_TOOL_MOCK_RESPONSE
-    result_tool_response = RESULT_TOOL_MOCK_RESPONSE
-    if is_schedule_task:
-        if schedule_tool is None:
-            schedule_tool = _tools_router.create_tool_definition(
-                project_id,
-                ToolDefinitionCreate(
-                    name="lookup_event_schedule",
-                    description=(
-                        "Find the next scheduled event for a sport, series, or calendar "
-                        "after a reference date."
-                    ),
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "series": {
-                                "type": "string",
-                                "description": "Competition or event series, such as Formula 1.",
-                            },
-                            "reference_date": {
-                                "type": "string",
-                                "format": "date",
-                                "description": "Date used to decide what counts as next.",
-                            },
-                            "query": {
-                                "type": "string",
-                                "description": "Original user schedule question.",
-                            },
-                        },
-                        "required": ["series", "reference_date"],
-                    },
-                    output_schema={
-                        "type": "object",
-                        "properties": {
-                            "event_name": {"type": "string"},
-                            "event_date": {"type": "string", "format": "date"},
-                            "venue": {"type": "string"},
-                            "source_url": {"type": "string"},
-                            "retrieved_at": {"type": "string", "format": "date-time"},
-                        },
-                        "required": ["event_name", "event_date", "source_url"],
-                    },
-                    output_description="Next scheduled event with date, venue, and source.",
-                    implementation_kind="mock",
-                    implementation_key="mock.lookup_event_schedule",
-                    config_schema={"type": "object", "properties": {}},
-                    mock_response=schedule_tool_response,
-                    status="approved",
-                ),
-            )
-        elif schedule_tool.status != "approved":
-            schedule_tool = approve_generated_tool(schedule_tool, schedule_tool_response)
-        if schedule_tool.status != "approved":
-            draft_tools.append(schedule_tool)
-    if is_result_task:
-        if result_tool is None:
-            result_tool = _tools_router.create_tool_definition(
-                project_id,
-                ToolDefinitionCreate(
-                    name="lookup_event_result",
-                    description=(
-                        "Find the latest completed event result for a sport or series, "
-                        "including winner and source."
-                    ),
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "series": {
-                                "type": "string",
-                                "description": "Competition or event series, such as Formula 1.",
-                            },
-                            "query": {
-                                "type": "string",
-                                "description": "Original user result question.",
-                            },
-                            "reference_date": {
-                                "type": "string",
-                                "format": "date",
-                                "description": "Date used to decide the latest completed event.",
-                            },
-                        },
-                        "required": ["series", "query"],
-                    },
-                    output_schema={
-                        "type": "object",
-                        "properties": {
-                            "event_name": {"type": "string"},
-                            "event_date": {"type": "string", "format": "date"},
-                            "winner": {"type": "string"},
-                            "source_url": {"type": "string"},
-                            "retrieved_at": {"type": "string", "format": "date-time"},
-                        },
-                        "required": ["event_name", "winner", "source_url"],
-                    },
-                    output_description="Latest completed event winner with source.",
-                    implementation_kind="mock",
-                    implementation_key="mock.lookup_event_result",
-                    config_schema={"type": "object", "properties": {}},
-                    mock_response=result_tool_response,
-                    status="approved",
-                ),
-            )
-        elif result_tool.status != "approved":
-            result_tool = approve_generated_tool(result_tool, result_tool_response)
-        if result_tool.status != "approved":
-            draft_tools.append(result_tool)
-    seen_tools: set[str] = set(allowed_tools)
-    if is_schedule_task and schedule_tool is not None:
-        if schedule_tool.name not in seen_tools:
-            allowed_tools.append(schedule_tool.name)
-            seen_tools.add(schedule_tool.name)
-        if schedule_tool.name not in required_tools:
-            required_tools.append(schedule_tool.name)
-    if is_result_task and result_tool is not None:
-        if result_tool.name not in seen_tools:
-            allowed_tools.append(result_tool.name)
-            seen_tools.add(result_tool.name)
-        if result_tool.name not in required_tools:
-            required_tools.append(result_tool.name)
-
     validate_allowed_tool_names(project_id, allowed_tools)
 
     live_tool_keys = {"call_http_api", "browse_webpage", "open_meteo_weather"}
@@ -561,17 +396,7 @@ def draft_agent_from_outcome(
                 "Do not mark the task complete when the response lacks the requested result.",
             ],
             required_tools=required_tools,
-            forbidden_behavior=(
-                [
-                    "I don",
-                    "real-time access",
-                    "If you provide",
-                    "guide you to check",
-                    "check a current source",
-                ]
-                if is_schedule_task or is_result_task
-                else []
-            ),
+            forbidden_behavior=[],
             output_requirements=output_requirements,
             checks=[
                 {
