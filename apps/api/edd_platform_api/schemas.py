@@ -342,6 +342,8 @@ class RunRecord(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
     input: str
+    # Kept off the run artifact body: eval checks read that body as run output.
+    system_prompt: Optional[str] = None
     output: str
     status: str
     artifact_ids: List[str]

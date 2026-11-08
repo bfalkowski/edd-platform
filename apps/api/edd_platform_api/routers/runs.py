@@ -872,6 +872,7 @@ def create_run(project_id: str, payload: RunCreate) -> RunRecord:
         provider=provider,
         model=None,
         input=runner_result.scenario_input,
+        system_prompt=runner_result.system_prompt,
         output=runner_result.response,
         status="completed",
         artifact_ids=[artifact.id] + [tool_artifact.id for tool_artifact in tool_artifacts],
