@@ -232,6 +232,28 @@ def test_overrule_opens_a_reviewer_packet_beside_an_open_packet_added_by_hand() 
     assert titles == ["Found by hand", "Reviewer overruled judge: One fix per ticket"]
 
 
+def test_overrule_returns_the_first_open_packet_with_the_reviewer_title() -> None:
+    client = TestClient(app)
+    agent_id, scenario_id, contract_id = create_contract(client, judge_passes=True)
+    eval_result = evaluate(client, agent_id, scenario_id, contract_id)
+    first = review(client, eval_result, "overrule", "Reason A.").json()["failure_packet"]
+    client.post(
+        f"{PROJECT}/failure-packets",
+        json={
+            "agent_design_id": agent_id,
+            "run_id": eval_result["run_id"],
+            "eval_result_id": eval_result["id"],
+            "eval_contract_id": contract_id,
+            "title": "Reviewer overruled judge: added by hand",
+            "diagnosis": "Hand-written diagnosis.",
+        },
+    )
+
+    response = review(client, eval_result, "overrule", "Reason B.")
+
+    assert response.json()["failure_packet"]["id"] == first["id"]
+    assert response.json()["failure_packet"]["diagnosis"].endswith("Reason B.")
+
 def test_gate_follows_reviews_in_both_directions() -> None:
     client = TestClient(app)
     for judge_passes, expected in (
