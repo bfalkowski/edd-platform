@@ -23,6 +23,7 @@ to use the consolidated product language:
 | [HLD-004](HLD-004-eval-contracts-runs-judges-and-fixes.md) | Eval Contracts, Runs, Judges, and Fixes | Implemented for the current product slice |
 | [HLD-005](HLD-005-relational-metadata-and-polars-analysis-plane.md) | Relational Metadata and Polars Analysis Plane | Implemented for the current product slice |
 | [HLD-006](HLD-006-agentic-investigation-evaluation-harness.md) | Agentic Investigation Evaluation Harness | Draft |
+| [HLD-007](HLD-007-spine-trace-and-loop-closure.md) | Spine Trace from Run to GateDecision, and the Smallest Loop Closure | Draft (plan) |
 
 ## Notes
 
