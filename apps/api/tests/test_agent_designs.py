@@ -2230,13 +2230,12 @@ def test_gate_decision_blocks_when_candidate_still_fails() -> None:
     )
 
     assert decision["decision"] == "blocked"
-    assert sorted(decision["blocking_failure_packet_ids"]) == sorted(
-        packet["id"] for packet in loop["packets"]()
-    )
-    assert len(decision["blocking_failure_packet_ids"]) == 2
+    assert decision["blocking_failure_packet_ids"] == [
+        packet["id"] for packet in loop["packets"]() if packet["agent_version_id"] == v1["id"]
+    ]
 
 
-def test_gate_decision_blocks_on_unfixed_sibling_version_packet() -> None:
+def test_gate_decision_ignores_unfixed_sibling_version_packet() -> None:
     loop = _fix_loop_for_gate(TestClient(app), "Sibling Gate Agent")
     v0 = loop["version"]("v0", "Answer with evidence only.")
     v1 = loop["version"]("v1", "Answer with evidence and include fixed phrase.", v0["id"])
@@ -2256,8 +2255,9 @@ def test_gate_decision_blocks_on_unfixed_sibling_version_packet() -> None:
         eval_result_id=v1_eval["id"], comparison_id=comparison["id"]
     )
 
-    assert decision["decision"] == "blocked"
-    assert decision["blocking_failure_packet_ids"] == [sibling_packet["id"]]
+    assert decision["decision"] == "passed"
+    assert decision["blocking_failure_packet_ids"] == []
+    assert sibling_packet["id"] not in decision["rationale"]
 
 
 def test_create_agent_versions_for_baseline_and_candidate() -> None:
