@@ -95,21 +95,29 @@ def review_judge_output(
             now=now,
         )
 
-    open_packets = [
-        packet
-        for packet in _failure_packets.values()
-        if packet.eval_result_id == eval_result.id and packet.status == "open"
-    ]
+    # Packets on a result the judge failed are the judge's; a reviewer overrule
+    # closes them as "overruled". Packets on a result the judge passed came from
+    # a reviewer overrule; agreeing with the judge closes them as "withdrawn".
+    closed_status = "withdrawn" if judge_passed else "overruled"
+    diagnosis = f"A reviewer overruled the judge's pass. Reason: {payload.reason}"
     failure_packet: Optional[FailurePacket] = None
-    if passed:
-        # The reviewer passed it, so its open failure packets no longer block a gate.
-        for packet in open_packets:
-            closed = packet.model_copy(update={"status": "overruled", "updated_at": now})
-            _failure_packets[closed.id] = closed
-            store.save_record("failure_packets", closed.id, closed)
-    elif open_packets:
-        failure_packet = open_packets[0]
-    else:
+    for packet in list(_failure_packets.values()):
+        if packet.eval_result_id != eval_result.id:
+            continue
+        update: dict = {}
+        if passed and packet.status == "open":
+            update = {"status": closed_status}
+        elif not passed and packet.status == closed_status:
+            update = {"status": "open"}
+            if judge_passed:
+                update["diagnosis"] = diagnosis
+        if update:
+            packet = packet.model_copy(update={**update, "updated_at": now})
+            _failure_packets[packet.id] = packet
+            store.save_record("failure_packets", packet.id, packet)
+        if not passed and packet.status == "open" and failure_packet is None:
+            failure_packet = packet
+    if not passed and failure_packet is None and judge_passed:
         failure_packet = api_main.create_failure_packet_record(
             project_id=project_id,
             agent_design_id=run.agent_design_id,
@@ -119,7 +127,7 @@ def review_judge_output(
             eval_contract_id=contract.id,
             failed_check_ids=[check.check_id for check in eval_result.checks],
             title=f"Reviewer overruled judge: {contract.name}",
-            diagnosis=f"A reviewer overruled the judge's pass. Reason: {payload.reason}",
+            diagnosis=diagnosis,
             severity="medium",
             evidence_artifact_ids=[*eval_result.artifact_ids, review_artifact.id],
             recommended_fix="Address the reviewer's reason and propose a bounded agent change.",

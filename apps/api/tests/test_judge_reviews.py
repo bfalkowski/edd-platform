@@ -130,18 +130,57 @@ def test_overrule_failed_verdict_passes_eval_and_closes_failure_packet() -> None
     assert client.get(f"{PROJECT}/eval-results/{eval_result['id']}").json()["passed"] is True
 
 
-def test_second_review_keeps_judge_verdict() -> None:
+def packets_for(client: TestClient, agent_id: str, eval_result_id: str) -> list:
+    packets = client.get(
+        f"{PROJECT}/failure-packets", params={"agent_design_id": agent_id}
+    ).json()
+    return [packet for packet in packets if packet["eval_result_id"] == eval_result_id]
+
+
+def test_agree_after_overruling_a_pass_withdraws_the_reviewer_packet() -> None:
     client = TestClient(app)
     agent_id, scenario_id, contract_id = create_contract(client, judge_passes=True)
     eval_result = evaluate(client, agent_id, scenario_id, contract_id)
 
-    review(client, eval_result, "overrule")
-    response = review(client, eval_result, "agree")
+    review(client, eval_result, "overrule", "Bundles fixes.")
+    response = review(client, eval_result, "agree", "On a second read it is one fix.")
 
     body = response.json()
     assert body["judge_output"]["review"]["judge_passed"] is True
     assert body["eval_result"]["passed"] is True
-    assert open_packets(client, agent_id, eval_result["id"]) == []
+    assert body["failure_packet"] is None
+    [packet] = packets_for(client, agent_id, eval_result["id"])
+    assert packet["status"] == "withdrawn"
+    assert packet["title"] == "Reviewer overruled judge: One fix per ticket"
+
+    # Overruling again reopens the same packet with the new reason.
+    response = review(client, eval_result, "overrule", "It does bundle fixes after all.")
+    assert response.json()["failure_packet"]["id"] == packet["id"]
+    [packet] = packets_for(client, agent_id, eval_result["id"])
+    assert packet["status"] == "open"
+    assert packet["diagnosis"].endswith("It does bundle fixes after all.")
+
+
+def test_agree_after_overruling_a_fail_reopens_the_judge_packet() -> None:
+    client = TestClient(app)
+    agent_id, scenario_id, contract_id = create_contract(client, judge_passes=False)
+    eval_result = evaluate(client, agent_id, scenario_id, contract_id)
+    [judge_packet] = packets_for(client, agent_id, eval_result["id"])
+
+    review(client, eval_result, "overrule", "The phrase is not needed here.")
+    [packet] = packets_for(client, agent_id, eval_result["id"])
+    assert packet["status"] == "overruled"
+
+    response = review(client, eval_result, "agree", "Judge was right.")
+
+    body = response.json()
+    assert body["judge_output"]["review"]["judge_passed"] is False
+    assert body["eval_result"]["passed"] is False
+    assert body["failure_packet"]["id"] == judge_packet["id"]
+    [packet] = packets_for(client, agent_id, eval_result["id"])
+    assert packet["status"] == "open"
+    assert packet["title"] == judge_packet["title"]
+    assert packet["diagnosis"] == judge_packet["diagnosis"]
 
 
 def test_review_requires_reason_and_known_judge_output() -> None:

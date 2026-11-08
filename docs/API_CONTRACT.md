@@ -802,11 +802,19 @@ Review request:
 
 The review is stored on the judge output as `review`, with `judge_passed`
 holding the judge's own verdict. The judge output text is not changed.
-Overruling flips the eval result's `passed`. When the result becomes a fail,
-an open failure packet is created for it unless one is already open. When it
-becomes a pass, its open failure packets move to status `overruled`, so gates
-stop blocking on them. A later review replaces the earlier one and is applied
-to the judge's original verdict. Each review saves a `JUDGE_REVIEW` artifact
+Overruling flips the eval result's `passed`. A later review replaces the
+earlier one and is applied to the judge's original verdict. Failure packets
+follow the result:
+
+- Judge failed, reviewer overrules: the judge's open packets move to
+  `overruled`. Agreeing later reopens them.
+- Judge passed, reviewer overrules: a packet titled "Reviewer overruled judge"
+  is opened with the reason. Agreeing later moves it to `withdrawn`;
+  overruling again reopens it with the new reason.
+
+Gates block on `open` packets by default, so `overruled` and `withdrawn`
+packets stop blocking unless a gate lists those statuses in
+`blocking_failure_statuses`. Each review saves a `JUDGE_REVIEW` artifact
 that comments on the judge output artifact.
 
 The response returns `judge_output`, `eval_result` and `failure_packet` (the
