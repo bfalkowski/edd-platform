@@ -3285,6 +3285,10 @@ dd {
   gap: 8px;
 }
 
+.judge-review-contract > .secondary-button {
+  justify-self: start;
+}
+
 .judge-review-row {
   background: var(--surface);
   border: 1px solid var(--border);

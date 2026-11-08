@@ -6,6 +6,7 @@ import {
   listJudgeOutputs,
   reviewJudgeOutput,
 } from "./api";
+import { RUN_PAGE_SIZE } from "./evidenceGroups";
 import type { EvalContract, EvalResult, JudgeAgreement, JudgeOutput } from "./types";
 
 type ContractReviews = {
@@ -40,6 +41,9 @@ export function JudgeReviewPanel({ projectId, agentId, onReviewed }: JudgeReview
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // How many verdicts each contract shows; eval results come newest first, one per run.
+  const [shownCounts, setShownCounts] = useState<Record<string, number>>({});
+  const shownCount = (contractId: string) => shownCounts[contractId] ?? RUN_PAGE_SIZE;
 
   async function load() {
     const [contracts, judgeOutputs] = await Promise.all([
@@ -64,6 +68,7 @@ export function JudgeReviewPanel({ projectId, agentId, onReviewed }: JudgeReview
   }
 
   useEffect(() => {
+    setShownCounts({});
     load().catch((caught: Error) => setError(caught.message));
   }, [projectId, agentId]);
 
@@ -98,7 +103,7 @@ export function JudgeReviewPanel({ projectId, agentId, onReviewed }: JudgeReview
             <strong>{contract.name}</strong>
             <span className="judge-agreement-rate">{agreementLabel(agreement)}</span>
           </div>
-          {rows.map(({ evalResult, judgeOutput }) => {
+          {rows.slice(0, shownCount(contract.id)).map(({ evalResult, judgeOutput }) => {
             const review = judgeOutput.review;
             const judgePassed = review ? review.judge_passed : evalResult.passed;
             const reason = reasons[judgeOutput.id] ?? "";
@@ -152,6 +157,20 @@ export function JudgeReviewPanel({ projectId, agentId, onReviewed }: JudgeReview
               </div>
             );
           })}
+          {rows.length > shownCount(contract.id) ? (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() =>
+                setShownCounts((current) => ({
+                  ...current,
+                  [contract.id]: shownCount(contract.id) + RUN_PAGE_SIZE,
+                }))
+              }
+            >
+              Show older verdicts ({rows.length - shownCount(contract.id)} more)
+            </button>
+          ) : null}
         </div>
       ))}
     </div>
