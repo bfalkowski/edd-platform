@@ -2183,6 +2183,16 @@ def test_comparison_keeps_packets_without_candidate_evidence_remaining() -> None
     )
 
 
+def test_gate_decision_rationale_labels_eval_only_version() -> None:
+    loop = _fix_loop_for_gate(TestClient(app), "Eval Only Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence and include fixed phrase.")
+    _, v0_eval = loop["run_and_evaluate"](v0["id"])
+
+    decision = loop["decide"](eval_result_id=v0_eval["id"])
+
+    assert f"Judged version v0 ({v0['id']})." in decision["rationale"]
+
+
 def test_gate_decision_rejects_eval_and_comparison_for_different_versions() -> None:
     client = TestClient(app)
     loop = _fix_loop_for_gate(client, "Mismatched Gate Agent")
