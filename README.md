@@ -239,7 +239,9 @@ default applies when you start only the API with `npm run api:dev`.
 
 The API runs on `http://127.0.0.1:8001` and the React console on
 `http://localhost:5173` by default. Choose other ports with `EDD_API_PORT` and
-`EDD_WEB_PORT`; the console's `/api` proxy follows `EDD_API_PORT`.
+`EDD_WEB_PORT`. `./scripts/dev.sh` points the console's `/api` proxy at
+`EDD_API_PORT` (overriding any `VITE_API_PROXY_TARGET`). When you start the
+console on its own with `npm run web:dev`, set `VITE_API_PROXY_TARGET` yourself.
 
 `./scripts/dev.sh` never stops processes it did not start. If a port is taken,
 it exits and names the port. To run several worktrees side by side, give each

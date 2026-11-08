@@ -28,7 +28,9 @@ enable_local_langfuse_if_running() {
 
 require_free_port() {
   local port="$1" var="$2"
-  if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+  # lsof may be missing or unable to see other users' processes, so also try to connect.
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 \
+    || (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
     echo "Port ${port} is already in use (maybe another worktree's dev server)." >&2
     echo "Choose another port, for example: ${var}=$((port + 10)) ./scripts/dev.sh" >&2
     exit 1
@@ -77,4 +79,4 @@ fi
 echo "Starting web on http://127.0.0.1:${WEB_PORT} (API proxy -> ${API_URL})"
 cd "$ROOT_DIR/apps/web"
 export VITE_API_PROXY_TARGET="$API_URL"
-npm exec -- vite --host 0.0.0.0 --port "$WEB_PORT" --strictPort
+npm exec --no -- vite --host 0.0.0.0 --port "$WEB_PORT" --strictPort
