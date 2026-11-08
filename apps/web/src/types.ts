@@ -481,7 +481,12 @@ export type SuiteResult = {
   agent_version_id: string;
   passed: number;
   total: number;
-  tests: { scenario_id: string; eval_contract_id: string; eval_result: EvalResult | null }[];
+  tests: {
+    scenario_id: string;
+    eval_contract_id: string;
+    eval_result: EvalResult | null;
+    error?: string | null;
+  }[];
 };
 
 export type GateDefinition = {

@@ -614,6 +614,13 @@ tests[].eval_result
 `passed` counts tests whose latest eval passed; a test with no eval for the
 version has `eval_result: null`.
 
+A suite run does not stop when one test fails to run or evaluate (for
+example, a live provider or judge call errors). It records the failure as
+`tests[].error` (the error detail) on that test in its response and runs the
+remaining tests. `eval_result` still shows that test's latest stored eval, which
+may come from an earlier run or be `null`. `error` is `null` otherwise, and the
+suite-result read never sets it.
+
 ### Runs
 
 Runs execute a version against a scenario and optional eval contract.
