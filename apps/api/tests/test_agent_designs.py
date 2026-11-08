@@ -2097,6 +2097,32 @@ def test_gate_decision_passes_after_fix_when_baseline_run_was_evaluated_twice() 
     assert decision["blocking_failure_packet_ids"] == []
 
 
+def test_comparison_uses_newest_eval_when_runs_were_evaluated_twice() -> None:
+    client = TestClient(app)
+    loop = _fix_loop_for_gate(client, "Newest Eval Comparison Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence and include fixed phrase.", v0["id"])
+    v0_run, _ = loop["run_and_evaluate"](v0["id"])
+    v1_run, _ = loop["run_and_evaluate"](v1["id"])
+    newest_v0_eval = client.post(
+        f"/api/projects/project_default/runs/{v0_run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    ).json()
+    newest_v1_eval = client.post(
+        f"/api/projects/project_default/runs/{v1_run['id']}/evaluate",
+        json={"judge_mode": "deterministic"},
+    ).json()
+
+    comparison = loop["compare"](v0_run, v1_run)
+
+    assert comparison["baseline_eval_result_id"] == newest_v0_eval["id"]
+    assert comparison["candidate_eval_result_id"] == newest_v1_eval["id"]
+    decision = loop["decide"](
+        eval_result_id=newest_v1_eval["id"], comparison_id=comparison["id"]
+    )
+    assert decision["decision"] == "passed"
+
+
 def test_gate_decision_passes_after_fix_when_baseline_version_failed_twice() -> None:
     loop = _fix_loop_for_gate(TestClient(app), "Twice Failing Baseline Gate Agent")
     v0 = loop["version"]("v0", "Answer with evidence only.")
