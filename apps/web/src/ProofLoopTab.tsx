@@ -235,6 +235,17 @@ export function ProofLoopTab({
     return packets.filter((packet) => packet.eval_contract_id === contractId);
   }
 
+  /** The baseline eval's packets, reloaded if Check's own reload failed and left them stale. */
+  async function baselineFailurePackets() {
+    const current = failurePacketsForEval(eddFlow, eddFlow.baselineEval?.id);
+    if (current.length > 0 || !eddFlow.baselineEval) {
+      return current;
+    }
+    const failurePackets = await loadFailurePackets(eddFlow.baselineEval.eval_contract_id);
+    setEddFlow((flow) => ({ ...flow, failurePackets }));
+    return failurePackets.filter((packet) => packet.eval_result_id === eddFlow.baselineEval?.id);
+  }
+
   async function handleRunBaseline() {
     if (!eddFlow.baselineVersion || !eddFlow.scenario || !eddFlow.contract) {
       return;
@@ -347,7 +358,6 @@ export function ProofLoopTab({
   }
 
   async function handleGenerateFix() {
-    const currentFailurePackets = failurePacketsForEval(eddFlow, eddFlow.baselineEval?.id);
     if (!eddFlow.baselineVersion || !eddFlow.contract) {
       return;
     }
@@ -355,6 +365,7 @@ export function ProofLoopTab({
     setActivity("Generating fix from failure evidence...");
     setIsGeneratingFix(true);
     try {
+      const currentFailurePackets = await baselineFailurePackets();
       const result = await generateFixProposal(
         projectId,
         selectedAgent.id,
@@ -377,7 +388,6 @@ export function ProofLoopTab({
   }
 
   async function handleCreateFixProposal() {
-    const currentFailurePackets = failurePacketsForEval(eddFlow, eddFlow.baselineEval?.id);
     if (!eddFlow.baselineVersion || !eddFlow.contract || !generatedInstructions) {
       return;
     }
@@ -385,6 +395,7 @@ export function ProofLoopTab({
     setActivity("Saving fix proposal.");
     setIsFlowBusy(true);
     try {
+      const currentFailurePackets = await baselineFailurePackets();
       const fixProposal = await createFixProposal(
         projectId,
         selectedAgent.id,
