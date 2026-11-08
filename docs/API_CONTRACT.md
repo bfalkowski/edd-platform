@@ -325,9 +325,12 @@ readiness artifact.
 
 Every failure packet for the agent whose status is in the gate's
 `blocking_failure_statuses` blocks, except the packets that the referenced
-`comparison_id` lists in `fixed_failure_packet_ids`. The rationale names the
-judged version (the comparison's candidate version, else the eval result's run
-version) and the packets it ignored as fixed.
+`comparison_id` lists in `fixed_failure_packet_ids`. When both
+`eval_result_id` and `comparison_id` are given, the eval result must be the
+comparison's `candidate_eval_result_id`, or the request returns 400. The
+rationale names the judged version by label and id (the comparison's candidate
+version, else the eval result's run version) and the packets it ignored as
+fixed.
 
 ```text
 GET  /api/projects/{project_id}/gate-decisions
@@ -494,6 +497,12 @@ selected input shape in `setup_context` using `test_shape:{value}`, where value
 is one of `single_turn`, `conversation`, or `trace_replay`. This keeps the API
 model stable while letting the UI distinguish isolated prompts, conversation
 turns, and future trace-replay starts.
+
+A run sends the agent the scenario's setup context followed by its `input`.
+Exact tag lines the platform writes (`test_shape:{value}` and
+`origin:outcome_draft`) are left out, and a scenario with no other setup context
+sends `input` alone. The run's `input` field records the full text the agent
+received.
 
 ```text
 GET    /api/projects/{project_id}/scenarios

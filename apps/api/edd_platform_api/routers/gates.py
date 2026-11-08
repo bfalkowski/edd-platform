@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from edd_platform_api import main as api_main
 from edd_platform_api.lookups import (
     get_agent_design_or_404,
+    get_agent_version_or_404,
     get_comparison_or_404,
     get_eval_result_or_404,
     get_gate_decision_or_404,
@@ -84,6 +85,14 @@ def create_gate_decision_record(
                 status_code=400,
                 detail="Gate decision comparison must belong to the same agent design.",
             )
+        if (
+            payload.eval_result_id is not None
+            and comparison.candidate_eval_result_id != payload.eval_result_id
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Gate decision eval result must be the comparison's candidate eval result.",
+            )
         evidence_artifact_ids.extend(comparison.artifact_ids)
         fixed_failure_packet_ids = comparison.fixed_failure_packet_ids
         judged_version_id = comparison.candidate_version_id or judged_version_id
@@ -115,11 +124,13 @@ def create_gate_decision_record(
     evidence_artifact_ids = sorted(set(evidence_artifact_ids))
     passed = not missing_artifact_types and not blocking_failure_packet_ids
     decision_value: Literal["passed", "blocked"] = "passed" if passed else "blocked"
-    rationale_parts = [
-        f"Judged version {judged_version_id}."
-        if judged_version_id
-        else "Judged the agent design (no version referenced)."
-    ]
+    if judged_version_id:
+        judged_version = get_agent_version_or_404(project_id, judged_version_id)
+        rationale_parts = [
+            f"Judged version {judged_version.version_label} ({judged_version_id})."
+        ]
+    else:
+        rationale_parts = ["Judged the agent design (no version referenced)."]
     if ignored_failure_packet_ids:
         rationale_parts.append(
             f"Ignored as fixed by {payload.comparison_id}: "
