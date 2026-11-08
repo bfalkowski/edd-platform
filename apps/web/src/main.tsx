@@ -1271,8 +1271,11 @@ function App() {
                 </div>
               </div>
 
-              {/* The other tabs render the shared error text themselves. */}
-              {error && (workspaceTab === "evidence" || workspaceTab === "readiness") ? (
+              {/* The other tabs, the tools panel and the scenario editor render the shared error text themselves. */}
+              {error &&
+              (workspaceTab === "evidence" || workspaceTab === "readiness") &&
+              !toolsPanelOpen &&
+              !scenarioEditorOpen ? (
                 <p className="error-text">{error}</p>
               ) : null}
 
