@@ -97,6 +97,16 @@ def test_live_run_without_a_model_uses_the_default(monkeypatch) -> None:
     assert run["model"] == edd_runner.DEFAULT_ANTHROPIC_MODEL
 
 
+def test_direct_config_and_env_config_share_one_default_model(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("EDD_ANTHROPIC_MODEL", raising=False)
+
+    direct = edd_runner.AnthropicRunnerConfig(api_key="test-key")
+    from_env = edd_runner.anthropic_config_from_env()
+
+    assert direct.model == from_env.model == edd_runner.DEFAULT_ANTHROPIC_MODEL
+
+
 def test_mock_run_records_no_model() -> None:
     client = TestClient(app)
     agent, scenario = create_agent_and_scenario(client)
