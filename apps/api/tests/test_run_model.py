@@ -1,4 +1,6 @@
+import sys
 import time
+import types
 from datetime import datetime
 
 from fastapi.testclient import TestClient
@@ -140,3 +142,42 @@ def test_models_route_default_follows_env_override(monkeypatch) -> None:
     catalog = client.get("/api/models").json()
     assert catalog["default_model"] == "claude-custom-model"
     assert catalog["models"][0] == {"id": "claude-custom-model", "label": "claude-custom-model"}
+
+
+def test_tool_path_run_records_langchain_reported_model(monkeypatch) -> None:
+    client = TestClient(app)
+    agent, scenario = create_agent_and_scenario(client)
+    stub_anthropic(monkeypatch, payload_model=None)
+    requested_models = []
+
+    class FakeMessage:
+        type = "ai"
+        content = "Hi."
+        # langchain-anthropic puts the provider's model ID here.
+        response_metadata = {"model_name": "claude-opus-5-5-20261001"}
+
+    class FakeGraph:
+        def invoke(self, _state, config=None):
+            return {"messages": [FakeMessage()]}
+
+    def fake_create_agent(*, model, tools, system_prompt):
+        requested_models.append(model)
+        return FakeGraph()
+
+    fake_agents_module = types.ModuleType("langchain.agents")
+    fake_agents_module.create_agent = fake_create_agent
+    monkeypatch.setitem(sys.modules, "langchain.agents", fake_agents_module)
+    monkeypatch.setattr(edd_runner, "build_langchain_tools", lambda _definitions: [object()])
+
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "mode": "live",
+            "model": "claude-opus-5-5",
+        },
+    ).json()
+
+    assert requested_models == ["anthropic:claude-opus-5-5"]
+    assert run["model"] == "claude-opus-5-5-20261001"
