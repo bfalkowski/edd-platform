@@ -1948,6 +1948,170 @@ def test_gate_decision_blocks_on_open_failure_packet() -> None:
     assert "Blocking failure packets remain" in decision["rationale"]
 
 
+def _fix_loop_for_gate(client: TestClient, name: str) -> dict:
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": name, "intent": "Gather evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": f"{name} scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": f"{name} contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "requires_fixed_phrase",
+                    "type": "output_contains",
+                    "value": "fixed phrase",
+                }
+            ],
+        },
+    ).json()
+    gate = client.post(
+        "/api/projects/project_default/gates",
+        json={
+            "agent_design_id": agent["id"],
+            "name": f"{name} gate",
+            "required_artifact_types": ["EVAL_RESULT"],
+            "blocking_failure_statuses": ["open"],
+        },
+    ).json()
+
+    def version(label: str, instructions: str, parent_id: Optional[str] = None) -> dict:
+        return client.post(
+            f"/api/projects/project_default/agent-designs/{agent['id']}/versions",
+            json={
+                "version_label": label,
+                "parent_version_id": parent_id,
+                "instructions": instructions,
+            },
+        ).json()
+
+    def run_and_evaluate(version_id: str) -> tuple:
+        run = client.post(
+            "/api/projects/project_default/runs",
+            json={
+                "agent_design_id": agent["id"],
+                "agent_version_id": version_id,
+                "scenario_id": scenario["id"],
+                "eval_contract_id": contract["id"],
+            },
+        ).json()
+        eval_result = client.post(
+            f"/api/projects/project_default/runs/{run['id']}/evaluate",
+            json={"judge_mode": "deterministic"},
+        ).json()
+        return run, eval_result
+
+    def compare(baseline_run: dict, candidate_run: dict) -> dict:
+        return client.post(
+            "/api/projects/project_default/comparisons",
+            json={
+                "baseline_run_id": baseline_run["id"],
+                "candidate_run_id": candidate_run["id"],
+                "eval_contract_id": contract["id"],
+            },
+        ).json()
+
+    def packets() -> List[dict]:
+        return client.get(
+            "/api/projects/project_default/failure-packets",
+            params={"agent_design_id": agent["id"]},
+        ).json()
+
+    def decide(**payload: str) -> dict:
+        response = client.post(
+            f"/api/projects/project_default/gates/{gate['id']}/decisions",
+            json=payload,
+        )
+        assert response.status_code == 201
+        return response.json()
+
+    return {
+        "version": version,
+        "run_and_evaluate": run_and_evaluate,
+        "compare": compare,
+        "packets": packets,
+        "decide": decide,
+    }
+
+
+def test_gate_decision_passes_after_comparison_fixes_failure_packet() -> None:
+    loop = _fix_loop_for_gate(TestClient(app), "Fixed Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence and include fixed phrase.", v0["id"])
+    v0_run, v0_eval = loop["run_and_evaluate"](v0["id"])
+    v1_run, v1_eval = loop["run_and_evaluate"](v1["id"])
+    assert v0_eval["passed"] is False
+    assert v1_eval["passed"] is True
+    [v0_packet] = loop["packets"]()
+    comparison = loop["compare"](v0_run, v1_run)
+    assert comparison["fixed_failure_packet_ids"] == [v0_packet["id"]]
+
+    decision = loop["decide"](
+        eval_result_id=v1_eval["id"], comparison_id=comparison["id"]
+    )
+
+    assert decision["decision"] == "passed"
+    assert decision["blocking_failure_packet_ids"] == []
+    assert v1["id"] in decision["rationale"]
+    assert f"Ignored as fixed by {comparison['id']}: {v0_packet['id']}" in decision["rationale"]
+
+
+def test_gate_decision_blocks_when_candidate_still_fails() -> None:
+    loop = _fix_loop_for_gate(TestClient(app), "Still Failing Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence, still no phrase.", v0["id"])
+    v0_run, _ = loop["run_and_evaluate"](v0["id"])
+    v1_run, v1_eval = loop["run_and_evaluate"](v1["id"])
+    assert v1_eval["passed"] is False
+    comparison = loop["compare"](v0_run, v1_run)
+    assert comparison["fixed_failure_packet_ids"] == []
+
+    decision = loop["decide"](
+        eval_result_id=v1_eval["id"], comparison_id=comparison["id"]
+    )
+
+    assert decision["decision"] == "blocked"
+    assert sorted(decision["blocking_failure_packet_ids"]) == sorted(
+        packet["id"] for packet in loop["packets"]()
+    )
+    assert len(decision["blocking_failure_packet_ids"]) == 2
+
+
+def test_gate_decision_blocks_on_unfixed_sibling_version_packet() -> None:
+    loop = _fix_loop_for_gate(TestClient(app), "Sibling Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence and include fixed phrase.", v0["id"])
+    sibling = loop["version"]("v1-alt", "Answer with evidence, other attempt.", v0["id"])
+    v0_run, _ = loop["run_and_evaluate"](v0["id"])
+    v1_run, v1_eval = loop["run_and_evaluate"](v1["id"])
+    _, sibling_eval = loop["run_and_evaluate"](sibling["id"])
+    assert sibling_eval["passed"] is False
+    sibling_packet = next(
+        packet
+        for packet in loop["packets"]()
+        if packet["eval_result_id"] == sibling_eval["id"]
+    )
+    comparison = loop["compare"](v0_run, v1_run)
+
+    decision = loop["decide"](
+        eval_result_id=v1_eval["id"], comparison_id=comparison["id"]
+    )
+
+    assert decision["decision"] == "blocked"
+    assert decision["blocking_failure_packet_ids"] == [sibling_packet["id"]]
+
+
 def test_create_agent_versions_for_baseline_and_candidate() -> None:
     client = TestClient(app)
     create_response = client.post(
