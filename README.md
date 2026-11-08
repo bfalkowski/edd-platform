@@ -363,6 +363,13 @@ python scripts/seed_sentiment_observer_demo.py
 python scripts/seed_customer_triage_demo.py
 ```
 
+The Customer Triage script runs a baseline and a fixed version of a triage
+agent live against Anthropic, has a live judge score both, and prints the agent
+ID, both scores and the comparison. It makes live, billed calls (two runs and
+two judge calls), so the API needs `ANTHROPIC_API_KEY`; without it the script
+stops before creating anything. See
+[`examples/customer-triage`](examples/customer-triage/README.md).
+
 Run the live Anthropic + Langfuse smoke test:
 
 ```bash

@@ -261,7 +261,7 @@ flowchart TB
   Platform["EDD Platform"]
 
   Sentiment["Sentiment Observer<br/>conversation monitoring, escalation-risk detection"]
-  Triage["Customer Triage<br/>support ticket routing, deterministic eval-driven fix loop"]
+  Triage["Customer Triage<br/>support ticket routing, live eval-driven fix loop"]
 
   Platform --> Sentiment
   Platform --> Triage
