@@ -25,12 +25,7 @@ from edd_platform_api.polars_analysis import (
     review_corpus_analysis_from_snapshot,
 )
 from edd_platform_api.tool_adapters import tool_adapter_contract
-from edd_platform_api.seed_data import (
-    APARTMENT_SEARCH_AGENT_INTENT,
-    PREVIOUS_SENTIMENT_OBSERVER_INTENT,
-    SENTIMENT_OBSERVER_INTENT,
-    build_sentiment_observer_tools,
-)
+from edd_platform_api.seed_data import APARTMENT_SEARCH_AGENT_INTENT
 from edd_platform_api.evidence_context import (
     build_deterministic_evidence_summary,
     build_evidence_summary_prompt,
@@ -461,56 +456,6 @@ def upsert_tool_definition_artifact(tool: ToolDefinition, now: datetime) -> Arti
         agent_design_id=None,
         now=now,
     )
-
-
-def seed_sentiment_observer_defaults() -> None:
-    now = seeded_at
-    tools = build_sentiment_observer_tools(default_project.id, now)
-    for tool in tools:
-        existing = _tool_definitions.get(tool.id)
-        seeded_tool = tool if existing is None else tool.model_copy(
-            update={
-                "created_at": existing.created_at,
-                "updated_at": now,
-            }
-        )
-        _tool_definitions[seeded_tool.id] = seeded_tool
-        store.save_record("tool_definitions", seeded_tool.id, seeded_tool)
-        upsert_tool_definition_artifact(seeded_tool, now)
-
-    tool_names = [tool.name for tool in tools]
-    existing_agent = _agent_designs.get("agent_sentiment_observer")
-    if existing_agent is None:
-        agent = AgentDesign(
-            id="agent_sentiment_observer",
-            project_id=default_project.id,
-            name="Sentiment Observer",
-            intent=SENTIMENT_OBSERVER_INTENT,
-            status="designing",
-            allowed_tool_names=tool_names,
-            created_at=now,
-            updated_at=now,
-        )
-    else:
-        allowed_tool_names = list(dict.fromkeys(existing_agent.allowed_tool_names + tool_names))
-        intent = (
-            SENTIMENT_OBSERVER_INTENT
-            if existing_agent.intent == PREVIOUS_SENTIMENT_OBSERVER_INTENT
-            else existing_agent.intent
-        )
-        agent = existing_agent.model_copy(
-            update={
-                "intent": intent,
-                "allowed_tool_names": allowed_tool_names,
-                "updated_at": existing_agent.updated_at,
-            }
-        )
-    _agent_designs[agent.id] = agent
-    store.save_record("agent_designs", agent.id, agent)
-    sync_agent_design_artifact(agent, now)
-
-
-seed_sentiment_observer_defaults()
 
 
 def seed_apartment_search_agent_defaults() -> None:

@@ -39,7 +39,6 @@ import {
   createAgentVersion,
   createEvalContract,
   createScenario,
-  createToolDefinition,
   deleteAgentDesign,
   deleteToolDefinition,
   evaluateArtifact,
@@ -68,8 +67,6 @@ import {
   defaultRubricForTestShape,
   defaultRubricText,
   defaultScenarioInput,
-  defaultToolInputSchema,
-  defaultToolOutputSchema,
   artifactRoleLabel,
   externalRefDetail,
   externalRefLabel,
@@ -77,14 +74,12 @@ import {
   isDefaultRubricText,
   isDefaultTestInput,
   parseArtifactFields,
-  parseJsonObject,
   proofArtifactIds,
   proofRunIds,
   relatedEvidenceLabel,
   testShapeFromSetupContext,
   testShapeInputHelp,
   testShapeInputLabels,
-  toolImplementationKey,
   traceUrlFromArtifact,
   wizardStateFromFlow,
 } from "./helpers";
@@ -164,7 +159,6 @@ function App() {
   const [scenarioEditorOpen, setScenarioEditorOpen] = useState(false);
   const [toolSearch, setToolSearch] = useState("");
   const [toolFilter, setToolFilter] = useState<"all" | "enabled" | "available" | "draft">("all");
-  const [toolComposerOpen, setToolComposerOpen] = useState(false);
   const [scratchPanelOpen, setScratchPanelOpen] = useState(false);
   const [openAgentMenuId, setOpenAgentMenuId] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<AgentDesign | null>(null);
@@ -181,12 +175,6 @@ function App() {
   const [scratchError, setScratchError] = useState<string | null>(null);
   const [scratchArtifact, setScratchArtifact] = useState<ArtifactRecord | null>(null);
   const [scratchTraceUrl, setScratchTraceUrl] = useState<string | null>(null);
-  const [toolName, setToolName] = useState("");
-  const [toolDescription, setToolDescription] = useState("");
-  const [toolInputSchema, setToolInputSchema] = useState(defaultToolInputSchema);
-  const [toolOutputSchema, setToolOutputSchema] = useState(defaultToolOutputSchema);
-  const [toolOutputDescription, setToolOutputDescription] = useState("");
-  const [toolMockResponse, setToolMockResponse] = useState("");
 
   useEffect(() => {
     Promise.all([listProjects(), listServices()])
@@ -855,44 +843,6 @@ function App() {
     }
   }
 
-  async function handleCreateTool(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!project) {
-      return;
-    }
-    setError(null);
-    setUpdatingTools(true);
-    try {
-      const inputSchema = parseJsonObject(toolInputSchema, "Input schema");
-      const outputSchema = toolOutputSchema.trim()
-        ? parseJsonObject(toolOutputSchema, "Output schema")
-        : null;
-      const tool = await createToolDefinition(project.id, {
-        name: toolName.trim(),
-        description: toolDescription.trim(),
-        input_schema: inputSchema,
-        output_schema: outputSchema,
-        output_description: toolOutputDescription.trim(),
-        implementation_kind: "mock",
-        implementation_key: toolImplementationKey(toolName),
-        config_schema: {"type": "object", "properties": {}},
-        mock_response: toolMockResponse.trim() || null,
-      });
-      setTools((items) => [tool, ...items.filter((item) => item.id !== tool.id)]);
-      setToolName("");
-      setToolDescription("");
-      setToolInputSchema(defaultToolInputSchema);
-      setToolOutputSchema(defaultToolOutputSchema);
-      setToolOutputDescription("");
-      setToolMockResponse("");
-      setActivity(`Draft tool created: ${tool.name}.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create tool definition.");
-    } finally {
-      setUpdatingTools(false);
-    }
-  }
-
   async function handleDeleteTool(tool: ToolDefinition) {
     if (!project) {
       return;
@@ -934,11 +884,7 @@ function App() {
       return;
     }
     setScratchActivity(
-      scratchTarget === "url"
-        ? "Calling URL directly."
-        : runMode === "live"
-          ? "Running live ad hoc scenario."
-          : "Running mock ad hoc scenario.",
+      scratchTarget === "url" ? "Calling URL directly." : "Running live ad hoc scenario.",
     );
     setScratchArtifact(null);
     setScratchTraceUrl(null);
@@ -1571,87 +1517,6 @@ function App() {
                 ))}
               </section>
             ) : null}
-            <section className="tool-composer-section">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => setToolComposerOpen((open) => !open)}
-              >
-                {toolComposerOpen ? "Hide new draft" : "New tool draft"}
-              </button>
-              {toolComposerOpen ? (
-                <form className="tool-definition-form" onSubmit={handleCreateTool}>
-                  <div>
-                    <p className="eyebrow">New draft</p>
-                    <h3>Define tool schema</h3>
-                    <p>
-                      Start with the contract: inputs, outputs, and deterministic mock behavior.
-                    </p>
-                  </div>
-                  <label>
-                    Tool name
-                    <input
-                      value={toolName}
-                      onChange={(event) => setToolName(event.target.value)}
-                      placeholder="lookup_ticket"
-                      required
-                    />
-                  </label>
-                  <label>
-                    Description
-                    <textarea
-                      value={toolDescription}
-                      onChange={(event) => setToolDescription(event.target.value)}
-                      placeholder="Look up a support ticket by id."
-                      rows={3}
-                      required
-                    />
-                  </label>
-                  <label>
-                    Input schema
-                    <textarea
-                      className="schema-editor"
-                      value={toolInputSchema}
-                      onChange={(event) => setToolInputSchema(event.target.value)}
-                      rows={10}
-                      spellCheck={false}
-                      required
-                    />
-                  </label>
-                  <label>
-                    Output schema
-                    <textarea
-                      className="schema-editor"
-                      value={toolOutputSchema}
-                      onChange={(event) => setToolOutputSchema(event.target.value)}
-                      rows={8}
-                      spellCheck={false}
-                    />
-                  </label>
-                  <label>
-                    Output description
-                    <input
-                      value={toolOutputDescription}
-                      onChange={(event) => setToolOutputDescription(event.target.value)}
-                      placeholder="Ticket status and summary."
-                      required
-                    />
-                  </label>
-                  <label>
-                    Mock response
-                    <textarea
-                      value={toolMockResponse}
-                      onChange={(event) => setToolMockResponse(event.target.value)}
-                      placeholder="Ticket is open and awaiting customer logs."
-                      rows={3}
-                    />
-                  </label>
-                  <button className="primary-button" type="submit" disabled={updatingTools}>
-                    {updatingTools ? "Creating" : "Create draft"}
-                  </button>
-                </form>
-              ) : null}
-            </section>
           </div>
         </aside>
       ) : null}

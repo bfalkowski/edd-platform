@@ -195,7 +195,7 @@ packages/langfuse-adapter
 
 **Persistence**
 - Project-scoped state through Postgres.
-- Seeded demo data for local walkthroughs (Sentiment Observer, Customer Triage).
+- Seeded demo data for local walkthroughs (Customer Triage).
 
 ## Local Development
 
