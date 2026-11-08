@@ -63,6 +63,7 @@ def create_gate_decision_record(
         else:
             missing_artifact_types.append(artifact_type)
 
+    judged_version_id: Optional[str] = None
     if payload.eval_result_id is not None:
         eval_result = get_eval_result_or_404(project_id, payload.eval_result_id)
         if eval_result.run_id:
@@ -72,8 +73,10 @@ def create_gate_decision_record(
                     status_code=400,
                     detail="Gate decision eval result must belong to the same agent design.",
                 )
+            judged_version_id = run.agent_version_id
         evidence_artifact_ids.extend(eval_result.artifact_ids)
 
+    fixed_failure_packet_ids: List[str] = []
     if payload.comparison_id is not None:
         comparison = get_comparison_or_404(project_id, payload.comparison_id)
         if comparison.agent_design_id != gate.agent_design_id:
@@ -82,13 +85,27 @@ def create_gate_decision_record(
                 detail="Gate decision comparison must belong to the same agent design.",
             )
         evidence_artifact_ids.extend(comparison.artifact_ids)
+        fixed_failure_packet_ids = comparison.fixed_failure_packet_ids
+        judged_version_id = comparison.candidate_version_id or judged_version_id
 
-    blocking_failure_packet_ids = [
-        failure.id
+    # Every open packet for the agent blocks, except the ones the referenced
+    # comparison proved fixed (HLD-007 step 3).
+    agent_blocking_failures = [
+        failure
         for failure in _failure_packets.values()
         if failure.project_id == project_id
         and failure.agent_design_id == gate.agent_design_id
         and failure.status in gate.blocking_failure_statuses
+    ]
+    ignored_failure_packet_ids = [
+        failure.id
+        for failure in agent_blocking_failures
+        if failure.id in fixed_failure_packet_ids
+    ]
+    blocking_failure_packet_ids = [
+        failure.id
+        for failure in agent_blocking_failures
+        if failure.id not in fixed_failure_packet_ids
     ]
     for failure_id in blocking_failure_packet_ids:
         failure_artifact = api_main.find_artifact_by_type_and_artifact_id("FAILURE_PACKET", failure_id)
@@ -98,14 +115,23 @@ def create_gate_decision_record(
     evidence_artifact_ids = sorted(set(evidence_artifact_ids))
     passed = not missing_artifact_types and not blocking_failure_packet_ids
     decision_value: Literal["passed", "blocked"] = "passed" if passed else "blocked"
-    rationale_parts = []
+    rationale_parts = [
+        f"Judged version {judged_version_id}."
+        if judged_version_id
+        else "Judged the agent design (no version referenced)."
+    ]
+    if ignored_failure_packet_ids:
+        rationale_parts.append(
+            f"Ignored as fixed by {payload.comparison_id}: "
+            f"{', '.join(ignored_failure_packet_ids)}."
+        )
     if missing_artifact_types:
         rationale_parts.append(f"Missing required artifacts: {', '.join(missing_artifact_types)}.")
     if blocking_failure_packet_ids:
         rationale_parts.append(
             f"Blocking failure packets remain: {', '.join(blocking_failure_packet_ids)}."
         )
-    if not rationale_parts:
+    if passed:
         rationale_parts.append("Required evidence is present and no blocking failures remain.")
     decision = GateDecision(
         id=f"gate_decision_{uuid4().hex[:12]}",

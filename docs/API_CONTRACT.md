@@ -323,6 +323,12 @@ updated_at
 Gate decisions evaluate a gate against current evidence and create a durable
 readiness artifact.
 
+Every failure packet for the agent whose status is in the gate's
+`blocking_failure_statuses` blocks, except the packets that the referenced
+`comparison_id` lists in `fixed_failure_packet_ids`. The rationale names the
+judged version (the comparison's candidate version, else the eval result's run
+version) and the packets it ignored as fixed.
+
 ```text
 GET  /api/projects/{project_id}/gate-decisions
 POST /api/projects/{project_id}/gates/{gate_id}/decisions
