@@ -130,11 +130,13 @@ test("Run all tests on v0 and v1, then compare them per test, before and after a
   await page.getByRole("tab", { name: "Readiness" }).click();
   await expect(page.getByText(stale)).toBeVisible();
   await expect(page.getByRole("button", { name: "Run again" })).toBeDisabled();
+  await expect(page.getByText("Decided before the latest results.", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Proof loop" }).click();
   await page.getByRole("button", { name: "Compare all tests" }).click();
   await expect(page.getByText(stale)).toHaveCount(0);
   await page.getByRole("tab", { name: "Readiness" }).click();
   await expect(page.getByRole("button", { name: "Run again" })).toBeEnabled();
+  await expect(page.getByText("Decided before the latest results.", { exact: false })).toHaveCount(0);
 });
 
 test("A test that passed on v0 and fails on v1 is marked as a regression and blocks the gate", async ({
