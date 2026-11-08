@@ -124,6 +124,7 @@ function App() {
   const [reviewRunPrompt, setReviewRunPrompt] = useState<{
     artifactId: string;
     systemPrompt: string | null;
+    loadError: string | null;
   } | null>(null);
   const initialProofLoopCtx: ProofLoopCtx = {
     judgeOutputText: null,
@@ -338,10 +339,8 @@ function App() {
   const reviewTraceUrl = reviewArtifact ? traceUrlFromArtifact(reviewArtifact) : null;
   const reviewFields = reviewArtifact ? parseArtifactFields(reviewArtifact.body) : [];
   const reviewExternalRefs = reviewArtifact?.external_refs ?? [];
-  const reviewSystemPrompt =
-    reviewArtifact && reviewRunPrompt?.artifactId === reviewArtifact.id
-      ? reviewRunPrompt.systemPrompt
-      : null;
+  const reviewPrompt =
+    reviewArtifact && reviewRunPrompt?.artifactId === reviewArtifact.id ? reviewRunPrompt : null;
   const generatedVersionArtifact = selectedGeneratedDesign
     ? artifactByRecordKey.get(`AGENT_VERSION:${selectedGeneratedDesign.version.id}`)
     : undefined;
@@ -1033,15 +1032,20 @@ function App() {
       ]);
       // A run output artifact records its run's id as artifact_id. The system
       // prompt lives on the run, not in the artifact body that evals read.
-      // Ad hoc and Call URL results have no run record, so a failed lookup
-      // means no prompt to show, not a panel that won't open.
-      const run =
-        artifact.artifact_type === "RUN_RESULT"
-          ? await loadRun(project.id, artifact.artifact_id).catch(() => null)
-          : null;
+      // Ad hoc and Call URL results have no run record: loadRun returns null.
+      // Any other failure still opens the panel, and says the prompt is unknown.
+      let systemPrompt: string | null = null;
+      let loadError: string | null = null;
+      if (artifact.artifact_type === "RUN_RESULT") {
+        try {
+          systemPrompt = (await loadRun(project.id, artifact.artifact_id))?.system_prompt ?? null;
+        } catch (err) {
+          loadError = err instanceof Error ? err.message : "Unable to load run.";
+        }
+      }
       setReviewArtifact(artifact);
       setReviewLinks(links);
-      setReviewRunPrompt({ artifactId: artifact.id, systemPrompt: run?.system_prompt ?? null });
+      setReviewRunPrompt({ artifactId: artifact.id, systemPrompt, loadError });
       setToolsPanelOpen(false);
       setScratchPanelOpen(false);
       setScenarioEditorOpen(false);
@@ -1790,10 +1794,14 @@ function App() {
                 </a>
               ) : null}
             </section>
-            {reviewSystemPrompt ? (
+            {reviewPrompt?.systemPrompt || reviewPrompt?.loadError ? (
               <section aria-labelledby="review-system-prompt-heading">
                 <h3 id="review-system-prompt-heading">System prompt</h3>
-                <pre className="agent-output">{reviewSystemPrompt}</pre>
+                {reviewPrompt.systemPrompt ? (
+                  <pre className="agent-output">{reviewPrompt.systemPrompt}</pre>
+                ) : (
+                  <p className="error-text">Could not load the system prompt: {reviewPrompt.loadError}</p>
+                )}
               </section>
             ) : null}
             {reviewExternalRefs.length > 0 ? (

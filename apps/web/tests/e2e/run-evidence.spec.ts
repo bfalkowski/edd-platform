@@ -233,3 +233,22 @@ test("An ad hoc run result, which has no run record, still opens in the review p
   await expect(review.getByText("Run output", { exact: true })).toBeVisible();
   await expect(review.getByRole("heading", { name: "System prompt" })).toHaveCount(0);
 });
+
+test("A run lookup that fails for a reason other than 404 says the prompt could not load", async ({
+  page,
+  request,
+}) => {
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+  await openAgent(page, agent.name);
+  await page.route(/\/runs\/[^/?]+$/, (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: '{"detail":"Boom."}' }),
+  );
+
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await page.locator(".workflow-evidence-item", { hasText: "Run output" }).click();
+  const prompt = page
+    .getByRole("complementary", { name: "Artifact review" })
+    .getByRole("region", { name: "System prompt" });
+  await expect(prompt).toContainText("Could not load the system prompt: Boom. (HTTP 500)");
+  await expect(prompt.locator("pre")).toHaveCount(0);
+});
