@@ -67,7 +67,7 @@ Expected result:
 
 *Human decision: Does the rubric capture what you actually care about?*
 
-Click **Looks right — run it**.
+Click **Looks right — save agent**.
 
 Expected result:
 
@@ -89,7 +89,8 @@ Expected result:
 Open the Langfuse trace to see what the agent actually did — tool calls,
 message sequence, token counts, latency.
 
-- If the answer **passed** → the wizard shows a done state. No fix needed.
+- If the answer **passed** → the wizard shows a done state. No fix needed, but
+  one passing test is not proof: it suggests adding more tests in the Proof loop.
 - If the answer **failed** → the wizard advances to Step 3.
 
 ---
