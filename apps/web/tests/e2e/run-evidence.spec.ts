@@ -252,3 +252,64 @@ test("A run lookup that fails for a reason other than 404 says the prompt could 
   await expect(prompt).toContainText("Could not load the system prompt: Boom. (HTTP 500)");
   await expect(prompt.locator("pre")).toHaveCount(0);
 });
+
+test("Evidence tab shows the error when an artifact fails to load", async ({ page, request }) => {
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  // Fail only the artifact GET, not its /links call.
+  await page.route(/\/artifacts\/[^/?]+$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 500, body: "Internal Server Error" })
+      : route.continue(),
+  );
+  await evidenceRows(page, "Run output").click();
+
+  await expect(page.getByText("Unable to load artifact. (HTTP 500)")).toBeVisible();
+  await expect(page.locator(".review-panel")).toHaveCount(0);
+});
+
+test("An artifact load error shows once when the tools panel is open on the Evidence tab", async ({
+  page,
+  request,
+}) => {
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page.getByRole("button", { name: "Manage tools" }).click();
+  await expect(page.getByRole("complementary", { name: "Tool marketplace" })).toBeVisible();
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await page.route(/\/artifacts\/[^/?]+$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 500, body: "Internal Server Error" })
+      : route.continue(),
+  );
+  await evidenceRows(page, "Run output").click();
+
+  await expect(page.getByText("Unable to load artifact. (HTTP 500)")).toHaveCount(1);
+  await expect(
+    page.getByRole("complementary", { name: "Tool marketplace" }).getByText("Unable to load artifact. (HTTP 500)"),
+  ).toBeVisible();
+});
+
+test("Readiness tab shows the error when creating a gate fails, and clears it on tab switch", async ({
+  page,
+  request,
+}) => {
+  const agent = await seedAgent(request, { live: 0, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: "Readiness" }).click();
+  await page.route(/\/gates$/, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 500, json: { detail: "Gate store unavailable" } })
+      : route.continue(),
+  );
+  await page.getByRole("button", { name: "Create gate" }).click();
+  await expect(page.getByText("Gate store unavailable (HTTP 500)")).toBeVisible();
+
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await expect(page.locator(".error-text")).toHaveCount(0);
+});
