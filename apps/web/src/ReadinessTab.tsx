@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createGateDecision, createGateDefinition } from "./api";
-import type { AgentDesign, EddFlowState, GateDecision, GateDefinition } from "./types";
+import { SuiteComparisonTable } from "./SuiteComparisonTable";
+import type { AgentDesign, EddFlowState, GateDecision, GateDefinition, SavedTest } from "./types";
 
 type ReadinessTabProps = {
   projectId: string;
@@ -8,6 +9,7 @@ type ReadinessTabProps = {
   latestGate: GateDefinition | null;
   latestGateDecision: GateDecision | null;
   eddFlow: EddFlowState;
+  savedTests: SavedTest[];
   setGates: (updater: (items: GateDefinition[]) => GateDefinition[]) => void;
   setGateDecisions: (updater: (items: GateDecision[]) => GateDecision[]) => void;
   setError: (message: string | null) => void;
@@ -22,6 +24,7 @@ export function ReadinessTab({
   latestGate,
   latestGateDecision,
   eddFlow,
+  savedTests,
   setGates,
   setGateDecisions,
   setError,
@@ -48,18 +51,29 @@ export function ReadinessTab({
     }
   }
 
+  // A suite comparison judges every test, so the gate uses it when there is one.
+  const suiteComparison = eddFlow.suiteComparison;
+  const suiteRows = suiteComparison?.tests ?? [];
+  const gateEvidence = suiteComparison
+    ? {
+        comparison_id: suiteComparison.id,
+        eval_result_id: (
+          suiteRows.find((row) => row.scenario_id === eddFlow.scenario?.id) ?? suiteRows[0]
+        ).candidate_eval_result_id,
+      }
+    : eddFlow.candidateEval && eddFlow.comparison
+      ? { comparison_id: eddFlow.comparison.id, eval_result_id: eddFlow.candidateEval.id }
+      : null;
+
   async function handleRunPromotionGate() {
-    if (!latestGate || !eddFlow.candidateEval || !eddFlow.comparison) {
+    if (!latestGate || !gateEvidence) {
       return;
     }
     setError(null);
     setActivity("Running promotion gate.");
     setIsGateBusy(true);
     try {
-      const decision = await createGateDecision(projectId, latestGate.id, {
-        eval_result_id: eddFlow.candidateEval.id,
-        comparison_id: eddFlow.comparison.id,
-      });
+      const decision = await createGateDecision(projectId, latestGate.id, gateEvidence);
       setGateDecisions((items) => [decision, ...items]);
       setActivity("Promotion readiness recorded.");
       await refreshReadiness();
@@ -107,11 +121,19 @@ export function ReadinessTab({
           className="secondary-button"
           type="button"
           onClick={handleRunPromotionGate}
-          disabled={isGateBusy || !eddFlow.candidateEval || !eddFlow.comparison}
+          disabled={isGateBusy || !gateEvidence}
         >
           {latestGateDecision ? "Run again" : "Run gate"}
         </button>
       )}
+      {suiteComparison && eddFlow.baselineVersion && eddFlow.candidateVersion ? (
+        <SuiteComparisonTable
+          comparison={suiteComparison}
+          savedTests={savedTests}
+          baselineLabel={eddFlow.baselineVersion.version_label}
+          candidateLabel={eddFlow.candidateVersion.version_label}
+        />
+      ) : null}
     </section>
   );
 }

@@ -1,16 +1,22 @@
+import { useEffect, useState } from "react";
 import {
   createAgentVersion,
   createComparison,
   createFixProposal,
   createProjectRun,
   createReviewNote,
+  createSuiteComparison,
   diagnoseFailure,
   evaluateRun,
   generateFixProposal,
+  getSuiteResult,
   listFailurePackets,
+  runSuite,
 } from "./api";
 import { checkLabel } from "./checkLabel";
 import { proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
+import { suiteIsComplete, suiteTestResult } from "./suite";
+import { SuiteComparisonTable } from "./SuiteComparisonTable";
 import { failurePacketsForEval, renderScenarioInput, testShapeFromSetupContext, testShapeLabels } from "./helpers";
 import type {
   AgentDesign,
@@ -22,6 +28,7 @@ import type {
   GeneratedToolState,
   ProofLoopCtx,
   SavedTest,
+  SuiteResult,
 } from "./types";
 
 const runMode = "live" as const;
@@ -141,6 +148,100 @@ export function ProofLoopTab({
     generatedInstructions,
     generatedRationale,
   } = proofLoopCtx;
+
+  // Each loop version's latest result on every test, read from saved runs.
+  const [suiteResults, setSuiteResults] = useState<Record<string, SuiteResult>>({});
+  const [suiteVersionId, setSuiteVersionId] = useState<string | null>(null);
+  const suiteVersions = [eddFlow.baselineVersion, eddFlow.candidateVersion].filter(
+    (version): version is NonNullable<typeof version> => Boolean(version),
+  );
+  const suiteVersion =
+    suiteVersions.find((version) => version.id === suiteVersionId) ??
+    eddFlow.candidateVersion ??
+    eddFlow.baselineVersion;
+  const suiteVersionKey = suiteVersions.map((version) => version.id).join(",");
+  const selectedSuite = suiteVersion ? suiteResults[suiteVersion.id] : undefined;
+  const suiteJudgeMode = savedTests.some((test) =>
+    test.contract.checks.some((check) => check.type === "rubric_judge"),
+  )
+    ? "live"
+    : "deterministic";
+  const canCompareSuite = Boolean(
+    eddFlow.baselineVersion &&
+      eddFlow.candidateVersion &&
+      suiteIsComplete(suiteResults[eddFlow.baselineVersion.id]) &&
+      suiteIsComplete(suiteResults[eddFlow.candidateVersion.id]),
+  );
+
+  // savedTests is reloaded after every run and check, so this keeps the results current.
+  useEffect(() => {
+    let isCurrent = true;
+    setSuiteResults({});
+    if (savedTests.length === 0) {
+      return;
+    }
+    Promise.all(
+      suiteVersions.map((version) => getSuiteResult(projectId, selectedAgent.id, version.id)),
+    )
+      .then((results) => {
+        if (isCurrent) {
+          setSuiteResults(
+            Object.fromEntries(results.map((result) => [result.agent_version_id, result])),
+          );
+        }
+      })
+      .catch((err: Error) => setError(err.message));
+    return () => {
+      isCurrent = false;
+    };
+    // suiteVersionKey stands for suiteVersions, which is a new array on every render.
+  }, [projectId, selectedAgent.id, suiteVersionKey, savedTests]);
+
+  async function handleRunSuite() {
+    if (!suiteVersion) {
+      return;
+    }
+    setError(null);
+    setActivity(`Running all ${savedTests.length} tests on ${suiteVersion.version_label}.`);
+    setIsFlowBusy(true);
+    try {
+      const result = await runSuite(projectId, selectedAgent.id, suiteVersion.id, suiteJudgeMode);
+      setSuiteResults((results) => ({ ...results, [result.agent_version_id]: result }));
+      setActivity(
+        `${suiteVersion.version_label} passed ${result.passed} of ${result.total} tests.`,
+      );
+      await refreshContext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to run all tests.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
+
+  async function handleCompareSuite() {
+    if (!eddFlow.baselineVersion || !eddFlow.candidateVersion) {
+      return;
+    }
+    setError(null);
+    setActivity("Comparing versions on all tests.");
+    setIsFlowBusy(true);
+    try {
+      const suiteComparison = await createSuiteComparison(
+        projectId,
+        eddFlow.baselineVersion.id,
+        eddFlow.candidateVersion.id,
+      );
+      setEddFlow((flow) => ({ ...flow, suiteComparison }));
+      setActivity(suiteComparison.summary);
+      await refreshContext();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to compare versions.");
+      setActivity(null);
+    } finally {
+      setIsFlowBusy(false);
+    }
+  }
 
   async function reviewFirstArtifact(artifactIds: string[]) {
     if (artifactIds[0]) {
@@ -729,10 +830,62 @@ export function ProofLoopTab({
         </div>
       ) : null}
       <div className="proof-scenario-card">
+        {savedTests.length > 0 && suiteVersion ? (
+          <div className="suite-bar">
+            {suiteVersions.length > 1 ? (
+              <div className="run-mode-control" role="group" aria-label="Version">
+                {suiteVersions.map((version) => (
+                  <button
+                    key={version.id}
+                    className={version.id === suiteVersion.id ? "mode-option active" : "mode-option"}
+                    type="button"
+                    aria-pressed={version.id === suiteVersion.id}
+                    onClick={() => setSuiteVersionId(version.id)}
+                  >
+                    {version.version_label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <strong>{suiteVersion.version_label}</strong>
+            )}
+            <span className="suite-pass-count">
+              {selectedSuite
+                ? `${selectedSuite.passed} of ${selectedSuite.total} passed`
+                : `${savedTests.length} tests`}
+            </span>
+            <div className="suite-bar-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={handleRunSuite}
+                disabled={isFlowBusy}
+              >
+                Run all tests
+              </button>
+              {eddFlow.baselineVersion && eddFlow.candidateVersion ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={handleCompareSuite}
+                  disabled={isFlowBusy || !canCompareSuite}
+                  title={
+                    canCompareSuite
+                      ? undefined
+                      : `Run all tests on ${eddFlow.baselineVersion.version_label} and ${eddFlow.candidateVersion.version_label} first.`
+                  }
+                >
+                  Compare all tests
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         {savedTests.length > 0 ? (
           <ul className="saved-test-list" aria-label="Saved tests">
             {savedTests.map((test) => {
               const isSelected = test.scenario.id === eddFlow.scenario?.id;
+              const result = suiteTestResult(selectedSuite, test.scenario.id) ?? test.latestResult;
               return (
                 <li key={test.scenario.id}>
                   <button
@@ -746,8 +899,8 @@ export function ProofLoopTab({
                     <span className="scenario-shape-pill">
                       {testShapeLabels[testShapeFromSetupContext(test.scenario.setup_context)]}
                     </span>
-                    <span className={`saved-test-result ${test.latestResult}`}>
-                      {savedTestResultLabels[test.latestResult]}
+                    <span className={`saved-test-result ${result}`}>
+                      {savedTestResultLabels[result]}
                     </span>
                   </button>
                 </li>
@@ -817,6 +970,14 @@ export function ProofLoopTab({
           ) : null}
         </div>
       </div>
+      {eddFlow.suiteComparison && eddFlow.baselineVersion && eddFlow.candidateVersion ? (
+        <SuiteComparisonTable
+          comparison={eddFlow.suiteComparison}
+          savedTests={savedTests}
+          baselineLabel={eddFlow.baselineVersion.version_label}
+          candidateLabel={eddFlow.candidateVersion.version_label}
+        />
+      ) : null}
       {showNextActionPanel ? (
         <div className="next-action-panel">
           <div>
