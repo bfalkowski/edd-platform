@@ -4080,6 +4080,32 @@ def test_wizard_state_without_baseline_returns_404() -> None:
     )
 
 
+def test_scenario_status_must_be_draft_active_or_superseded() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Status Agent", "intent": "Answer billing questions."},
+    ).json()["agent"]
+
+    typo = client.post(
+        "/api/projects/project_default/scenarios",
+        json={"agent_design_id": agent["id"], "input": "Refund my order", "status": "actve"},
+    )
+    assert typo.status_code == 422
+
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={"agent_design_id": agent["id"], "input": "Refund my order", "status": "active"},
+    ).json()
+    patched = client.patch(
+        f"/api/projects/project_default/scenarios/{scenario['id']}",
+        json={"status": "archived"},
+    )
+    assert patched.status_code == 422
+    stored = client.get(f"/api/projects/project_default/scenarios/{scenario['id']}").json()
+    assert stored["status"] == "active"
+
+
 def test_scenario_name_defaults_to_start_of_input_and_can_be_patched() -> None:
     client = TestClient(app)
     agent = client.post(

@@ -9,6 +9,7 @@ import { EvidenceTab } from "./EvidenceTab";
 import { ReadinessTab } from "./ReadinessTab";
 import { ErrorAnalysisTab } from "./ErrorAnalysisTab";
 import { ProofLoopTab } from "./ProofLoopTab";
+import { saveTestRevision } from "./saveTestRevision";
 import type {
   AgentDesign,
   AgentSuggestion,
@@ -1078,28 +1079,22 @@ function App() {
           instructions: selectedAgent.intent,
           status: "baseline",
         }));
-      const scenario = await createScenario(
-        project.id,
-        selectedAgent.id,
-        scenarioInput.trim(),
-        testShape,
-        testName.trim(),
-      );
-      const contract = await createEvalContract(
-        project.id,
-        selectedAgent.id,
-        scenario.id,
-        {
-          method: evalMethod,
-          requiredPhrase: requiredPhrase.trim(),
-          requiredToolName,
-          rubric: rubricText.trim(),
-        },
-      );
       // Saving an edit keeps the old revision (and its runs) but takes it out of the test list.
-      if (scenarioEditorMode === "edit" && eddFlow.scenario) {
-        await updateScenario(project.id, eddFlow.scenario.id, { status: "superseded" });
-      }
+      const { scenario, contract } = await saveTestRevision(
+        {
+          createScenario: () =>
+            createScenario(project.id, selectedAgent.id, scenarioInput.trim(), testShape, testName.trim()),
+          createContract: (scenarioId) =>
+            createEvalContract(project.id, selectedAgent.id, scenarioId, {
+              method: evalMethod,
+              requiredPhrase: requiredPhrase.trim(),
+              requiredToolName,
+              rubric: rubricText.trim(),
+            }),
+          setScenarioStatus: (scenarioId, status) => updateScenario(project.id, scenarioId, { status }),
+        },
+        scenarioEditorMode === "edit" ? eddFlow.scenario?.id : undefined,
+      );
       setEddFlow({ baselineVersion, scenario, contract, failurePackets: [] });
       resetProofLoopCtx();
       setActivity("Test is ready. Run the current version next.");
