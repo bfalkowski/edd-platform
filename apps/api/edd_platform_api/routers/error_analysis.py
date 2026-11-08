@@ -460,7 +460,7 @@ def create_discovery_finding_artifact(
         artifact_id=annotation.id,
         title=f"Discovery finding: {item.title}",
         body=(
-            f"Review item\n{item.title}\n\n"
+            f"Review item\n{item.title} ({item.id}, corpus {item.corpus_id})\n\n"
             f"Finding\n{annotation.body}\n\n"
             f"Failure mode\n{failure_mode.name if failure_mode else 'None'}\n\n"
             f"Source\n{item.source_kind}: {item.source_id}"
@@ -1520,10 +1520,8 @@ def promote_review_annotation(
                 agent_design_id=item.agent_design_id,
                 name=f"Discovery case: {item.title}",
                 input=item.content or annotation.body,
-                setup_context=(
-                    f"Promoted from review item {item.id} in corpus {item.corpus_id}.\n\n"
-                    f"Original source: {item.source_kind} {item.source_id}."
-                ),
+                # Provenance lives on the finding artifact in fixture_refs, not
+                # in setup_context, which is sent to the agent on every run.
                 fixture_refs=[finding_artifact.id],
                 status="active",
             ),
