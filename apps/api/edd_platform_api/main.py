@@ -9,9 +9,10 @@ from dotenv import find_dotenv, load_dotenv
 
 def load_env_files() -> None:
     # find_dotenv walks up parent folders, so from a worktree under
-    # .worktrees/ it finds the main checkout's .env.local. E2E runs set
-    # EDD_PLATFORM_E2E=1 so their stub env is never replaced by real keys.
-    if os.environ.get("EDD_PLATFORM_E2E") == "1":
+    # .worktrees/ it finds the main checkout's .env.local. E2E and pytest runs
+    # set EDD_PLATFORM_SKIP_ENV_FILES=1 so their stub env is never replaced by
+    # real keys.
+    if os.environ.get("EDD_PLATFORM_SKIP_ENV_FILES") == "1":
         return
     load_dotenv(find_dotenv(raise_error_if_not_found=False))
     load_dotenv(find_dotenv(".env.local", raise_error_if_not_found=False), override=True)

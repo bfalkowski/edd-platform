@@ -32,7 +32,7 @@ export default defineConfig({
       env: {
         EDD_PLATFORM_STORAGE_BACKEND: "memory",
         // Skip .env files, which from a worktree would be the main checkout's.
-        EDD_PLATFORM_E2E: "1",
+        EDD_PLATFORM_SKIP_ENV_FILES: "1",
         // Live runs go to the local stub, never a real provider.
         ANTHROPIC_API_KEY: "e2e-stub-key",
         ANTHROPIC_BASE_URL: `http://127.0.0.1:${STUB_ANTHROPIC_PORT}`,
