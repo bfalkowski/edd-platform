@@ -161,7 +161,7 @@ export function ProofLoopTab({
     suiteVersions.find((version) => version.id === suiteVersionId) ??
     eddFlow.candidateVersion ??
     eddFlow.baselineVersion;
-  const [suiteResults, setSuiteResult] = useSuiteResults(
+  const [suiteResults, setSuiteResult, clearRunError] = useSuiteResults(
     projectId,
     selectedAgent.id,
     suiteVersions,
@@ -255,6 +255,7 @@ export function ProofLoopTab({
       return;
     }
     setError(null);
+    clearRunError(eddFlow.baselineVersion.id, eddFlow.scenario.id);
     setActivity(`Running ${eddFlow.baselineVersion.version_label}.`);
     setIsFlowBusy(true);
     try {
@@ -282,6 +283,7 @@ export function ProofLoopTab({
       return;
     }
     setError(null);
+    clearRunError(eddFlow.baselineRun.agent_version_id, eddFlow.baselineRun.scenario_id);
     setActivity("Checking the current answer.");
     setIsFlowBusy(true);
     try {
@@ -469,6 +471,7 @@ export function ProofLoopTab({
       return;
     }
     setError(null);
+    clearRunError(eddFlow.candidateVersion.id, eddFlow.scenario.id);
     setActivity(`Running ${eddFlow.candidateVersion.version_label}.`);
     setIsFlowBusy(true);
     try {
@@ -496,6 +499,7 @@ export function ProofLoopTab({
       return;
     }
     setError(null);
+    clearRunError(eddFlow.candidateRun.agent_version_id, eddFlow.candidateRun.scenario_id);
     setActivity("Checking the new answer.");
     setIsFlowBusy(true);
     try {

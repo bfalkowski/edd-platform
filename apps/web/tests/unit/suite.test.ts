@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  dropRunError,
   keepRunErrors,
   suiteComparisonIsCurrent,
   suiteIsComplete,
@@ -92,5 +93,22 @@ test("a run error stays after a reload of the suite result until that test gets 
   assert.deepEqual(
     keepRunErrors(undefined, suite([null])).tests.map((test) => test.error ?? null),
     [null],
+  );
+});
+
+test("a single-test run or check drops that test's suite-run error only", () => {
+  const run = suite([null, false]);
+  run.tests[0] = { ...run.tests[0], error: "Provider timed out." };
+  run.tests[1] = { ...run.tests[1], error: "Judge timed out." };
+
+  const dropped = dropRunError(run, "scenario_0");
+  assert.deepEqual(
+    dropped.tests.map((test) => test.error ?? null),
+    [null, "Judge timed out."],
+  );
+  // A reload of the saved result does not bring the dropped error back.
+  assert.deepEqual(
+    keepRunErrors(dropped, suite([null, false])).tests.map((test) => test.error ?? null),
+    [null, "Judge timed out."],
   );
 });
