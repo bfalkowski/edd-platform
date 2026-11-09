@@ -47,7 +47,14 @@ test("Error analysis runs end to end with Langfuse offline", async ({ page, requ
   const intro = page.locator(".error-analysis-intro");
   await expect(intro).toContainText("Start by building a review set of traces and evidence.");
   await expect(intro).toContainText("Create a review set to begin");
+  // Under parallel load the API can take seconds to add the item, so wait on
+  // that response (test timeout) before the message (expect timeout).
+  const itemAdded = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url().endsWith("/review-items"),
+  );
   await page.getByRole("button", { name: "Pull in new runs" }).click();
+  expect((await itemAdded).ok()).toBeTruthy();
   await expect(page.getByText("Added 1 run to the review set.")).toBeVisible();
   await expect(intro.getByRole("heading", { level: 3 })).toHaveText(`${agent.name} review set`);
   await expect(intro.locator(".analysis-scope-card small")).toContainText("review set ·");
