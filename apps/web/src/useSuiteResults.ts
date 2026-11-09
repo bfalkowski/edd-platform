@@ -22,7 +22,12 @@ export function useSuiteResults(
   (versionId: string | null, scenarioId: string) => void,
 ] {
   const [results, setResults] = useState<Record<string, SuiteResult>>({});
-  const versionKey = versions.map((version) => version.id).join(",");
+  // Right after an agent switch the versions can still be the last agent's,
+  // until the new agent's context loads; asking for those would 404.
+  const versionKey = versions
+    .filter((version) => version.agent_design_id === agentId)
+    .map((version) => version.id)
+    .join(",");
 
   useEffect(() => {
     let isCurrent = true;
