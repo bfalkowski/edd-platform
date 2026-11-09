@@ -44,8 +44,15 @@ test("Error analysis runs end to end with Langfuse offline", async ({ page, requ
 
   // 1. Build review set. The stepper uses the same name as the intro box.
   await expect(page.locator(".discovery-step.active")).toHaveText("1Build review set");
+  // The intro and side card say "review set" too, never the old word "corpus".
+  const intro = page.locator(".error-analysis-intro");
+  await expect(intro).toContainText("Start by building a review set of traces and evidence.");
+  await expect(intro).toContainText("Create a review set to begin");
   await page.getByRole("button", { name: "Pull in new runs" }).click();
   await expect(page.getByText("Added 1 run to the review set.")).toBeVisible();
+  await expect(intro.getByRole("heading", { level: 3 })).toHaveText(`${agent.name} review set`);
+  await expect(intro.locator(".analysis-scope-card small")).toContainText("review set ·");
+  await expect(intro).not.toContainText(/corpus/i);
   await page.getByRole("button", { name: "Start reviewing" }).click();
 
   // 2. Review & code: read the run, write a note, name a mode, assign the note.

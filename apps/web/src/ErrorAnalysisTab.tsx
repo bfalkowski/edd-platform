@@ -119,20 +119,20 @@ export function ErrorAnalysisTab({
     if (activeReviewCorpus) {
       return activeReviewCorpus;
     }
-    return createReviewCorpus(projectId, selectedAgent.id, `${selectedAgent.name} review corpus`);
+    return createReviewCorpus(projectId, selectedAgent.id, `${selectedAgent.name} review set`);
   }
 
   async function handleCreateReviewCorpus() {
     setError(null);
-    setActivity("Creating review corpus.");
+    setActivity("Creating review set.");
     setIsDiscoveryBusy(true);
     try {
-      await createReviewCorpus(projectId, selectedAgent.id, `${selectedAgent.name} review corpus`);
+      await createReviewCorpus(projectId, selectedAgent.id, `${selectedAgent.name} review set`);
       await refreshDiscoveryState();
       await refreshContext();
-      setActivity("Review corpus created.");
+      setActivity("Review set created.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create review corpus.");
+      setError(err instanceof Error ? err.message : "Unable to create review set.");
       setActivity(null);
     } finally {
       setIsDiscoveryBusy(false);
@@ -155,7 +155,7 @@ export function ErrorAnalysisTab({
       return;
     }
     setError(null);
-    setActivity("Adding evidence to the review corpus.");
+    setActivity("Adding evidence to the review set.");
     setIsDiscoveryBusy(true);
     try {
       const corpus = await ensureReviewCorpus();
@@ -213,7 +213,7 @@ export function ErrorAnalysisTab({
           : "All live runs are already in the review set.",
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to add evidence to corpus.");
+      setError(err instanceof Error ? err.message : "Unable to add evidence to the review set.");
       setActivity(null);
     } finally {
       setIsDiscoveryBusy(false);
@@ -361,7 +361,7 @@ export function ErrorAnalysisTab({
           <h3>{activeReviewCorpus?.name ?? "Discovery review"}</h3>
           <p>
             {discoveryStep === "corpus"
-              ? "Start by building a corpus of traces and evidence to review."
+              ? "Start by building a review set of traces and evidence."
               : discoveryStep === "review"
                 ? "Step through each item, write a note on what you observe, and tag it with a failure mode."
                 : discoveryStep === "confirm"
@@ -374,8 +374,8 @@ export function ErrorAnalysisTab({
           <strong>{selectedAgent.name}</strong>
           <small>
             {activeReviewCorpus
-              ? `${activeReviewCorpus.source} corpus · ${activeReviewCorpus.status}`
-              : "Create a corpus to begin"}
+              ? `${activeReviewCorpus.source} review set · ${activeReviewCorpus.status}`
+              : "Create a review set to begin"}
           </small>
         </div>
       </div>
