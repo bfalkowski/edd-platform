@@ -164,7 +164,7 @@ export function JudgeReviewPanel({ projectId, agentId, onReviewed }: JudgeReview
               onClick={() =>
                 setShownCounts((current) => ({
                   ...current,
-                  [contract.id]: shownCount(contract.id) + RUN_PAGE_SIZE,
+                  [contract.id]: (current[contract.id] ?? RUN_PAGE_SIZE) + RUN_PAGE_SIZE,
                 }))
               }
             >
