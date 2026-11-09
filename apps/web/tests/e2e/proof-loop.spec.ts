@@ -256,9 +256,9 @@ test("A second test's fix gets its own version, not the first test's", async ({ 
   await expect(nextAction(page).getByRole("button", { name: "Run version", exact: true })).toBeVisible();
 });
 
-test("A saved fix with blank instructions leaves Create version disabled", async ({ page, request }) => {
+test("A saved fix with blank instructions leaves Create version disabled and says why", async ({ page, request }) => {
   const name = await seedAgent(request, true);
-  // A fix saved earlier whose instructions are only whitespace.
+  // A fix saved before the API rejected blank instructions: seeded valid, read back as whitespace.
   const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
     (agent: { name: string }) => agent.name === name,
   ).id;
@@ -269,9 +269,15 @@ test("A saved fix with blank instructions leaves Create version disabled", async
     agent_design_id: agentId,
     title: "Blank fix",
     rationale: "Instructions left blank.",
-    proposed_changes: [{ surface: "instructions", change: "   " }],
+    proposed_changes: [{ surface: "instructions", change: "Give a rollback plan." }],
     addressed_failure_packet_ids: packets.map((packet: { id: string }) => packet.id),
     validation_contract_ids: [contract.id],
+  });
+  await page.route("**/fix-proposals?*", async (route) => {
+    const response = await route.fetch();
+    const fixes = (await response.json()) as { proposed_changes: { change: string }[] }[];
+    for (const fix of fixes) fix.proposed_changes[0].change = "   ";
+    await route.fulfill({ response, json: fixes });
   });
   await openAgent(page, name);
 
@@ -282,6 +288,7 @@ test("A saved fix with blank instructions leaves Create version disabled", async
 
   await expect(nextAction(page).getByRole("heading", { name: "Create the next version" })).toBeVisible();
   await expect(nextAction(page).getByRole("button", { name: "Create version", exact: true })).toBeDisabled();
+  await expect(nextAction(page)).toContainText("The saved fix has no instructions.");
 });
 
 test("A test sharing a default contract does not inherit another test's failure or fix", async ({ page, request }) => {

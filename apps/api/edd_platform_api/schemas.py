@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Dict, List, Literal, Optional, get_args
 
@@ -906,6 +907,21 @@ class DiscoveryPromotionResult(BaseModel):
     artifact_ids: List[str]
 
 
+def _reject_blank_instructions_change(
+    changes: Optional[List[Dict[str, object]]],
+) -> Optional[List[Dict[str, object]]]:
+    # An instructions change becomes the next version's system prompt, so it must not be blank.
+    for change in changes or []:
+        text = change.get("change")
+        if (
+            change.get("surface") == "instructions"
+            and isinstance(text, str)
+            and not re.search(VISIBLE_TEXT, text)
+        ):
+            raise ValueError("An instructions change must contain a visible character.")
+    return changes
+
+
 class FixProposalCreate(BaseModel):
     agent_design_id: str = Field(min_length=1)
     target_version_id: Optional[str] = None
@@ -916,6 +932,10 @@ class FixProposalCreate(BaseModel):
     validation_contract_ids: List[str] = Field(default_factory=list)
     status: str = "proposed"
 
+    _proposed_changes = field_validator("proposed_changes")(
+        _reject_blank_instructions_change
+    )
+
 
 class FixProposalUpdate(BaseModel):
     title: Optional[str] = None
@@ -924,6 +944,10 @@ class FixProposalUpdate(BaseModel):
     addressed_failure_packet_ids: Optional[List[str]] = None
     validation_contract_ids: Optional[List[str]] = None
     status: Optional[str] = None
+
+    _proposed_changes = field_validator("proposed_changes")(
+        _reject_blank_instructions_change
+    )
 
 
 class FixProposal(BaseModel):
