@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { getSuiteResult } from "./api";
-import { keepRunErrors } from "./suite";
+import { dropRunError, keepRunErrors } from "./suite";
 import type { AgentVersion, SavedTest, SuiteResult } from "./types";
 
 /**
  * Each version's latest result on every test, read from saved runs. Refetched
  * when the saved-test list reloads, which happens after every run and check.
  * Old results stay until new ones arrive, so the counts do not flicker.
- * A suite run's per-test errors are kept across the refetch (see keepRunErrors).
+ * A suite run's per-test errors are kept across the refetch (see keepRunErrors)
+ * until a run or check of that one test drops them (clearRunError).
  */
 export function useSuiteResults(
   projectId: string,
@@ -15,7 +16,11 @@ export function useSuiteResults(
   versions: AgentVersion[],
   savedTests: SavedTest[],
   setError: (message: string | null) => void,
-): [Record<string, SuiteResult>, (result: SuiteResult) => void] {
+): [
+  Record<string, SuiteResult>,
+  (result: SuiteResult) => void,
+  (versionId: string | null, scenarioId: string) => void,
+] {
   const [results, setResults] = useState<Record<string, SuiteResult>>({});
   const versionKey = versions.map((version) => version.id).join(",");
 
@@ -55,5 +60,12 @@ export function useSuiteResults(
     setResults((items) => ({ ...items, [result.agent_version_id]: result }));
   }
 
-  return [results, setResult];
+  function clearRunError(versionId: string | null, scenarioId: string) {
+    if (!versionId) return;
+    setResults((items) =>
+      items[versionId] ? { ...items, [versionId]: dropRunError(items[versionId], scenarioId) } : items,
+    );
+  }
+
+  return [results, setResult, clearRunError];
 }

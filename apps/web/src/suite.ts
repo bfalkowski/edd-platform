@@ -41,6 +41,19 @@ export function keepRunErrors(earlier: SuiteResult | undefined, loaded: SuiteRes
   };
 }
 
+/**
+ * A run or check of one test makes its suite-run error out of date, even if
+ * that call fails and saves no eval. Its own error shows on the page instead.
+ */
+export function dropRunError(suite: SuiteResult, scenarioId: string): SuiteResult {
+  return {
+    ...suite,
+    tests: suite.tests.map((test) =>
+      test.scenario_id === scenarioId ? { ...test, error: null } : test,
+    ),
+  };
+}
+
 /** A suite comparison needs both versions checked on every test. */
 export function suiteIsComplete(suite: SuiteResult | undefined): boolean {
   return Boolean(suite && suite.total > 0 && suite.tests.every((test) => test.eval_result));
