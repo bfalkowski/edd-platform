@@ -1501,6 +1501,55 @@ def test_create_scenario_live_syncs_langfuse_dataset_refs(monkeypatch) -> None:
     assert {ref["metadata"]["dataset_name"] for ref in scenario_refs} == {dataset_name}
 
 
+def test_agent_version_rejects_blank_instructions() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Blank Instructions Agent", "intent": "Answer billing questions."},
+    ).json()["agent"]
+    versions_path = f"/api/projects/project_default/agent-designs/{agent['id']}/versions"
+
+    for blank in ["", "   ", "\n\t"]:
+        response = client.post(versions_path, json={"instructions": blank})
+        assert response.status_code == 422, blank
+
+    omitted = client.post(versions_path, json={"version_label": "v0"})
+    assert omitted.status_code == 201
+    assert omitted.json()["instructions"] == "Answer billing questions."
+
+    padded = client.post(versions_path, json={"instructions": "  Be brief.  "})
+    assert padded.status_code == 201
+    assert padded.json()["instructions"] == "Be brief."
+
+
+def test_agent_design_rejects_blank_intent() -> None:
+    client = TestClient(app)
+    designs_path = "/api/projects/project_default/agent-designs"
+
+    for blank in ["", "   ", "\n\t"]:
+        response = client.post(designs_path, json={"name": "Blank Intent Agent", "intent": blank})
+        assert response.status_code == 422, repr(blank)
+
+    agent = client.post(
+        designs_path,
+        json={"name": "Blank Intent Agent", "intent": "  Answer billing questions.  "},
+    ).json()["agent"]
+    assert agent["intent"] == "Answer billing questions."
+    agent_path = f"{designs_path}/{agent['id']}"
+
+    for blank in ["", "   ", "\n\t"]:
+        response = client.patch(agent_path, json={"intent": blank})
+        assert response.status_code == 422, repr(blank)
+
+    renamed = client.patch(agent_path, json={"name": "Renamed Agent"})
+    assert renamed.status_code == 200
+    assert renamed.json()["intent"] == "Answer billing questions."
+
+    version = client.post(f"{agent_path}/versions", json={})
+    assert version.status_code == 201
+    assert version.json()["instructions"] == "Answer billing questions."
+
+
 def test_eval_contract_fields_generate_deterministic_checks() -> None:
     client = TestClient(app)
     create_response = client.post(
@@ -2653,6 +2702,67 @@ def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
     ).json()
     assert judge_artifact["source"] == "judge:live"
     assert "Live judge explanation" in judge_artifact["body"]
+
+
+def test_live_judge_verdict_marks_llm_judge_check(monkeypatch) -> None:
+    client = TestClient(app)
+    seen_prompt = {}
+
+    def fake_live_judge(prompt: str, trace_id: Optional[str] = None):
+        seen_prompt["value"] = prompt
+        return "PASS - the reply asks for logs first.", "test-judge-model", {}
+
+    monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "LLM Judge Agent", "intent": "Answer with evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "LLM judge scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "LLM judge contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "asks_for_logs",
+                    "type": "llm_judge",
+                    "value": "Asks for deployment logs before diagnosing.",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "live"},
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    assert "Asks for deployment logs before diagnosing." in seen_prompt["value"]
+    assert eval_result["passed"] is True
+    assert eval_result["score"] == 1
+    [check] = eval_result["checks"]
+    assert check["check_id"] == "asks_for_logs"
+    assert check["passed"] is True
+    assert check["comment"] == "Live judge marked the rubric as passed."
 
 
 def test_live_judge_requires_openai_api_key(monkeypatch) -> None:

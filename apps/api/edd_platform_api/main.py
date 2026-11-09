@@ -762,6 +762,7 @@ def create_failure_packet_record(
     recommended_fix: str,
     status: str,
     now: datetime,
+    origin: Optional[str] = None,
 ) -> FailurePacket:
     failure_packet = FailurePacket(
         id=f"failure_{uuid4().hex[:12]}",
@@ -778,13 +779,16 @@ def create_failure_packet_record(
         evidence_artifact_ids=evidence_artifact_ids,
         recommended_fix=recommended_fix,
         status=status,
+        origin=origin,
         created_at=now,
         updated_at=now,
     )
     _failure_packets[failure_packet.id] = failure_packet
     store.save_record("failure_packets", failure_packet.id, failure_packet)
 
+    # Run comes first so a "Run" line inside the free-text diagnosis is never read as the run.
     body = (
+        f"Run\n{failure_packet.run_id}\n\n"
         f"Diagnosis\n{failure_packet.diagnosis}\n\n"
         f"Failed checks\n"
         + "\n".join(f"- {check_id}" for check_id in failure_packet.failed_check_ids)

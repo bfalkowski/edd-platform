@@ -518,6 +518,8 @@ function App() {
     let isCurrent = true;
     // An error from the last agent's context does not belong to this one.
     setError(null);
+    // Nor do its artifacts: until this load lands, show none rather than the last list.
+    setAgentArtifacts([]);
     setEddFlow({ failurePackets: [] });
     resetProofLoopCtx();
     setIsLoadingContext(true);
@@ -1270,6 +1272,14 @@ function App() {
                   </button>
                 </div>
               </div>
+
+              {/* The other tabs, the tools panel and the scenario editor render the shared error text themselves. */}
+              {error &&
+              (workspaceTab === "evidence" || workspaceTab === "readiness") &&
+              !toolsPanelOpen &&
+              !scenarioEditorOpen ? (
+                <p className="error-text">{error}</p>
+              ) : null}
 
               {workspaceTab === "agent" ? (
                 <AgentTab

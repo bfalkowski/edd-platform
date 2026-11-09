@@ -109,6 +109,11 @@ created_at
 updated_at
 ```
 
+On create and update, `intent` must contain a non-whitespace character, or the
+request returns 422; it may be omitted on update. Surrounding whitespace is
+trimmed. A version created without `instructions` uses the intent as its
+instructions, so a blank intent would reach live runs as an empty system prompt.
+
 ### Tool Definitions
 
 Tool definitions are platform-owned. Agents may only use approved tools in
@@ -570,6 +575,12 @@ created_at
 updated_at
 ```
 
+A version's `instructions` are sent unchanged as the system prompt (Anthropic)
+or agent instructions (Foundry) on live runs. On create, `instructions` may be
+omitted, and then the agent's intent is used; if sent, they must contain a
+non-whitespace character, or the request returns 422. Surrounding whitespace is
+trimmed.
+
 ### Suite Runs
 
 A suite run executes every test for an agent against one version: each
@@ -903,9 +914,12 @@ follow the result:
 - Judge failed, reviewer overrules: the judge's open packets move to
   `overruled`. Agreeing later reopens them.
 - Judge passed, reviewer overrules: a packet titled "Reviewer overruled judge"
-  is opened with the reason. Agreeing later moves it to `withdrawn`.
+  with `origin` `reviewer_overrule` is opened with the reason, even when a
+  packet added by hand is already open on the result. Agreeing later moves it
+  to `withdrawn`.
   Overruling again reopens it, and each overrule writes its reason into the
-  packet's diagnosis.
+  packet's diagnosis. The reviewer's packet is found by `origin`, not by title,
+  so a hand-added packet with the same title keeps its own diagnosis.
 
 Gates block on `open` packets by default, so `overruled` and `withdrawn`
 packets stop blocking unless a gate lists those statuses in
@@ -913,7 +927,8 @@ packets stop blocking unless a gate lists those statuses in
 that comments on the judge output artifact.
 
 The response returns `judge_output`, `eval_result` and `failure_packet` (the
-open packet when the result fails, else null).
+open packet when the result fails, else null; after overruling a pass, the
+reviewer's packet).
 
 Agreement response fields:
 
@@ -953,6 +968,8 @@ severity
 evidence_artifact_ids
 recommended_fix
 status
+origin   (reviewer_overrule when a judge review opened it, else null;
+          not accepted on create or update)
 created_at
 updated_at
 ```

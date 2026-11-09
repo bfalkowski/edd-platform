@@ -106,6 +106,12 @@ def test_overrule_passed_verdict_fails_eval_and_opens_failure_packet() -> None:
     assert len(packets) == 1
     assert packets[0]["id"] == body["failure_packet"]["id"]
     assert "Bundles three fixes into one ticket." in packets[0]["diagnosis"]
+    # The Evidence tab groups the packet by its Run line before the records load.
+    [packet_artifact] = client.get(
+        f"{PROJECT}/artifacts",
+        params={"agent_design_id": agent_id, "artifact_type": "FAILURE_PACKET"},
+    ).json()
+    assert packet_artifact["body"].startswith(f"Run\n{eval_result['run_id']}\n\n")
 
 
 def test_overrule_failed_verdict_passes_eval_and_closes_failure_packet() -> None:
@@ -193,11 +199,70 @@ def test_overrule_keeps_the_diagnosis_of_a_packet_added_by_hand() -> None:
 
     review(client, eval_result, "overrule", "Reason A.")
     review(client, eval_result, "agree", "Fine after all.")
-    review(client, eval_result, "overrule", "Reason B.")
+    response = review(client, eval_result, "overrule", "Reason B.")
 
-    [packet] = packets_for(client, agent_id, eval_result["id"])
-    assert packet["status"] == "open"
-    assert packet["diagnosis"] == "Hand-written diagnosis."
+    packets = {packet["title"]: packet for packet in packets_for(client, agent_id, eval_result["id"])}
+    assert set(packets) == {"Found by hand", "Reviewer overruled judge: One fix per ticket"}
+    hand_packet = packets["Found by hand"]
+    assert hand_packet["status"] == "open"
+    assert hand_packet["diagnosis"] == "Hand-written diagnosis."
+    reviewer_packet = packets["Reviewer overruled judge: One fix per ticket"]
+    assert reviewer_packet["status"] == "open"
+    assert reviewer_packet["diagnosis"].endswith("Reason B.")
+    assert response.json()["failure_packet"]["id"] == reviewer_packet["id"]
+
+
+def test_overrule_opens_a_reviewer_packet_beside_an_open_packet_added_by_hand() -> None:
+    client = TestClient(app)
+    agent_id, scenario_id, contract_id = create_contract(client, judge_passes=True)
+    eval_result = evaluate(client, agent_id, scenario_id, contract_id)
+    added = client.post(
+        f"{PROJECT}/failure-packets",
+        json={
+            "agent_design_id": agent_id,
+            "run_id": eval_result["run_id"],
+            "eval_result_id": eval_result["id"],
+            "eval_contract_id": contract_id,
+            "title": "Found by hand",
+            "diagnosis": "Hand-written diagnosis.",
+        },
+    )
+    assert added.status_code == 201, added.text
+
+    response = review(client, eval_result, "overrule", "Bundles fixes.")
+
+    assert response.status_code == 201, response.text
+    failure_packet = response.json()["failure_packet"]
+    assert failure_packet["title"] == "Reviewer overruled judge: One fix per ticket"
+    assert failure_packet["diagnosis"].endswith("Bundles fixes.")
+    titles = sorted(packet["title"] for packet in open_packets(client, agent_id, eval_result["id"]))
+    assert titles == ["Found by hand", "Reviewer overruled judge: One fix per ticket"]
+
+
+def test_overrule_returns_the_reviewer_packet_not_a_later_one_with_its_title() -> None:
+    client = TestClient(app)
+    agent_id, scenario_id, contract_id = create_contract(client, judge_passes=True)
+    eval_result = evaluate(client, agent_id, scenario_id, contract_id)
+    first = review(client, eval_result, "overrule", "Reason A.").json()["failure_packet"]
+    added = client.post(
+        f"{PROJECT}/failure-packets",
+        json={
+            "agent_design_id": agent_id,
+            "run_id": eval_result["run_id"],
+            "eval_result_id": eval_result["id"],
+            "eval_contract_id": contract_id,
+            "title": "Reviewer overruled judge: added by hand",
+            "diagnosis": "Hand-written diagnosis.",
+        },
+    )
+    assert added.status_code == 201, added.text
+
+    response = review(client, eval_result, "overrule", "Reason B.")
+
+    assert response.json()["failure_packet"]["id"] == first["id"]
+    assert response.json()["failure_packet"]["diagnosis"].endswith("Reason B.")
+    hand_packet = client.get(f"{PROJECT}/failure-packets/{added.json()['id']}").json()
+    assert hand_packet["diagnosis"] == "Hand-written diagnosis."
 
 
 def test_gate_follows_reviews_in_both_directions() -> None:
@@ -295,3 +360,92 @@ def test_judge_agreement_rate_for_contract() -> None:
     }
     missing = client.get(f"{PROJECT}/eval-contracts/contract_missing/judge-agreement")
     assert missing.status_code == 404
+
+
+def test_overrule_ignores_a_hand_added_packet_with_the_reviewer_title() -> None:
+    client = TestClient(app)
+    agent_id, scenario_id, contract_id = create_contract(client, judge_passes=True)
+    eval_result = evaluate(client, agent_id, scenario_id, contract_id)
+    added = client.post(
+        f"{PROJECT}/failure-packets",
+        json={
+            "agent_design_id": agent_id,
+            "run_id": eval_result["run_id"],
+            "eval_result_id": eval_result["id"],
+            "eval_contract_id": contract_id,
+            "title": "Reviewer overruled judge: One fix per ticket",
+            "diagnosis": "Hand-written diagnosis.",
+            "origin": "reviewer_overrule",
+        },
+    )
+    assert added.status_code == 201, added.text
+    assert added.json()["origin"] is None
+
+    response = review(client, eval_result, "overrule", "Reason A.")
+
+    assert response.status_code == 201, response.text
+    reviewer_packet = response.json()["failure_packet"]
+    assert reviewer_packet["id"] != added.json()["id"]
+    assert reviewer_packet["origin"] == "reviewer_overrule"
+    assert reviewer_packet["diagnosis"].endswith("Reason A.")
+    packets = {packet["id"]: packet for packet in open_packets(client, agent_id, eval_result["id"])}
+    assert set(packets) == {added.json()["id"], reviewer_packet["id"]}
+    assert packets[added.json()["id"]]["diagnosis"] == "Hand-written diagnosis."
+
+
+def test_stored_packet_without_origin_loads_with_null_origin() -> None:
+    from edd_platform_api.schemas import FailurePacket
+
+    packet = FailurePacket.model_validate(
+        {
+            "id": "failure_stored",
+            "project_id": "project_default",
+            "agent_design_id": "agent",
+            "run_id": "run",
+            "eval_result_id": "eval",
+            "eval_contract_id": "contract",
+            "failed_check_ids": [],
+            "title": "Reviewer overruled judge: One fix per ticket",
+            "diagnosis": "Stored before origin existed.",
+            "severity": "medium",
+            "evidence_artifact_ids": [],
+            "recommended_fix": "",
+            "status": "open",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+    )
+
+    assert packet.origin is None
+
+
+def test_patch_neither_sets_nor_clears_the_reviewer_origin() -> None:
+    client = TestClient(app)
+    agent_id, scenario_id, contract_id = create_contract(client, judge_passes=True)
+    eval_result = evaluate(client, agent_id, scenario_id, contract_id)
+    added = client.post(
+        f"{PROJECT}/failure-packets",
+        json={
+            "agent_design_id": agent_id,
+            "run_id": eval_result["run_id"],
+            "eval_result_id": eval_result["id"],
+            "eval_contract_id": contract_id,
+            "title": "Found by hand",
+            "diagnosis": "Hand-written diagnosis.",
+        },
+    ).json()
+    reviewer_packet = review(client, eval_result, "overrule", "Reason A.").json()["failure_packet"]
+
+    patched_hand = client.patch(
+        f"{PROJECT}/failure-packets/{added['id']}",
+        json={"origin": "reviewer_overrule", "severity": "high"},
+    )
+    patched_reviewer = client.patch(
+        f"{PROJECT}/failure-packets/{reviewer_packet['id']}",
+        json={"origin": None, "severity": "high"},
+    )
+
+    assert patched_hand.status_code == 200, patched_hand.text
+    assert patched_hand.json()["origin"] is None
+    assert patched_reviewer.status_code == 200, patched_reviewer.text
+    assert patched_reviewer.json()["origin"] == "reviewer_overrule"

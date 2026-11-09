@@ -54,6 +54,17 @@ function evidenceRows(page: Page, label: string) {
   return page.locator(".workflow-evidence-item > span").filter({ hasText: new RegExp(`^${label}$`) });
 }
 
+/**
+ * This agent's run output rows. Until its context loads, the Evidence tab can
+ * still list the agent the page opened on, which under parallel tests is
+ * another test's newer agent.
+ */
+function runOutputRows(page: Page, agentName: string) {
+  return page
+    .locator(".workflow-evidence-item", { hasText: "Run output" })
+    .filter({ hasText: `Run: ${agentName}` });
+}
+
 test("Evidence tab lists every run output, eval result and judge output", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 3, mock: 0 });
   await openAgent(page, agent.name);
@@ -197,7 +208,7 @@ test("A live run output shows the system prompt sent; a mock run output shows no
   await openAgent(page, agent.name);
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
-  const runOutputs = page.locator(".workflow-evidence-item", { hasText: "Run output" });
+  const runOutputs = runOutputRows(page, agent.name);
   await expect(runOutputs).toHaveCount(2);
   const review = page.getByRole("complementary", { name: "Artifact review" });
 
@@ -245,10 +256,103 @@ test("A run lookup that fails for a reason other than 404 says the prompt could 
   );
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
-  await page.locator(".workflow-evidence-item", { hasText: "Run output" }).click();
+  await runOutputRows(page, agent.name).click();
   const prompt = page
     .getByRole("complementary", { name: "Artifact review" })
     .getByRole("region", { name: "System prompt" });
   await expect(prompt).toContainText("Could not load the system prompt: Boom. (HTTP 500)");
   await expect(prompt.locator("pre")).toHaveCount(0);
+});
+
+test("Evidence tab shows the error when an artifact fails to load", async ({ page, request }) => {
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  // Fail only the artifact GET, not its /links call.
+  await page.route(/\/artifacts\/[^/?]+$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 500, body: "Internal Server Error" })
+      : route.continue(),
+  );
+  await runOutputRows(page, agent.name).click();
+
+  await expect(page.getByText("Unable to load artifact. (HTTP 500)")).toBeVisible();
+  await expect(page.locator(".review-panel")).toHaveCount(0);
+});
+
+test("An artifact load error shows once when the tools panel is open on the Evidence tab", async ({
+  page,
+  request,
+}) => {
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page.getByRole("button", { name: "Manage tools" }).click();
+  await expect(page.getByRole("complementary", { name: "Tool marketplace" })).toBeVisible();
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await page.route(/\/artifacts\/[^/?]+$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 500, body: "Internal Server Error" })
+      : route.continue(),
+  );
+  await runOutputRows(page, agent.name).click();
+
+  await expect(page.getByText("Unable to load artifact. (HTTP 500)")).toHaveCount(1);
+  await expect(
+    page.getByRole("complementary", { name: "Tool marketplace" }).getByText("Unable to load artifact. (HTTP 500)"),
+  ).toBeVisible();
+});
+
+test("Readiness tab shows the error when creating a gate fails, and clears it on tab switch", async ({
+  page,
+  request,
+}) => {
+  const agent = await seedAgent(request, { live: 0, mock: 0 });
+  await openAgent(page, agent.name);
+
+  await page.getByRole("tab", { name: "Readiness" }).click();
+  await page.route(/\/gates$/, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 500, json: { detail: "Gate store unavailable" } })
+      : route.continue(),
+  );
+  await page.getByRole("button", { name: "Create gate" }).click();
+  await expect(page.getByText("Gate store unavailable (HTTP 500)")).toBeVisible();
+
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await expect(page.locator(".error-text")).toHaveCount(0);
+});
+
+test("Evidence tab shows no other agent's artifacts while the selected agent's load is pending", async ({
+  page,
+  request,
+}) => {
+  const other = await seedAgent(request, { live: 1, mock: 0 });
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+
+  // Hold this agent's artifact list so the tab renders before it arrives.
+  let releaseLoad: () => void = () => {};
+  const loadReleased = new Promise<void>((resolve) => {
+    releaseLoad = resolve;
+  });
+  await page.route(`**/artifacts?agent_design_id=${agent.id}`, async (route) => {
+    await loadReleased;
+    await route.continue();
+  });
+
+  // Show the other agent's evidence first, then switch while this agent's load is held.
+  await openAgent(page, other.name);
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await expect(page.getByText(`Run: ${other.name}`)).toBeVisible();
+  await page.getByRole("region", { name: "Agent designs" }).getByText(agent.name).click();
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await expect(page.getByText("Loading evidence...")).toBeVisible();
+  await expect(page.getByText(`Run: ${other.name}`)).toHaveCount(0);
+  await expect(page.locator(".workflow-evidence-item")).toHaveCount(0);
+
+  releaseLoad();
+  await expect(evidenceRows(page, "Run output")).toHaveCount(1);
+  await expect(page.getByText(`Run: ${other.name}`)).toHaveCount(0);
 });

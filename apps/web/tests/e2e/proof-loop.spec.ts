@@ -164,6 +164,126 @@ test("A fix proposal names the failure packet when the Check reload failed", asy
   expect(proposal.addressed_failure_packet_ids).toHaveLength(1);
 });
 
+test("The fix message never names a version label other than the one created", async ({ page, request }) => {
+  const name = await seedAgent(request);
+  // An extra version that is neither the baseline nor a candidate: the server's next label skips past it.
+  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
+    (agent: { name: string }) => agent.name === name,
+  ).id;
+  await postJson(request, `/agent-designs/${agentId}/versions`, { version_label: "draft", status: "draft" });
+  await openAgent(page, name);
+  await clickNext(page, "Run current");
+  await clickNext(page, "Check answer");
+
+  const analysis = page.locator(".failure-analysis-panel");
+  await analysis.getByLabel("Failure mode").fill("missing rollback plan");
+  await analysis.getByLabel(/Review note/).fill("The answer never gives a rollback plan.");
+  await analysis.getByRole("button", { name: "Save analysis" }).click();
+
+  await clickNext(page, "Generate fix");
+  const message = page.locator(".activity-text").filter({ hasText: "Fix generated" }).first();
+  await expect(message).toHaveText("Fix generated. Review and confirm to create a new version.");
+  const text = (await message.textContent()) ?? "";
+
+  await clickNext(page, "Save fix proposal");
+  const created = page.waitForResponse(
+    (response) => response.request().method() === "POST" && /\/versions$/.test(new URL(response.url()).pathname),
+  );
+  await clickNext(page, "Create version");
+  const version = await (await created).json();
+  for (const label of text.match(/\bv\d+\b/g) ?? []) {
+    expect(label).toBe(version.version_label);
+  }
+  await expect(page.locator(".activity-text").filter({ hasText: `${version.version_label} is ready to run.` }).first()).toBeVisible();
+});
+
+test("A second test's fix gets its own version, not the first test's", async ({ page, request }) => {
+  const name = await seedAgent(request);
+  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
+    (agent: { name: string }) => agent.name === name,
+  ).id;
+  // A second test, saved after the first, so the agent opens on it.
+  const scenario = await postJson<{ id: string }>(request, "/scenarios", {
+    agent_design_id: agentId,
+    name: "Failed migration",
+    input: "A database migration failed. What should I do?",
+    setup_context: "test_shape:single_turn",
+    status: "active",
+  });
+  await postJson(request, "/eval-contracts", {
+    agent_design_id: agentId,
+    name: "Gives a rollback plan for the migration",
+    scenario_id: scenario.id,
+    checks: [{ id: "rollback_plan", type: "output_contains", value: "rollback plan" }],
+  });
+  await openAgent(page, name);
+
+  /** Run and check the open test, then save its analysis and fix, and create a version from the fix. */
+  async function fixOpenTest() {
+    await clickNext(page, "Run current");
+    await clickNext(page, "Check answer");
+    const analysis = page.locator(".failure-analysis-panel");
+    await analysis.getByRole("button", { name: "Auto-diagnose" }).click();
+    await expect(analysis.getByLabel("Failure mode")).toHaveValue("missing rollback plan");
+    await analysis.getByRole("button", { name: "Save analysis" }).click();
+    await clickNext(page, "Generate fix");
+    const saved = page.waitForResponse(
+      (response) => response.request().method() === "POST" && /\/fix-proposals$/.test(new URL(response.url()).pathname),
+    );
+    await clickNext(page, "Save fix proposal");
+    const proposal = await (await saved).json();
+    const created = page.waitForResponse(
+      (response) => response.request().method() === "POST" && /\/versions$/.test(new URL(response.url()).pathname),
+    );
+    await clickNext(page, "Create version");
+    const version = await (await created).json();
+    expect(version.source_fix_proposal_id).toBe(proposal.id);
+    return version;
+  }
+
+  const first = await fixOpenTest();
+  // Running every test on the first fix's version gives the second test a run and a check on it too.
+  await page.getByRole("group", { name: "Version" }).getByRole("button", { name: first.version_label }).click();
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  await expect(page.locator(".suite-pass-count")).toHaveText("2 of 2 passed");
+
+  await page.getByRole("list", { name: "Saved tests" }).getByRole("button").filter({ hasText: "Failed deploy" }).click();
+  await expect(nextAction(page).getByRole("button", { name: "Run current", exact: true })).toBeVisible();
+  const second = await fixOpenTest();
+  expect(second.id).not.toBe(first.id);
+  // The new version has no run yet, so the first fix's run and check are not reused for it.
+  await expect(nextAction(page).getByRole("heading", { name: `Run ${second.version_label}` })).toBeVisible();
+  await expect(nextAction(page).getByRole("button", { name: "Run version", exact: true })).toBeVisible();
+});
+
+test("A saved fix with blank instructions leaves Create version disabled", async ({ page, request }) => {
+  const name = await seedAgent(request, true);
+  // A fix saved earlier whose instructions are only whitespace.
+  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
+    (agent: { name: string }) => agent.name === name,
+  ).id;
+  const [contract] = await (await request.get(`${PROJECT}/eval-contracts?agent_design_id=${agentId}`)).json();
+  // Like the console's, the fix names the failure it addresses, so it is this test's fix.
+  const packets = await (await request.get(`${PROJECT}/failure-packets?agent_design_id=${agentId}`)).json();
+  await postJson(request, "/fix-proposals", {
+    agent_design_id: agentId,
+    title: "Blank fix",
+    rationale: "Instructions left blank.",
+    proposed_changes: [{ surface: "instructions", change: "   " }],
+    addressed_failure_packet_ids: packets.map((packet: { id: string }) => packet.id),
+    validation_contract_ids: [contract.id],
+  });
+  await openAgent(page, name);
+
+  const analysis = page.locator(".failure-analysis-panel");
+  await analysis.getByLabel("Failure mode").fill("missing rollback plan");
+  await analysis.getByLabel(/Review note/).fill("The answer never gives a rollback plan.");
+  await analysis.getByRole("button", { name: "Save analysis" }).click();
+
+  await expect(nextAction(page).getByRole("heading", { name: "Create the next version" })).toBeVisible();
+  await expect(nextAction(page).getByRole("button", { name: "Create version", exact: true })).toBeDisabled();
+});
+
 test("A test sharing a default contract does not inherit another test's failure or fix", async ({ page, request }) => {
   const name = `Shared Contract Proof Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {

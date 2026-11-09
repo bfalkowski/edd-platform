@@ -13,9 +13,13 @@ import {
   runSuite,
 } from "./api";
 import { checkLabel } from "./checkLabel";
-import { nextVersionLabel } from "./nextVersionLabel";
-import { proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
-import { suiteComparisonIsCurrent, suiteIsComplete, suiteTestResult } from "./suite";
+import { builtFromAnotherFix, proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
+import {
+  suiteComparisonIsCurrent,
+  suiteIsComplete,
+  suiteTestError,
+  suiteTestResult,
+} from "./suite";
 import { SuiteComparisonTable } from "./SuiteComparisonTable";
 import { useSuiteResults } from "./useSuiteResults";
 import { failurePacketsForEval, renderScenarioInput, testShapeFromSetupContext, testShapeLabels } from "./helpers";
@@ -378,7 +382,7 @@ export function ProofLoopTab({
         generatedInstructions: result.proposed_instructions,
         generatedRationale: result.rationale,
       }));
-      setActivity(`Fix generated. Review and confirm to create ${nextVersionLabel(eddFlow.baselineVersion.version_label)}.`);
+      setActivity("Fix generated. Review and confirm to create a new version.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to generate fix.");
       setActivity(null);
@@ -405,7 +409,20 @@ export function ProofLoopTab({
         generatedInstructions,
         generatedRationale,
       );
-      setEddFlow((flow) => ({ ...flow, fixProposal }));
+      setEddFlow((flow) =>
+        flow.candidateVersion && builtFromAnotherFix(flow.candidateVersion, fixProposal)
+          ? // Drop the other fix's version and everything recorded on it.
+            {
+              ...flow,
+              fixProposal,
+              candidateVersion: undefined,
+              candidateRun: undefined,
+              candidateEval: undefined,
+              comparison: undefined,
+              suiteComparison: undefined,
+            }
+          : { ...flow, fixProposal },
+      );
       setActivity("Fix proposal saved. Create the next version to apply it.");
       await refreshContext();
       await reviewFirstArtifact(fixProposal.artifact_ids);
@@ -417,14 +434,15 @@ export function ProofLoopTab({
     }
   }
 
+  const storedChange = eddFlow.fixProposal?.proposed_changes[0]?.change;
+  const instructionsToUse: string | null =
+    generatedInstructions ?? (typeof storedChange === "string" ? storedChange : null);
+
   async function handleCreateCandidate() {
     if (!eddFlow.baselineVersion || !eddFlow.fixProposal) {
       return;
     }
-    const storedChange = eddFlow.fixProposal.proposed_changes[0]?.change;
-    const instructionsToUse: string | null =
-      generatedInstructions ?? (typeof storedChange === "string" ? storedChange : null);
-    if (!instructionsToUse) return;
+    if (!instructionsToUse?.trim()) return;
     setError(null);
     setActivity("Creating the next version.");
     setIsFlowBusy(true);
@@ -650,7 +668,7 @@ export function ProofLoopTab({
       detail: "Apply the saved fix to create a new agent version.",
       label: "Create version",
       onClick: handleCreateCandidate,
-      disabled: isFlowBusy || (!generatedInstructions && !eddFlow.fixProposal?.proposed_changes[0]?.change),
+      disabled: isFlowBusy || !instructionsToUse?.trim(),
     },
     run_candidate: {
       eyebrow: "Next action",
@@ -880,6 +898,7 @@ export function ProofLoopTab({
             {savedTests.map((test) => {
               const isSelected = test.scenario.id === eddFlow.scenario?.id;
               const result = suiteTestResult(selectedSuite, test.scenario.id) ?? test.latestResult;
+              const runError = suiteTestError(selectedSuite, test.scenario.id);
               return (
                 <li key={test.scenario.id}>
                   <button
@@ -893,10 +912,15 @@ export function ProofLoopTab({
                     <span className="scenario-shape-pill">
                       {testShapeLabels[testShapeFromSetupContext(test.scenario.setup_context)]}
                     </span>
-                    <span className={`saved-test-result ${result}`}>
-                      {savedTestResultLabels[result]}
-                    </span>
+                    {runError ? (
+                      <span className="saved-test-result failed">Error</span>
+                    ) : (
+                      <span className={`saved-test-result ${result}`}>
+                        {savedTestResultLabels[result]}
+                      </span>
+                    )}
                   </button>
+                  {runError ? <p className="error-text saved-test-error">{runError}</p> : null}
                 </li>
               );
             })}

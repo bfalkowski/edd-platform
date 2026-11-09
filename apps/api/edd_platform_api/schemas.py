@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 
 class AgentDesignCreate(BaseModel):
     name: str = Field(min_length=1)
-    intent: str = Field(min_length=1)
+    # A version created without instructions uses the intent as its system prompt.
+    intent: str = Field(pattern=r"\S")
     allowed_tool_names: List[str] = Field(default_factory=list)
     langfuse_prompt_name: Optional[str] = None
     langfuse_prompt_version: Optional[str] = None
@@ -17,7 +18,7 @@ class AgentDesignCreate(BaseModel):
 
 class AgentDesignUpdate(BaseModel):
     name: Optional[str] = None
-    intent: Optional[str] = None
+    intent: Optional[str] = Field(default=None, pattern=r"\S")
     allowed_tool_names: Optional[List[str]] = None
     status: Optional[str] = None
     langfuse_prompt_name: Optional[str] = None
@@ -206,7 +207,8 @@ class GateDecision(BaseModel):
 class AgentVersionCreate(BaseModel):
     version_label: Optional[str] = None
     parent_version_id: Optional[str] = None
-    instructions: Optional[str] = None
+    # Sent unchanged as the live system prompt, so it must not be blank.
+    instructions: Optional[str] = Field(default=None, pattern=r"\S")
     tool_policy: Dict[str, object] = Field(default_factory=dict)
     source_fix_proposal_id: Optional[str] = None
     status: str = "candidate"
@@ -863,6 +865,8 @@ class FailurePacket(BaseModel):
     evidence_artifact_ids: List[str]
     recommended_fix: str
     status: str
+    # Set only when a reviewer's overrule opens the packet; null for every other packet.
+    origin: Optional[Literal["reviewer_overrule"]] = None
     created_at: datetime
     updated_at: datetime
 

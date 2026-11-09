@@ -137,6 +137,9 @@ export type EvalRunResult = {
   created_at: string;
 };
 
+/** Matches ScenarioStatus in apps/api/edd_platform_api/schemas.py. */
+export type ScenarioStatus = "draft" | "active" | "superseded";
+
 export type Scenario = {
   id: string;
   project_id: string;
@@ -146,7 +149,7 @@ export type Scenario = {
   setup_context: string;
   fixture_refs: string[];
   default_eval_contract_id: string | null;
-  status: string;
+  status: ScenarioStatus;
   created_at: string;
   updated_at: string;
 };

@@ -47,7 +47,7 @@ the right step — run, fix, compare, or done.
 Error analysis is a guided 4-step wizard for turning raw traces into a named
 failure mode taxonomy:
 
-1. **Build review set** — pull in live runs as a corpus of traces to review.
+1. **Build review set** — pull in the live runs and traces you want to review.
    A data table shows each item with its source, status, and note count.
 
    ![Error analysis step 1: the review set table](./docs/assets/error-analysis-build-corpus.webp)

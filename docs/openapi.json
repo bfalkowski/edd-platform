@@ -96,7 +96,7 @@
             "type": "array"
           },
           "intent": {
-            "minLength": 1,
+            "pattern": "\\S",
             "title": "Intent",
             "type": "string"
           },
@@ -181,6 +181,7 @@
           "intent": {
             "anyOf": [
               {
+                "pattern": "\\S",
                 "type": "string"
               },
               {
@@ -854,6 +855,7 @@
           "instructions": {
             "anyOf": [
               {
+                "pattern": "\\S",
                 "type": "string"
               },
               {
@@ -2568,6 +2570,18 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "const": "reviewer_overrule",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
           },
           "project_id": {
             "title": "Project Id",

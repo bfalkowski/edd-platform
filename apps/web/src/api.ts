@@ -32,6 +32,7 @@ import type {
   RunRecord,
   SavedTest,
   Scenario,
+  ScenarioStatus,
   ServiceStatus,
   SuiteResult,
   ServiceStatusResponse,
@@ -40,6 +41,7 @@ import type {
   ToolDefinitionCreate,
 } from "./types";
 import { setupContextFromTestShape } from "./helpers";
+import { builtFromAnotherFix } from "./proofLoopStep";
 
 const apiBase = "/api";
 
@@ -310,7 +312,7 @@ export async function createScenario(
 export async function updateScenario(
   projectId: string,
   scenarioId: string,
-  payload: { name?: string; status?: "draft" | "active" | "superseded" },
+  payload: { name?: string; status?: ScenarioStatus },
 ): Promise<Scenario> {
   const response = await fetch(`${apiBase}/projects/${projectId}/scenarios/${scenarioId}`, {
     method: "PATCH",
@@ -1233,11 +1235,14 @@ export async function hydrateEddFlow(
     versions.find((version) => version.id === comparison?.baseline_version_id) ??
     versions.find((version) => version.status === "baseline") ??
     versions.find((version) => version.version_label === "v0");
+  const testPackets = testFailurePackets(failurePackets, runs, scenario?.id, contract?.id);
+  const fixProposal = testFixProposal(fixProposals, testPackets, contract?.id);
+  const candidateVersions = versions.filter((version) => !builtFromAnotherFix(version, fixProposal));
   const candidateVersion =
     versions.find((version) => version.id === comparison?.candidate_version_id) ??
-    versions.find((version) => version.source_fix_proposal_id) ??
-    versions.find((version) => version.status === "candidate") ??
-    versions.find((version) => version.version_label === "v1");
+    candidateVersions.find((version) => version.source_fix_proposal_id) ??
+    candidateVersions.find((version) => version.status === "candidate") ??
+    candidateVersions.find((version) => version.version_label === "v1");
   const baselineRun =
     runs.find((run) => run.id === comparison?.baseline_run_id) ??
     latestRunForVersion(runs, baselineVersion?.id, scenario?.id, contract?.id);
@@ -1249,8 +1254,6 @@ export async function hydrateEddFlow(
     candidateRun ? listEvalResults(projectId, candidateRun.id) : Promise.resolve([]),
   ]);
 
-  const testPackets = testFailurePackets(failurePackets, runs, scenario?.id, contract?.id);
-
   return {
     baselineVersion,
     candidateVersion,
@@ -1261,7 +1264,7 @@ export async function hydrateEddFlow(
     baselineEval: baselineEvalResults[0],
     candidateEval: candidateEvalResults[0],
     failurePackets: testPackets,
-    fixProposal: testFixProposal(fixProposals, testPackets, contract?.id),
+    fixProposal,
     comparison,
     suiteComparison: comparisons.find(
       (item) =>
