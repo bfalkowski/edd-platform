@@ -356,3 +356,25 @@ test("Evidence tab shows no other agent's artifacts while the selected agent's l
   await expect(evidenceRows(page, "Run output")).toHaveCount(1);
   await expect(page.getByText(`Run: ${other.name}`)).toHaveCount(0);
 });
+
+test("Evidence tab shows no other agent's artifacts when the selected agent's load fails", async ({
+  page,
+  request,
+}) => {
+  const other = await seedAgent(request, { live: 1, mock: 0 });
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+
+  await page.route(`**/artifacts?agent_design_id=${agent.id}`, (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: '{"detail":"Artifact store unavailable"}' }),
+  );
+
+  // Show the other agent's evidence first, then switch to the agent whose load fails.
+  await openAgent(page, other.name);
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await expect(page.getByText(`Run: ${other.name}`)).toBeVisible();
+  await page.getByRole("region", { name: "Agent designs" }).getByText(agent.name).click();
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await expect(page.getByText("Loading evidence...")).toHaveCount(0);
+  await expect(page.getByText(`Run: ${other.name}`)).toHaveCount(0);
+  await expect(page.locator(".workflow-evidence-item")).toHaveCount(0);
+});
