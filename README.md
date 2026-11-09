@@ -367,11 +367,13 @@ ports.
 
 The suite runs fully parallel. On a machine that is already busy (other test
 suites, VMs), a browser page can freeze for 15 seconds or more and a step then
-times out at random. In the failed test's trace (`npx playwright show-trace`),
-such a step shows no retries at all while it waits, because the page could not
-run them. Rerun with fewer workers, for example `npm run test:e2e -- --workers=2`.
-A failure that comes back with fewer workers, or that shows an API 500 in the
-`[WebServer]` output, is a real one.
+times out at random. In the failed test's trace (`npx playwright show-trace
+<trace.zip path printed with the failure>`), such a step shows no retries at
+all while it waits, because the page could not run them. Treat a failure as
+this kind only when its trace shows that, then rerun with fewer workers, for
+example `npm run test:e2e -- --workers=2`. A failure whose trace shows retries,
+or that shows an API 500 in the `[WebServer]` output, is a real one, even if it
+goes away with fewer workers: a race between workers also gets rarer then.
 
 A fresh start already has one agent, Apartment Search Agent. To add the
 Customer Triage demo agent, run this after the app is running:
