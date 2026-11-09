@@ -81,6 +81,8 @@ def test_agree_records_review_and_keeps_result() -> None:
         params={"agent_design_id": agent_id, "artifact_type": "JUDGE_REVIEW"},
     ).json()
     assert len(review_artifacts) == 1
+    # The Evidence tab groups the review by its Run line, next to the judge output it reviews.
+    assert review_artifacts[0]["body"].startswith(f"Run\n{eval_result['run_id']}\n\n")
 
 
 def test_overrule_passed_verdict_fails_eval_and_opens_failure_packet() -> None:

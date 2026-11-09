@@ -21,6 +21,7 @@ const RUN_ROW_ORDER = [
   "TRACE_REF",
   "EVAL_RESULT",
   "JUDGE_OUTPUT",
+  "JUDGE_REVIEW",
   "FAILURE_PACKET",
 ];
 
@@ -30,6 +31,7 @@ const RUN_LINE_TYPES = new Set([
   "TOOL_RESULT",
   "TRACE_REF",
   "EVAL_RESULT",
+  "JUDGE_REVIEW",
   "FAILURE_PACKET",
 ]);
 

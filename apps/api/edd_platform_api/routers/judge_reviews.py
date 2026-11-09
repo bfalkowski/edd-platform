@@ -75,7 +75,9 @@ def review_judge_output(
         artifact_type="JUDGE_REVIEW",
         artifact_id=judge_output.id,
         title=f"Judge review: {contract.name}",
+        # Run comes first so a "Run" line inside the free-text reason is never read as the run.
         body=(
+            f"Run\n{run.id}\n\n"
             f"Reviewer\n{payload.reviewer}\n\n"
             f"Verdict\n{'Agreed' if payload.verdict == 'agree' else 'Overruled'}"
             f" (judge said {judge_verdict})\n\n"
