@@ -99,3 +99,30 @@ test("before the failure records load, a failure saved later joins the run its R
   );
   assert.deepEqual(ids(grouped.agentArtifacts), []);
 });
+
+test("a judge review joins the run its Run line names, after the judge output it reviews", () => {
+  const rows = [
+    artifact("run_e", "RUN_RESULT", "2026-11-07T00:00:00Z", { artifact_id: "run_e_id" }),
+    artifact("eval_e", "EVAL_RESULT", "2026-11-07T00:00:01Z"),
+    artifact("judge_e", "JUDGE_OUTPUT", "2026-11-07T00:00:01Z"),
+    // A reviewer overrules later; the review and its failure packet share a timestamp.
+    artifact("review_e", "JUDGE_REVIEW", "2026-11-07T00:05:00Z", {
+      body: "Run\nrun_e_id\n\nReviewer\nana\n\nVerdict\nOverruled (judge said pass)",
+    }),
+    artifact("failure_e", "FAILURE_PACKET", "2026-11-07T00:05:00Z", {
+      body: "Run\nrun_e_id\n\nDiagnosis\nA reviewer overruled the judge's pass.",
+    }),
+  ];
+  // Every record has loaded, and none of them lists the review artifact.
+  const runIndex = evidenceRunIndex(
+    [{ id: "run_e_id", artifact_ids: ["run_e"] }] as RunRecord[],
+    [{ run_id: "run_e_id", artifact_ids: ["eval_e", "judge_e"] }] as EvalResult[],
+    [{ id: "failure_e_record", run_id: "run_e_id" }] as FailurePacket[],
+  );
+  const grouped = groupEvidence(rows, runIndex);
+  assert.deepEqual(
+    grouped.runGroups.map((group) => [group.runId, ids(group.artifacts)]),
+    [["run_e_id", ["run_e", "eval_e", "judge_e", "review_e", "failure_e"]]],
+  );
+  assert.deepEqual(ids(grouped.agentArtifacts), []);
+});
