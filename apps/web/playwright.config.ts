@@ -10,6 +10,7 @@ const REUSE_SERVERS = process.env.EDD_E2E_REUSE_SERVERS === "1";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: true,
   // A busy machine can stall the browser for several seconds mid-test; a
   // passing step still returns at once, so only real failures wait longer.
