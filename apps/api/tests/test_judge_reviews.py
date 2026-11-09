@@ -393,7 +393,7 @@ def test_overrule_ignores_a_hand_added_packet_with_the_reviewer_title() -> None:
     assert packets[added.json()["id"]]["diagnosis"] == "Hand-written diagnosis."
 
 
-def test_stored_packet_without_origin_loads_as_not_the_reviewer_packet() -> None:
+def test_stored_packet_without_origin_loads_with_null_origin() -> None:
     from edd_platform_api.schemas import FailurePacket
 
     packet = FailurePacket.model_validate(
@@ -417,3 +417,35 @@ def test_stored_packet_without_origin_loads_as_not_the_reviewer_packet() -> None
     )
 
     assert packet.origin is None
+
+
+def test_patch_neither_sets_nor_clears_the_reviewer_origin() -> None:
+    client = TestClient(app)
+    agent_id, scenario_id, contract_id = create_contract(client, judge_passes=True)
+    eval_result = evaluate(client, agent_id, scenario_id, contract_id)
+    added = client.post(
+        f"{PROJECT}/failure-packets",
+        json={
+            "agent_design_id": agent_id,
+            "run_id": eval_result["run_id"],
+            "eval_result_id": eval_result["id"],
+            "eval_contract_id": contract_id,
+            "title": "Found by hand",
+            "diagnosis": "Hand-written diagnosis.",
+        },
+    ).json()
+    reviewer_packet = review(client, eval_result, "overrule", "Reason A.").json()["failure_packet"]
+
+    patched_hand = client.patch(
+        f"{PROJECT}/failure-packets/{added['id']}",
+        json={"origin": "reviewer_overrule", "severity": "high"},
+    )
+    patched_reviewer = client.patch(
+        f"{PROJECT}/failure-packets/{reviewer_packet['id']}",
+        json={"origin": None, "severity": "high"},
+    )
+
+    assert patched_hand.status_code == 200, patched_hand.text
+    assert patched_hand.json()["origin"] is None
+    assert patched_reviewer.status_code == 200, patched_reviewer.text
+    assert patched_reviewer.json()["origin"] == "reviewer_overrule"
