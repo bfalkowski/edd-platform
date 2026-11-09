@@ -255,3 +255,28 @@ test("A second test's fix gets its own version, not the first test's", async ({ 
   await expect(nextAction(page).getByRole("heading", { name: `Run ${second.version_label}` })).toBeVisible();
   await expect(nextAction(page).getByRole("button", { name: "Run version", exact: true })).toBeVisible();
 });
+
+test("A saved fix with blank instructions leaves Create version disabled", async ({ page, request }) => {
+  const name = await seedAgent(request, true);
+  // A fix saved earlier whose instructions are only whitespace.
+  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
+    (agent: { name: string }) => agent.name === name,
+  ).id;
+  const [contract] = await (await request.get(`${PROJECT}/eval-contracts?agent_design_id=${agentId}`)).json();
+  await postJson(request, "/fix-proposals", {
+    agent_design_id: agentId,
+    title: "Blank fix",
+    rationale: "Instructions left blank.",
+    proposed_changes: [{ surface: "instructions", change: "   " }],
+    validation_contract_ids: [contract.id],
+  });
+  await openAgent(page, name);
+
+  const analysis = page.locator(".failure-analysis-panel");
+  await analysis.getByLabel("Failure mode").fill("missing rollback plan");
+  await analysis.getByLabel(/Review note/).fill("The answer never gives a rollback plan.");
+  await analysis.getByRole("button", { name: "Save analysis" }).click();
+
+  await expect(nextAction(page).getByRole("heading", { name: "Create the next version" })).toBeVisible();
+  await expect(nextAction(page).getByRole("button", { name: "Create version", exact: true })).toBeDisabled();
+});
