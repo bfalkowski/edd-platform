@@ -1,4 +1,4 @@
-import type { EddFlowState } from "./types";
+import type { AgentVersion, EddFlowState, FixProposal } from "./types";
 
 /** Where one proof loop iteration stands. Every step but the two finished ones has an action. */
 export type ProofLoopStep =
@@ -34,4 +34,9 @@ export function proofLoopStep({ flow, analysisSaved, fixGenerated }: ProofLoopSt
   if (!flow.candidateEval) return "check_candidate";
   if (!flow.comparison) return "compare";
   return flow.candidateEval.passed ? "candidate_passed" : "candidate_failed";
+}
+
+/** A version built from a fix other than this test's own, so not this test's candidate. */
+export function builtFromAnotherFix(version: AgentVersion, fixProposal: FixProposal | undefined): boolean {
+  return Boolean(fixProposal && version.source_fix_proposal_id && version.source_fix_proposal_id !== fixProposal.id);
 }

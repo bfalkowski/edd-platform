@@ -196,3 +196,54 @@ test("The fix message never names a version label other than the one created", a
   }
   await expect(page.locator(".activity-text").filter({ hasText: `${version.version_label} is ready to run.` }).first()).toBeVisible();
 });
+
+test("A second test's fix gets its own version, not the first test's", async ({ page, request }) => {
+  const name = await seedAgent(request);
+  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
+    (agent: { name: string }) => agent.name === name,
+  ).id;
+  // A second test, saved after the first, so the agent opens on it.
+  const scenario = await postJson<{ id: string }>(request, "/scenarios", {
+    agent_design_id: agentId,
+    name: "Failed migration",
+    input: "A database migration failed. What should I do?",
+    setup_context: "test_shape:single_turn",
+    status: "active",
+  });
+  await postJson(request, "/eval-contracts", {
+    agent_design_id: agentId,
+    name: "Gives a rollback plan for the migration",
+    scenario_id: scenario.id,
+    checks: [{ id: "rollback_plan", type: "output_contains", value: "rollback plan" }],
+  });
+  await openAgent(page, name);
+
+  /** Run and check the open test, then save its analysis and fix, and create a version from the fix. */
+  async function fixOpenTest() {
+    await clickNext(page, "Run current");
+    await clickNext(page, "Check answer");
+    const analysis = page.locator(".failure-analysis-panel");
+    await analysis.getByRole("button", { name: "Auto-diagnose" }).click();
+    await expect(analysis.getByLabel("Failure mode")).toHaveValue("missing rollback plan");
+    await analysis.getByRole("button", { name: "Save analysis" }).click();
+    await clickNext(page, "Generate fix");
+    const saved = page.waitForResponse(
+      (response) => response.request().method() === "POST" && /\/fix-proposals$/.test(new URL(response.url()).pathname),
+    );
+    await clickNext(page, "Save fix proposal");
+    const proposal = await (await saved).json();
+    const created = page.waitForResponse(
+      (response) => response.request().method() === "POST" && /\/versions$/.test(new URL(response.url()).pathname),
+    );
+    await clickNext(page, "Create version");
+    const version = await (await created).json();
+    expect(version.source_fix_proposal_id).toBe(proposal.id);
+    return version;
+  }
+
+  const first = await fixOpenTest();
+  await page.getByRole("list", { name: "Saved tests" }).getByRole("button").filter({ hasText: "Failed deploy" }).click();
+  await expect(nextAction(page).getByRole("button", { name: "Run current", exact: true })).toBeVisible();
+  const second = await fixOpenTest();
+  expect(second.id).not.toBe(first.id);
+});
