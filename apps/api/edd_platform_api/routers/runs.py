@@ -15,7 +15,6 @@ from fastapi import APIRouter, HTTPException
 from edd_platform_api import main as api_main
 from edd_platform_api.eval_checks import (
     RUBRIC_CHECK_TYPES,
-    contract_rubric,
     evaluate_contract_check,
     is_rubric_check,
 )
@@ -167,6 +166,7 @@ def build_live_judge_prompt(
     run: RunRecord,
     checks: List[EvalCheckResult],
     template: Optional[JudgePromptTemplate],
+    rubric: str,
 ) -> str:
     # Only include deterministic checks in the prompt — rubric/LLM checks are
     # evaluated by the live judge itself and their stub results ("live judge required")
@@ -184,8 +184,7 @@ def build_live_judge_prompt(
         if template is not None
         else "Explain whether the response satisfies the eval contract. Cite the provided evidence only."
     )
-    # evaluate_run allows at most one judge check in live mode.
-    rubric = contract_rubric(contract.checks).strip()
+    rubric = rubric.strip()
     rubric_section = f"Rubric:\n{rubric}\n\n" if rubric else ""
     deterministic_section = (
         f"Deterministic check results:\n{check_lines}\n\n" if check_lines else ""
@@ -202,6 +201,34 @@ def build_live_judge_prompt(
         "Put PASS or FAIL as the first word of your response, "
         "then give a concise explanation citing only the evidence above."
     )
+
+
+def judged_rubric_check(check: EvalCheckResult, run: RunRecord, reply: str) -> EvalCheckResult:
+    judge_passed = live_judge_passed(reply)
+    return check.model_copy(
+        update={
+            "passed": judge_passed,
+            "observed": run.output,
+            "comment": (
+                "Live judge marked the rubric as passed."
+                if judge_passed
+                else "Live judge marked the rubric as failed."
+            ),
+            "explanation": reply,
+        }
+    )
+
+
+def add_token_usage(total: Dict[str, object], usage: Dict[str, object]) -> Dict[str, object]:
+    """Sum the integer counts of two judge calls; other values keep the latest call's."""
+    summed = dict(total)
+    for key, value in usage.items():
+        previous = summed.get(key)
+        if isinstance(value, int) and isinstance(previous, int):
+            summed[key] = previous + value
+        else:
+            summed[key] = value
+    return summed
 
 
 def token_count(token_usage: Dict[str, object], key: str) -> int:
@@ -987,54 +1014,45 @@ def evaluate_run(
     token_usage: Dict[str, object] = {}
     cost_estimate: Optional[float] = None
     if payload.judge_mode == "live":
-        # The live judge returns one verdict, so it can only stand for one judge check.
-        judge_check_count = sum(
-            1 for check in contract.checks if is_rubric_check(check)
-        )
-        if judge_check_count > 1:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Live judge supports at most one rubric_judge or llm_judge check per "
-                    f"eval contract; this contract has {judge_check_count}."
-                ),
-            )
         template = (
             get_judge_prompt_template_or_404(project_id, contract.judge_prompt_template_id)
             if contract.judge_prompt_template_id is not None
             else None
         )
-        prompt = build_live_judge_prompt(
-            contract=contract,
-            run=run,
-            checks=checks,
-            template=template,
-        )
         trace_ref = find_langfuse_trace_ref_for_run(project_id, run.id)
-        try:
-            judge_output_text, judge_model, token_usage = api_main.run_live_judge(
-                prompt,
-                trace_id=trace_ref.external_trace_id if trace_ref is not None else None,
+        # The judge returns one verdict per call, so each rubric check gets its own call.
+        # A contract without rubric checks still gets one call for its explanation.
+        rubric_checks = [check for check in contract.checks if is_rubric_check(check)]
+        replies: Dict[str, str] = {}
+        token_usage = {}
+        for rubric_check in rubric_checks or [{}]:
+            prompt = build_live_judge_prompt(
+                contract=contract,
+                run=run,
+                checks=checks,
+                template=template,
+                rubric=str(rubric_check.get("value") or ""),
             )
-        except RuntimeError as exc:
-            detail = str(exc)
-            status_code = 400 if "ANTHROPIC_API_KEY" in detail else 502
-            raise HTTPException(status_code=status_code, detail=detail) from exc
-        cost_estimate = estimate_live_judge_cost(token_usage)
-        if any(check.check_type in RUBRIC_CHECK_TYPES for check in checks):
-            judge_passed = live_judge_passed(judge_output_text)
-            checks = [
-                check.model_copy(
-                    update={
-                        "passed": judge_passed,
-                        "observed": run.output,
-                        "comment": (
-                            "Live judge marked the rubric as passed."
-                            if judge_passed
-                            else "Live judge marked the rubric as failed."
-                        ),
-                    }
+            try:
+                reply, judge_model, call_usage = api_main.run_live_judge(
+                    prompt,
+                    trace_id=trace_ref.external_trace_id if trace_ref is not None else None,
                 )
+            except RuntimeError as exc:
+                detail = str(exc)
+                status_code = 400 if "ANTHROPIC_API_KEY" in detail else 502
+                raise HTTPException(status_code=status_code, detail=detail) from exc
+            replies[str(rubric_check.get("id") or "unnamed_check")] = reply
+            token_usage = add_token_usage(token_usage, call_usage)
+        judge_output_text = (
+            "\n\n".join(f"{check_id}:\n{reply}" for check_id, reply in replies.items())
+            if len(replies) > 1
+            else next(iter(replies.values()))
+        )
+        cost_estimate = estimate_live_judge_cost(token_usage)
+        if rubric_checks:
+            checks = [
+                judged_rubric_check(check, run, replies[check.check_id])
                 if check.check_type in RUBRIC_CHECK_TYPES
                 else check
                 for check in checks

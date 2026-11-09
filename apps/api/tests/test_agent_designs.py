@@ -2768,6 +2768,7 @@ def test_live_judge_verdict_marks_llm_judge_check(monkeypatch) -> None:
     assert check["check_id"] == "asks_for_logs"
     assert check["passed"] is True
     assert check["comment"] == "Live judge marked the rubric as passed."
+    assert check["explanation"] == "PASS - the reply asks for logs first."
 
 
 @pytest.mark.parametrize(
@@ -2778,15 +2779,21 @@ def test_live_judge_verdict_marks_llm_judge_check(monkeypatch) -> None:
         ("rubric_judge", "llm_judge"),
     ],
 )
-def test_live_judge_rejects_contract_with_more_than_one_judge_check(
-    monkeypatch, judge_types
-) -> None:
+def test_live_judge_judges_each_rubric_check_separately(monkeypatch, judge_types) -> None:
     client = TestClient(app)
-    judge_calls = []
+    judge_prompts = []
 
     def fake_live_judge(prompt: str, trace_id: Optional[str] = None):
-        judge_calls.append(prompt)
-        return "PASS - looks fine.", "test-judge-model", {}
+        judge_prompts.append(prompt)
+        if "Rubric:\nAsks for logs." in prompt:
+            return "PASS - the reply asks for logs.", "test-judge-model", {
+                "input_tokens": 10,
+                "output_tokens": 5,
+            }
+        return "FAIL - the reply is curt.", "test-judge-model", {
+            "input_tokens": 20,
+            "output_tokens": 7,
+        }
 
     monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)
     agent = client.post(
@@ -2821,17 +2828,33 @@ def test_live_judge_rejects_contract_with_more_than_one_judge_check(
             "eval_contract_id": contract["id"],
         },
     ).json()
-    eval_count = len(api_main._eval_results)
 
     eval_response = client.post(
         f"/api/projects/project_default/runs/{run['id']}/evaluate",
         json={"judge_mode": "live"},
     )
 
-    assert eval_response.status_code == 400
-    assert "one rubric_judge or llm_judge check" in eval_response.json()["detail"]
-    assert judge_calls == []
-    assert len(api_main._eval_results) == eval_count
+    assert eval_response.status_code == 201
+    # One judge call per rubric check, each seeing only its own rubric.
+    assert len(judge_prompts) == 2
+    assert "Stays polite." not in judge_prompts[0]
+    assert "Asks for logs." not in judge_prompts[1]
+    eval_result = eval_response.json()
+    logs_check, polite_check = eval_result["checks"]
+    assert logs_check["check_id"] == "asks_for_logs"
+    assert logs_check["passed"] is True
+    assert logs_check["comment"] == "Live judge marked the rubric as passed."
+    assert logs_check["explanation"] == "PASS - the reply asks for logs."
+    assert polite_check["check_id"] == "stays_polite"
+    assert polite_check["passed"] is False
+    assert polite_check["comment"] == "Live judge marked the rubric as failed."
+    assert polite_check["explanation"] == "FAIL - the reply is curt."
+    assert eval_result["score"] == 1
+    assert eval_result["passed"] is False
+    judge_output = api_main._judge_outputs[eval_result["judge_output_ids"][0]]
+    assert "asks_for_logs:\nPASS - the reply asks for logs." in judge_output.output
+    assert "stays_polite:\nFAIL - the reply is curt." in judge_output.output
+    assert judge_output.token_usage == {"input_tokens": 30, "output_tokens": 12}
 
 
 def test_live_judge_requires_openai_api_key(monkeypatch) -> None:

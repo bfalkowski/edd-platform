@@ -64,7 +64,9 @@ def test_live_judge_prompt_leaves_out_rubric_placeholder_result() -> None:
         make_check("mentions_logs", "contains", True, "Found logs."),
     ]
 
-    prompt = build_live_judge_prompt(contract=contract, run=run, checks=checks, template=None)
+    prompt = build_live_judge_prompt(
+        contract=contract, run=run, checks=checks, template=None, rubric="Asks for logs."
+    )
 
     assert "Live judge required" not in prompt
     assert "asks_for_logs_before_diagnosing: fail" not in prompt
