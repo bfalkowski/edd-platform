@@ -62,7 +62,7 @@ Two wizards exist in the product:
 `Describe → Review → Run → Name the failure → Fix → Compare → Done`
 
 **Error analysis wizard** (`ErrorAnalysisTab.tsx`) — triggered by Error analysis
-tab. Steps: `Build corpus → Review & code → Confirm modes → Done`
+tab. Steps: `Build review set → Review & code → Confirm modes → Done`
 
 Rules for wizards:
 
