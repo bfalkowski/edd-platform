@@ -35,6 +35,9 @@ const RUN_LINE_TYPES = new Set([
   "FAILURE_PACKET",
 ]);
 
+// Run-line types whose Run line always comes first, ahead of free text that could hold another.
+const RUN_LINE_FIRST_TYPES = new Set(["JUDGE_REVIEW", "FAILURE_PACKET"]);
+
 // Artifact types saved in the same request as the eval result they come from.
 const SAVED_WITH_EVAL_TYPES = new Set(["JUDGE_OUTPUT", "FAILURE_PACKET"]);
 
@@ -63,7 +66,9 @@ function runIdOf(artifact: ArtifactRecord, runIndex: Map<string, string>): strin
   // A run output artifact records its run's id as artifact_id.
   if (artifact.artifact_type === "RUN_RESULT") return artifact.artifact_id;
   if (RUN_LINE_TYPES.has(artifact.artifact_type)) {
-    const match = artifact.body.match(/(?:^|\n)Run\n(.+)/);
+    const match = RUN_LINE_FIRST_TYPES.has(artifact.artifact_type)
+      ? artifact.body.match(/^Run\n(.+)/)
+      : artifact.body.match(/(?:^|\n)Run\n(.+)/);
     if (match) return match[1].trim();
   }
   return null;

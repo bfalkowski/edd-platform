@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from edd_platform_api import main as api_main
-from edd_platform_api.eval_checks import evaluate_contract_check
+from edd_platform_api.eval_checks import contract_rubric, evaluate_contract_check
 from edd_platform_api.main import app
 from edd_platform_api.schemas import RunRecord
 
@@ -106,3 +106,38 @@ def test_fix_proposal_prompt_includes_llm_judge_rubric(monkeypatch) -> None:
     assert response.status_code == 200, response.text
     [prompt] = prompts
     assert f"Success criteria (rubric): {RUBRIC}" in prompt
+
+
+def test_patch_rubric_rejects_a_contract_with_two_rubric_checks() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Two Rubric Checks Agent", "intent": "Answer with evidence."},
+    ).json()["agent"]
+    checks = [
+        {"id": "asks_for_logs", "type": "rubric_judge", "value": "Asks for logs."},
+        {"id": "stays_polite", "type": "llm_judge", "value": "Stays polite."},
+    ]
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={"agent_design_id": agent["id"], "name": "Two rubric checks", "checks": checks},
+    ).json()
+
+    response = client.patch(
+        f"/api/projects/project_default/eval-contracts/{contract['id']}/rubric",
+        json={"rubric": "Cites the error code."},
+    )
+
+    assert response.status_code == 409
+    assert "/checks" in response.json()["detail"]
+    stored = client.get(f"/api/projects/project_default/eval-contracts/{contract['id']}").json()
+    assert stored["checks"] == checks
+
+
+def test_contract_rubric_skips_a_blank_rubric() -> None:
+    checks = [
+        {"id": "blank", "type": "rubric_judge", "value": "   "},
+        {"id": "asks_for_logs", "type": "llm_judge", "value": RUBRIC},
+    ]
+
+    assert contract_rubric(checks) == RUBRIC

@@ -26,8 +26,11 @@ def is_rubric_check(check: Dict[str, object]) -> bool:
 
 
 def contract_rubric(checks: List[Dict[str, object]]) -> str:
-    """The value of the contract's first rubric check that has one, or ""."""
-    return next((str(c["value"]) for c in checks if is_rubric_check(c) and c.get("value")), "")
+    """The value of the contract's first rubric check that is not blank, or ""."""
+    return next(
+        (str(c["value"]) for c in checks if is_rubric_check(c) and str(c.get("value") or "").strip()),
+        "",
+    )
 
 
 def contract_generated_checks(payload: EvalContractCreate) -> List[Dict[str, object]]:

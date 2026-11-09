@@ -126,3 +126,23 @@ test("a judge review joins the run its Run line names, after the judge output it
   );
   assert.deepEqual(ids(grouped.agentArtifacts), []);
 });
+
+test("a review or failure saved before its Run line was added stays in the Agent section, even with a Run line in its reason", () => {
+  const rows = [
+    artifact("run_f", "RUN_RESULT", "2026-11-08T00:00:00Z", { artifact_id: "run_f_id" }),
+    // Saved before PR #82: no Run line at the top, but the free-text reason has one.
+    artifact("review_f", "JUDGE_REVIEW", "2026-11-08T00:05:00Z", {
+      body: "Reviewer\nana\n\nVerdict\nOverruled (judge said pass)\n\nReason\nRun\nbogus",
+    }),
+    // Saved before T-80: no Run line at the top, but the diagnosis has one.
+    artifact("failure_f", "FAILURE_PACKET", "2026-11-08T00:06:00Z", {
+      body: "Diagnosis\nRun\nbogus\n\nRecommended fix\nNeeds review",
+    }),
+  ];
+  const grouped = groupEvidence(rows, new Map());
+  assert.deepEqual(
+    grouped.runGroups.map((group) => [group.runId, ids(group.artifacts)]),
+    [["run_f_id", ["run_f"]]],
+  );
+  assert.deepEqual(ids(grouped.agentArtifacts), ["review_f", "failure_f"]);
+});
