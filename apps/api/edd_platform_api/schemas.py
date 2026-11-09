@@ -881,6 +881,9 @@ class FailurePacket(BaseModel):
     eval_result_id: str
     eval_contract_id: str
     failed_check_ids: List[str]
+    # One fingerprint (id, type and value) per failed check the packet's eval ran;
+    # empty on packets saved before fingerprints existed.
+    failed_check_fingerprints: List[str] = Field(default_factory=list)
     title: str
     diagnosis: str
     severity: str

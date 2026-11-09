@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Dict, List
 
 from edd_platform_api.schemas import (
@@ -11,6 +13,12 @@ from edd_platform_api.schemas import (
 
 # llm_judge is an alias of rubric_judge: both carry a rubric for the live judge.
 RUBRIC_CHECK_TYPES = ("rubric_judge", "llm_judge")
+
+
+def check_fingerprint(check: EvalCheckResult) -> str:
+    """Identify what a check tested: its id, type and value, so an edited check under a reused id differs."""
+    key = json.dumps([check.check_id, check.check_type, check.expected])
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
 def is_rubric_check(check: Dict[str, object]) -> bool:

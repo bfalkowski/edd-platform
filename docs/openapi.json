@@ -2571,6 +2571,13 @@
             "title": "Evidence Artifact Ids",
             "type": "array"
           },
+          "failed_check_fingerprints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Check Fingerprints",
+            "type": "array"
+          },
           "failed_check_ids": {
             "items": {
               "type": "string"

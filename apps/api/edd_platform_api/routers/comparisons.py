@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 
 from edd_platform_api import main as api_main
+from edd_platform_api.eval_checks import check_fingerprint
 from edd_platform_api.lookups import (
     get_agent_version_or_404,
     get_comparison_or_404,
@@ -105,16 +106,18 @@ def classify_failure_packets(
     baseline_failed_check_ids = {
         check.check_id for check in baseline_eval_result.checks if not check.passed
     }
-    candidate_passed_check_ids = {
-        check.check_id for check in candidate_eval_result.checks if check.passed
+    candidate_passed_fingerprints = {
+        check_fingerprint(check) for check in candidate_eval_result.checks if check.passed
     }
-    # Fixed only with evidence: the packet names failed checks, and the
-    # candidate eval ran and passed every one of them.
+    # Fixed only with evidence: the packet names failed checks, each has a
+    # fingerprint, and the candidate eval passed the same check (same id, type
+    # and value) for every one. A check edited under a reused id is not evidence.
     fixed_failure_packet_ids = [
         packet.id
         for packet in baseline_packets
         if packet.failed_check_ids
-        and set(packet.failed_check_ids) <= candidate_passed_check_ids
+        and len(packet.failed_check_fingerprints) == len(set(packet.failed_check_ids))
+        and set(packet.failed_check_fingerprints) <= candidate_passed_fingerprints
     ]
     remaining_failure_packet_ids = [
         packet.id

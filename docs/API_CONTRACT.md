@@ -981,6 +981,9 @@ run_id
 eval_result_id
 eval_contract_id
 failed_check_ids
+failed_check_fingerprints   (one per failed check the packet's eval ran: a hash of
+                             id, type and value; empty on older packets;
+                             not accepted on create or update)
 title
 diagnosis
 severity
@@ -1109,9 +1112,10 @@ Single-pair comparisons return `tests: []` and `totals: null`.
 Fixed and remaining failure packets cover every packet on the eval contract
 from any run of the baseline version on the same scenario, not only the
 baseline run's first eval result. A packet is fixed only when it names failed
-checks and the candidate eval result ran and passed every one of them; a packet
-with no failed checks, or with a check the candidate eval did not run, stays
-remaining.
+checks and the candidate eval result ran and passed every one of them with the
+same fingerprint (id, type and value); a packet with no failed checks, with a
+check the candidate eval did not run, with a check edited under the same id,
+or saved without fingerprints, stays remaining.
 
 ## Contract Acceptance
 
