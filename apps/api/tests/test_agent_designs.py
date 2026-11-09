@@ -2676,6 +2676,67 @@ def test_live_judge_evaluation_uses_prompt_template(monkeypatch) -> None:
     assert "Live judge explanation" in judge_artifact["body"]
 
 
+def test_live_judge_verdict_marks_llm_judge_check(monkeypatch) -> None:
+    client = TestClient(app)
+    seen_prompt = {}
+
+    def fake_live_judge(prompt: str, trace_id: Optional[str] = None):
+        seen_prompt["value"] = prompt
+        return "PASS - the reply asks for logs first.", "test-judge-model", {}
+
+    monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "LLM Judge Agent", "intent": "Answer with evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "LLM judge scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "LLM judge contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {
+                    "id": "asks_for_logs",
+                    "type": "llm_judge",
+                    "value": "Asks for deployment logs before diagnosing.",
+                }
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "live"},
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    assert "Asks for deployment logs before diagnosing." in seen_prompt["value"]
+    assert eval_result["passed"] is True
+    assert eval_result["score"] == 1
+    [check] = eval_result["checks"]
+    assert check["check_id"] == "asks_for_logs"
+    assert check["passed"] is True
+    assert check["comment"] == "Live judge marked the rubric as passed."
+
+
 def test_live_judge_requires_openai_api_key(monkeypatch) -> None:
     client = TestClient(app)
 
