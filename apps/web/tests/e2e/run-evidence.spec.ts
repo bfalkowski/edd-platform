@@ -83,6 +83,8 @@ test("Evidence tab groups rows by run and pages older runs", async ({ page, requ
   await openAgent(page, agent.name);
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
+  // Wait for this agent's context: until then the tab can show another test's agent.
+  await expect(runOutputRows(page, agent.name)).toHaveCount(5);
   const agentSection = page.getByRole("region", { name: "Agent artifacts" });
   await expect(agentSection.getByText("Scenario", { exact: true })).toBeVisible();
   await expect(
