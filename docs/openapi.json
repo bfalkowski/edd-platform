@@ -96,7 +96,7 @@
             "type": "array"
           },
           "intent": {
-            "pattern": "\\S",
+            "pattern": "[^\\s\\u200b\\u200c\\u200d\\u2060\\ufeff]",
             "title": "Intent",
             "type": "string"
           },
@@ -181,7 +181,7 @@
           "intent": {
             "anyOf": [
               {
-                "pattern": "\\S",
+                "pattern": "[^\\s\\u200b\\u200c\\u200d\\u2060\\ufeff]",
                 "type": "string"
               },
               {
@@ -855,7 +855,7 @@
           "instructions": {
             "anyOf": [
               {
-                "pattern": "\\S",
+                "pattern": "[^\\s\\u200b\\u200c\\u200d\\u2060\\ufeff]",
                 "type": "string"
               },
               {

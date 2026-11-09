@@ -1502,6 +1502,10 @@ def test_create_scenario_live_syncs_langfuse_dataset_refs(monkeypatch) -> None:
     assert {ref["metadata"]["dataset_name"] for ref in scenario_refs} == {dataset_name}
 
 
+# Zero-width characters are invisible and survive str.strip(), so they count as blank.
+BLANK_TEXTS = ["", "   ", "\n\t", "\u200b", "\u200c\u200d", " \u2060\ufeff\n"]
+
+
 def test_agent_version_rejects_blank_instructions() -> None:
     client = TestClient(app)
     agent = client.post(
@@ -1510,9 +1514,9 @@ def test_agent_version_rejects_blank_instructions() -> None:
     ).json()["agent"]
     versions_path = f"/api/projects/project_default/agent-designs/{agent['id']}/versions"
 
-    for blank in ["", "   ", "\n\t"]:
+    for blank in BLANK_TEXTS:
         response = client.post(versions_path, json={"instructions": blank})
-        assert response.status_code == 422, blank
+        assert response.status_code == 422, repr(blank)
 
     omitted = client.post(versions_path, json={"version_label": "v0"})
     assert omitted.status_code == 201
@@ -1527,7 +1531,7 @@ def test_agent_design_rejects_blank_intent() -> None:
     client = TestClient(app)
     designs_path = "/api/projects/project_default/agent-designs"
 
-    for blank in ["", "   ", "\n\t"]:
+    for blank in BLANK_TEXTS:
         response = client.post(designs_path, json={"name": "Blank Intent Agent", "intent": blank})
         assert response.status_code == 422, repr(blank)
 
@@ -1538,7 +1542,7 @@ def test_agent_design_rejects_blank_intent() -> None:
     assert agent["intent"] == "Answer billing questions."
     agent_path = f"{designs_path}/{agent['id']}"
 
-    for blank in ["", "   ", "\n\t"]:
+    for blank in BLANK_TEXTS:
         response = client.patch(agent_path, json={"intent": blank})
         assert response.status_code == 422, repr(blank)
 
