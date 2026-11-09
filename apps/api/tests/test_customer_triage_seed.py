@@ -78,3 +78,18 @@ def test_seed_stores_live_anthropic_runs_and_prints_summary(monkeypatch, capsys)
     ).json()
     assert len(runs) == 2
     assert {(run["mode"], run["provider"]) for run in runs} == {("live", "anthropic")}
+    scenarios = client.get(
+        f"/api/projects/project_default/scenarios?agent_design_id={summary['agent_id']}"
+    ).json()
+    contracts = client.get(
+        f"/api/projects/project_default/eval-contracts?agent_design_id={summary['agent_id']}"
+    ).json()
+    # The console's Proof loop shows only active scenarios that have a contract
+    # (pairActiveTests in apps/web/src/api.ts), so the seed must leave one.
+    saved_tests = [
+        scenario
+        for scenario in scenarios
+        if scenario["status"] == "active"
+        and any(contract["scenario_id"] == scenario["id"] for contract in contracts)
+    ]
+    assert [scenario["name"] for scenario in saved_tests] == ["Failed deployment escalation"]

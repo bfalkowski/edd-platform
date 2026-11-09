@@ -79,6 +79,7 @@ def main() -> None:
                 "A customer says a deployment failed after release and asks what "
                 "to do next. Account impact is unclear."
             ),
+            "status": "active",
         },
     )
     contract = post(
