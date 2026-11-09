@@ -1,3 +1,4 @@
+import { testFailurePackets, testFixProposal } from "./testScope";
 import type {
   AgentDesign,
   AgentRunResult,
@@ -1138,9 +1139,32 @@ function latestRunForVersion(
 }
 
 /**
- * A saved test is an active scenario paired with its newest eval contract,
- * oldest first. Draft scenarios (left by earlier edits) and superseded ones
- * are not tests.
+ * A scenario's test contract: its newest own contract (one naming the
+ * scenario), else its default contract unless that names another scenario (a
+ * run refuses such a contract). `contracts` is one agent's, newest first.
+ * Matches `active_tests` in apps/api/edd_platform_api/routers/suites.py.
+ */
+function testContract(
+  scenario: Scenario | undefined,
+  contracts: EvalContract[],
+): EvalContract | undefined {
+  if (!scenario) {
+    return undefined;
+  }
+  return (
+    contracts.find((item) => item.scenario_id === scenario.id) ??
+    contracts.find(
+      (item) =>
+        item.id === scenario.default_eval_contract_id &&
+        (!item.scenario_id || item.scenario_id === scenario.id),
+    )
+  );
+}
+
+/**
+ * A saved test is an active scenario paired with its test contract, oldest
+ * first. Draft scenarios (left by earlier edits) and superseded ones are not
+ * tests.
  */
 function pairActiveTests(
   scenarios: Scenario[],
@@ -1150,19 +1174,24 @@ function pairActiveTests(
     .filter((scenario) => scenario.status === "active")
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
     .flatMap((scenario) => {
-      const contract = contracts.find((item) => item.scenario_id === scenario.id);
+      const contract = testContract(scenario, contracts);
       return contract ? [{ scenario, contract }] : [];
     });
 }
 
 export async function listSavedTests(projectId: string, agentDesignId: string): Promise<SavedTest[]> {
-  const [scenarios, contracts] = await Promise.all([
+  const [scenarios, contracts, runs] = await Promise.all([
     listScenarios(projectId, agentDesignId),
     listEvalContracts(projectId, agentDesignId),
+    listRuns(projectId, agentDesignId),
   ]);
+  const scenarioByRun = new Map(runs.map((run) => [run.id, run.scenario_id]));
   return Promise.all(
     pairActiveTests(scenarios, contracts).map(async (test) => {
-      const [latest] = await listEvalResultsForContract(projectId, test.contract.id);
+      // Scenarios can share a default contract: read only this scenario's results.
+      const latest = (await listEvalResultsForContract(projectId, test.contract.id)).find(
+        (result) => scenarioByRun.get(result.run_id) === test.scenario.id,
+      );
       const latestResult: SavedTest["latestResult"] = latest
         ? latest.passed
           ? "passed"
@@ -1195,7 +1224,7 @@ export async function hydrateEddFlow(
     ]);
 
   const requestedScenario = scenarios.find((item) => item.id === scenarioId);
-  const requestedContract = contracts.find((item) => item.scenario_id === scenarioId);
+  const requestedContract = testContract(requestedScenario, contracts);
   const tests = pairActiveTests(scenarios, contracts);
   const selectedTest =
     requestedScenario && requestedContract
@@ -1211,9 +1240,8 @@ export async function hydrateEddFlow(
     versions.find((version) => version.id === comparison?.baseline_version_id) ??
     versions.find((version) => version.status === "baseline") ??
     versions.find((version) => version.version_label === "v0");
-  const fixProposal = fixProposals.find(
-    (proposal) => contract && proposal.validation_contract_ids.includes(contract.id),
-  );
+  const testPackets = testFailurePackets(failurePackets, runs, scenario?.id, contract?.id);
+  const fixProposal = testFixProposal(fixProposals, testPackets, contract?.id);
   const candidateVersions = versions.filter((version) => !builtFromAnotherFix(version, fixProposal));
   const candidateVersion =
     versions.find((version) => version.id === comparison?.candidate_version_id) ??
@@ -1240,7 +1268,7 @@ export async function hydrateEddFlow(
     candidateRun,
     baselineEval: baselineEvalResults[0],
     candidateEval: candidateEvalResults[0],
-    failurePackets: failurePackets.filter((packet) => packet.eval_contract_id === contract?.id),
+    failurePackets: testPackets,
     fixProposal,
     comparison,
     suiteComparison: comparisons.find(

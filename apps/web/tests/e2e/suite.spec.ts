@@ -267,3 +267,75 @@ test("A failed run or check of one test replaces its older suite-run error", asy
   await expect(list.getByText(suiteError)).toHaveCount(0);
   await expect(row).not.toContainText("Error");
 });
+
+test("Scenarios sharing a default contract are tests in both the saved-test list and the suite run", async ({
+  page,
+  request,
+}) => {
+  // Three active scenarios that name no contract share one as their default.
+  // "No contract" has none, and "Borrowed" defaults to a contract that names
+  // another scenario (a run refuses it), so neither is a test.
+  const name = await seedAgent(request, []);
+  const agents = await (await request.get(`${PROJECT}/agent-designs`)).json();
+  const agent = agents.find((item: { name: string }) => item.name === name);
+  const shared = await postJson<{ id: string }>(request, "/eval-contracts", {
+    agent_design_id: agent.id,
+    name: "Shared contract",
+    checks: [{ id: "phrase_check", type: "output_contains", value: "rollback plan" }],
+  });
+  const sharedNames = ["Shared one", "Shared two", "Shared three"];
+  const scenarioIds: Record<string, string> = {};
+  for (const scenarioName of [...sharedNames, "No contract"]) {
+    const scenario = await postJson<{ id: string }>(request, "/scenarios", {
+      agent_design_id: agent.id,
+      name: scenarioName,
+      input: "A deployment failed. What should I do?",
+      setup_context: "test_shape:single_turn",
+      default_eval_contract_id: scenarioName === "No contract" ? null : shared.id,
+      status: "active",
+    });
+    scenarioIds[scenarioName] = scenario.id;
+  }
+  const owned = await postJson<{ id: string }>(request, "/eval-contracts", {
+    agent_design_id: agent.id,
+    name: "No contract's own contract",
+    scenario_id: scenarioIds["No contract"],
+    checks: [{ id: "phrase_check", type: "output_contains", value: "rollback plan" }],
+  });
+  await postJson(request, "/scenarios", {
+    agent_design_id: agent.id,
+    name: "Borrowed",
+    input: "A deployment failed. What should I do?",
+    setup_context: "test_shape:single_turn",
+    default_eval_contract_id: owned.id,
+    status: "active",
+  });
+  // "No contract" now has its own contract, so it is a test; "Borrowed" is not.
+  const testNames = [...sharedNames, "No contract"];
+  await page.goto("/");
+  await openAgent(page, name);
+
+  const rows = page.getByRole("list", { name: "Saved tests" }).getByRole("button");
+  await expect(rows).toHaveCount(4);
+  for (const [index, scenarioName] of testNames.entries()) {
+    await expect(rows.nth(index)).toContainText(scenarioName);
+  }
+  await expect(rows.filter({ hasText: "Borrowed" })).toHaveCount(0);
+
+  const version = page.getByRole("group", { name: "Version" });
+  const passCount = page.locator(".suite-pass-count");
+  await version.getByRole("button", { name: "v0" }).click();
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  await expect(passCount).toHaveText("0 of 4 passed");
+  await version.getByRole("button", { name: "v1" }).click();
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  await expect(passCount).toHaveText("4 of 4 passed");
+  for (const scenarioName of testNames) {
+    await expect(testRow(page, scenarioName)).toContainText("Passed");
+  }
+
+  await page.getByRole("button", { name: "Compare all tests" }).click();
+  await expect(
+    page.getByRole("region", { name: "Test comparison" }).getByText("4 fixed · 0 regressed · 0 still passing · 0 still failing"),
+  ).toBeVisible();
+});

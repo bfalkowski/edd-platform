@@ -584,10 +584,15 @@ trimmed.
 ### Suite Runs
 
 A suite run executes every test for an agent against one version: each
-`active` scenario paired with its newest eval contract, the same list the
-Proof loop shows as saved tests. Tests run one at a time, and each stores one
-run and one eval result. Nothing else is stored: a version's suite result is
-the latest eval per (version, scenario, contract), read on demand.
+`active` scenario paired with its test contract, the same list the Proof loop
+shows as saved tests. A scenario's test contract is its newest own contract
+(one whose `scenario_id` names it), else its `default_eval_contract_id` when
+that contract belongs to the same agent and names no other scenario (a run
+refuses a contract that names another scenario), so several scenarios can
+share one default contract. An active scenario with neither is not a test.
+Tests run one at a time, and each stores one run and one eval result. Nothing
+else is stored: a version's suite result is the latest eval per (version,
+scenario, contract), read on demand.
 
 ```text
 POST  /api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}/suite-runs
