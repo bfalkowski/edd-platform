@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from edd_platform_api import main as api_main
 from edd_platform_api.eval_checks import contract_generated_checks, is_rubric_check
@@ -15,6 +15,7 @@ from edd_platform_api.lookups import (
     get_project_or_404,
     get_scenario_or_404,
 )
+from edd_platform_api.query_params import reject_unknown_query_params
 from edd_platform_api.schemas import (
     EvalContract,
     EvalContractChecksUpdate,
@@ -26,7 +27,7 @@ from edd_platform_api.state import _eval_contracts, store
 router = APIRouter()
 
 
-@router.get("/api/projects/{project_id}/eval-contracts")
+@router.get("/api/projects/{project_id}/eval-contracts", dependencies=[Depends(reject_unknown_query_params)])
 def list_eval_contracts(
     project_id: str,
     agent_design_id: Optional[str] = None,

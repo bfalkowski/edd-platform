@@ -4,10 +4,11 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from edd_platform_api.eval_checks import evaluate_run_text
 from edd_platform_api.lookups import get_artifact_or_404, get_project_or_404
+from edd_platform_api.query_params import reject_unknown_query_params
 from edd_platform_api.schemas import (
     ArtifactLink,
     ArtifactLinkCreate,
@@ -75,7 +76,7 @@ def evaluate_run_artifact(project_id: str, artifact_id: str) -> EvalRunResult:
     )
 
 
-@router.get("/api/projects/{project_id}/artifacts")
+@router.get("/api/projects/{project_id}/artifacts", dependencies=[Depends(reject_unknown_query_params)])
 def list_project_artifacts(
     project_id: str,
     agent_design_id: Optional[str] = None,
@@ -92,7 +93,7 @@ def list_project_artifacts(
     return sorted(artifacts, key=lambda artifact: artifact.updated_at, reverse=True)
 
 
-@router.get("/api/projects/{project_id}/artifacts/search")
+@router.get("/api/projects/{project_id}/artifacts/search", dependencies=[Depends(reject_unknown_query_params)])
 def search_project_artifacts(
     project_id: str,
     q: str = "",
