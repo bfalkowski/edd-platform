@@ -226,21 +226,27 @@ test("A failed run or check of one test replaces its older suite-run error", asy
   const row = testRow(page, "Gives a rollback plan");
   const nextAction = page.locator(".next-action-panel");
   const suiteError = "Judge request failed with status 529: Overloaded";
+  // Route the suite run once and never unroute it. Removing the last route turns
+  // Playwright's request interception off, and a request the app sends meanwhile
+  // (the reload after the run) can hang, which leaves the console busy.
+  await page.route("**/suite-runs", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.tests[0].error = suiteError;
+    await route.fulfill({ response, json: body });
+  });
   async function runSuiteWithError() {
-    await page.route("**/suite-runs", async (route) => {
-      const response = await route.fetch();
-      const body = await response.json();
-      body.tests[0].error = suiteError;
-      await route.fulfill({ response, json: body });
-    });
     await page.getByRole("button", { name: "Run all tests" }).click();
     await expect(list.getByText(suiteError)).toBeVisible();
-    await page.unroute("**/suite-runs");
   }
 
   // Run current and Check answer use v0, so the suite runs on v0 too.
   await page.getByRole("group", { name: "Version" }).getByRole("button", { name: "v0" }).click();
+  // Let the agent's load (which selects the last test) and then this test's load
+  // land before the suite runs, or a late load shows the suite's run of this test.
+  await expect(testRow(page, "Names a safe next action")).toHaveAttribute("aria-pressed", "true");
   await row.click();
+  await expect(row).toHaveAttribute("aria-pressed", "true");
   await runSuiteWithError();
 
   // A run that fails over HTTP saves nothing; its error shows, not the suite's.
