@@ -140,7 +140,7 @@ def get_review_note_or_404(project_id: str, review_note_id: str) -> ReviewNote:
 def get_review_corpus_or_404(project_id: str, corpus_id: str) -> ReviewCorpus:
     corpus = _review_corpora.get(corpus_id)
     if corpus is None or corpus.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Review corpus not found.")
+        raise HTTPException(status_code=404, detail="Review set not found.")
     return corpus
 
 

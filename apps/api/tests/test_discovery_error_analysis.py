@@ -139,6 +139,15 @@ def test_review_corpus_trace_annotation_failure_mode_and_suggestion_flow() -> No
     assert annotations_response.json()[0]["id"] == annotation["id"]
 
 
+def test_missing_review_corpus_404_says_review_set() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/projects/project_default/review-corpora/corpus_missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Review set not found."
+
+
 def test_trace_review_item_requires_langfuse_trace_or_observation_ref() -> None:
     client = TestClient(app)
     agent = create_agent(client)
