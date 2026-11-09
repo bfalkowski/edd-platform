@@ -61,10 +61,9 @@ test("Error analysis runs end to end with Langfuse offline", async ({ page, requ
   await expect(details).toContainText("A deployment failed. What should I do?");
   await expect(details).toContainText("Judge verdict");
   await expect(details).toContainText("Failed");
-  // A long output scrolls inside its box, so the box takes keyboard focus.
+  // A long output scrolls inside its box, so the box is in the tab order.
   const output = details.getByRole("region", { name: "Agent output" });
-  await output.focus();
-  await expect(output).toBeFocused();
+  await expect(output).toHaveAttribute("tabindex", "0");
 
   await page.getByRole("textbox", { name: "Note" }).fill("Never suggests rolling back the deploy.");
   await page.getByRole("button", { name: "Add note" }).click();
