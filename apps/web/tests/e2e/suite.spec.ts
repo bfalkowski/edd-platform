@@ -235,6 +235,10 @@ test("A failed run or check of one test replaces its older suite-run error", asy
     });
     await page.getByRole("button", { name: "Run all tests" }).click();
     await expect(list.getByText(suiteError)).toBeVisible();
+    // The saved results still reload after the error shows. Unrouting while
+    // that reload is in flight once left a request hanging, and the console
+    // busy for good, so wait until the run is over.
+    await expect(page.getByRole("button", { name: "Run all tests" })).toBeEnabled();
     await page.unroute("**/suite-runs");
   }
 
