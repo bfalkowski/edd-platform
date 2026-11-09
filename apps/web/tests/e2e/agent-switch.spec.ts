@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 async function createAgent(request: APIRequestContext, label: string) {
   const name = `${label} ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -175,3 +175,97 @@ test("suite results never ask for the last agent's versions while the new agent'
   expect(crossed).toEqual([]);
   await expect(page.locator(".error-text")).toHaveCount(0);
 });
+
+/** An agent with one gate, and one review set holding one item. */
+async function createAgentWithGateAndReviewSet(request: APIRequestContext, label: string) {
+  const agent = await createAgent(request, label);
+  const post = async (path: string, data: object) => {
+    const response = await request.post(`/api/projects/project_default${path}`, { data });
+    expect(response.ok(), `${path}: ${await response.text()}`).toBeTruthy();
+    return (await response.json()) as { id: string };
+  };
+  await post("/gates", { agent_design_id: agent.id, name: `${agent.name} gate` });
+  const corpus = await post("/review-corpora", {
+    agent_design_id: agent.id,
+    name: `${agent.name} review set`,
+  });
+  await post("/review-items", {
+    corpus_id: corpus.id,
+    source_kind: "trace",
+    source_id: `trace-${agent.id}`,
+    langfuse_ref: { trace_id: `trace-${agent.id}` },
+    title: `${agent.name} review item`,
+  });
+  return agent;
+}
+
+/** Hold (or fail) the agent's gate and review set requests. Returns a release for held ones. */
+async function stallReadinessAndReview(page: Page, agentId: string, mode: "hold" | "fail") {
+  let release: () => void = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  for (const path of [`**/gates?agent_design_id=${agentId}`, `**/review-corpora?agent_design_id=${agentId}`]) {
+    await page.route(path, async (route) => {
+      if (mode === "fail") {
+        await route.fulfill({ status: 500, json: { detail: "Agent context unavailable" } });
+        return;
+      }
+      await released;
+      await route.continue();
+    });
+  }
+  return release;
+}
+
+async function showOtherAgentThenSwitch(
+  page: Page,
+  other: { id: string; name: string },
+  agent: { name: string },
+  tab: "Readiness" | "Error analysis",
+) {
+  await page.goto(`/?agent=${other.id}`);
+  await expect(page.locator(".agent-row.selected")).toHaveText(other.name);
+  await page.getByRole("tab", { name: tab }).click();
+  if (tab === "Readiness") {
+    await expect(page.getByRole("heading", { name: "Gate ready" })).toBeVisible();
+  } else {
+    await expect(page.getByRole("heading", { name: `${other.name} review set` })).toBeVisible();
+    await expect(page.getByText(`${other.name} review item`)).toBeVisible();
+  }
+  await page.getByRole("region", { name: "Agent designs" }).getByText(agent.name).click();
+  await expect(page.locator(".agent-row.selected")).toHaveText(agent.name);
+  await page.getByRole("tab", { name: tab }).click();
+}
+
+for (const mode of ["hold", "fail"] as const) {
+  const when = mode === "hold" ? "while the selected agent's load is pending" : "when the selected agent's load fails";
+
+  test(`Readiness tab shows no other agent's gate ${when}`, async ({ page, request }) => {
+    const other = await createAgentWithGateAndReviewSet(request, "Gate Other Agent");
+    const agent = await createAgent(request, "Gate Current Agent");
+    const release = await stallReadinessAndReview(page, agent.id, mode);
+
+    await showOtherAgentThenSwitch(page, other, agent, "Readiness");
+    await expect(page.getByRole("heading", { name: "No gate yet" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Gate ready" })).toHaveCount(0);
+
+    release();
+    await expect(page.getByRole("heading", { name: "No gate yet" })).toBeVisible();
+  });
+
+  test(`Error analysis tab shows no other agent's review set ${when}`, async ({ page, request }) => {
+    const other = await createAgentWithGateAndReviewSet(request, "Review Other Agent");
+    const agent = await createAgent(request, "Review Current Agent");
+    const release = await stallReadinessAndReview(page, agent.id, mode);
+
+    await showOtherAgentThenSwitch(page, other, agent, "Error analysis");
+    await expect(page.getByRole("heading", { name: "Discovery review" })).toBeVisible();
+    await expect(page.getByText(`${other.name} review set`)).toHaveCount(0);
+    await expect(page.getByText(`${other.name} review item`)).toHaveCount(0);
+
+    release();
+    await expect(page.getByRole("heading", { name: "Discovery review" })).toBeVisible();
+    await expect(page.getByText(`${other.name} review item`)).toHaveCount(0);
+  });
+}
