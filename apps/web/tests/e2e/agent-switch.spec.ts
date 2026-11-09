@@ -41,11 +41,9 @@ test("a failed load for a previously selected agent shows no error on the new on
   await page.getByRole("tab", { name: "Agent" }).click();
   await expect(page.getByRole("heading", { name: newAgent.name })).toBeVisible();
 
-  const failedResponse = page.waitForResponse(`**/gates?agent_design_id=${oldAgent.id}`);
   releaseOldLoad();
-  await failedResponse;
-  // Give the rejected load time to reach the page before checking nothing was shown.
-  await page.waitForTimeout(500);
+  // Wait until the page has handled (and dropped) every one of the old agent's loads.
+  await expect(page.locator(`main[data-settled-stale-agent-id="${oldAgent.id}"]`)).toHaveCount(1);
 
   await expect(page.getByRole("heading", { name: newAgent.name })).toBeVisible();
   await expect(page.locator(".error-text")).toHaveCount(0);
@@ -105,11 +103,9 @@ test("a failed saved-tests load for a previously selected agent shows no error o
   await page.getByRole("tab", { name: "Agent" }).click();
   await expect(page.getByRole("heading", { name: newAgent.name })).toBeVisible();
 
-  const failedResponse = page.waitForResponse(`**/eval-contracts?agent_design_id=${oldAgent.id}`);
   releaseOldLoad();
-  await failedResponse;
-  // Give the rejected load time to reach the page before checking nothing was shown.
-  await page.waitForTimeout(500);
+  // Wait until the page has handled (and dropped) every one of the old agent's loads.
+  await expect(page.locator(`main[data-settled-stale-agent-id="${oldAgent.id}"]`)).toHaveCount(1);
 
   await expect(page.getByRole("heading", { name: newAgent.name })).toBeVisible();
   await expect(page.locator(".error-text")).toHaveCount(0);
