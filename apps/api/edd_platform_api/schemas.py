@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, get_args
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AgentDesignCreate(BaseModel):
@@ -72,9 +72,16 @@ class Scenario(BaseModel):
     setup_context: str
     fixture_refs: List[str]
     default_eval_contract_id: Optional[str] = None
-    status: str
+    status: ScenarioStatus
     created_at: datetime
     updated_at: datetime
+
+    # Before T-35 a scenario could be saved with any status. Such a scenario
+    # was never listed as a saved test, so it loads as a draft.
+    @field_validator("status", mode="before")
+    @classmethod
+    def _load_unknown_status_as_draft(cls, value: object) -> object:
+        return value if value in get_args(ScenarioStatus) else "draft"
 
 
 class ScenarioUpdate(BaseModel):
