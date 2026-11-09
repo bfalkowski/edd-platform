@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { testFailurePackets, testFixProposal } from "../../src/testScope.ts";
-import type { FailurePacket, FixProposal, RunRecord } from "../../src/types.ts";
+import { testContract, testFailurePackets, testFixProposal } from "../../src/testScope.ts";
+import type { EvalContract, FailurePacket, FixProposal, RunRecord, Scenario } from "../../src/types.ts";
 
 // Scenarios A and B share contract C. A failed on run_a, and fix_a addresses A's packet.
 const runs = [
@@ -33,4 +33,16 @@ test("a scenario sharing a contract does not inherit another scenario's fix", ()
 test("a fix validated by another contract is not the test's fix", () => {
   assert.equal(testFixProposal([fixA], [packetA], "contract_x"), undefined);
   assert.equal(testFixProposal([fixA], [packetA], undefined), undefined);
+});
+
+// An older console saved two contracts on scenario S; the list is newest first.
+const scenarioS = { id: "scenario_s", default_eval_contract_id: null } as Scenario;
+const newerContract = { id: "contract_new", scenario_id: "scenario_s" } as EvalContract;
+const olderContract = { id: "contract_old", scenario_id: "scenario_s" } as EvalContract;
+
+test("a test's contract is the one asked for, so wizard resume reads the wizard's own contract", () => {
+  const contracts = [newerContract, olderContract];
+  assert.equal(testContract(scenarioS, contracts, "contract_old"), olderContract);
+  assert.equal(testContract(scenarioS, contracts), newerContract);
+  assert.equal(testContract(scenarioS, contracts, "contract_missing"), newerContract);
 });
