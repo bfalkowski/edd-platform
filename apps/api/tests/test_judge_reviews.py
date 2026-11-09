@@ -106,6 +106,12 @@ def test_overrule_passed_verdict_fails_eval_and_opens_failure_packet() -> None:
     assert len(packets) == 1
     assert packets[0]["id"] == body["failure_packet"]["id"]
     assert "Bundles three fixes into one ticket." in packets[0]["diagnosis"]
+    # The Evidence tab groups the packet by its Run line before the records load.
+    [packet_artifact] = client.get(
+        f"{PROJECT}/artifacts",
+        params={"agent_design_id": agent_id, "artifact_type": "FAILURE_PACKET"},
+    ).json()
+    assert packet_artifact["body"].startswith(f"Run\n{eval_result['run_id']}\n\n")
 
 
 def test_overrule_failed_verdict_passes_eval_and_closes_failure_packet() -> None:

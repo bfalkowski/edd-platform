@@ -25,7 +25,13 @@ const RUN_ROW_ORDER = [
 ];
 
 // Artifact types whose body names their run on a "Run" line.
-const RUN_LINE_TYPES = new Set(["TOOL_CALL", "TOOL_RESULT", "TRACE_REF", "EVAL_RESULT"]);
+const RUN_LINE_TYPES = new Set([
+  "TOOL_CALL",
+  "TOOL_RESULT",
+  "TRACE_REF",
+  "EVAL_RESULT",
+  "FAILURE_PACKET",
+]);
 
 // Artifact types saved in the same request as the eval result they come from.
 const SAVED_WITH_EVAL_TYPES = new Set(["JUDGE_OUTPUT", "FAILURE_PACKET"]);

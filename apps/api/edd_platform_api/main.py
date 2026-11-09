@@ -784,7 +784,9 @@ def create_failure_packet_record(
     _failure_packets[failure_packet.id] = failure_packet
     store.save_record("failure_packets", failure_packet.id, failure_packet)
 
+    # Run comes first so a "Run" line inside the free-text diagnosis is never read as the run.
     body = (
+        f"Run\n{failure_packet.run_id}\n\n"
         f"Diagnosis\n{failure_packet.diagnosis}\n\n"
         f"Failed checks\n"
         + "\n".join(f"- {check_id}" for check_id in failure_packet.failed_check_ids)

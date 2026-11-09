@@ -566,6 +566,7 @@ def create_discovery_run_and_eval(
         title=f"Discovery eval: {item.title}",
         body=(
             "Result\nFailed by accepted discovery finding.\n\n"
+            f"Run\n{run.id}\n\n"
             f"Finding\n{annotation.body}\n\n"
             f"Contract\n{contract.name}"
         ),
