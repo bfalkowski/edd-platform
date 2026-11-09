@@ -63,6 +63,18 @@ async function clickNext(page: Page, label: string) {
   await button.click();
 }
 
+/**
+ * Run current waits on a live run. The API's first one loads the provider
+ * libraries, which can take longer than an expect, so wait on the run itself.
+ */
+async function runCurrent(page: Page) {
+  const ran = page.waitForResponse(
+    (response) => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/runs"),
+  );
+  await clickNext(page, "Run current");
+  expect((await ran).ok()).toBeTruthy();
+}
+
 // Wide enough that the artifact review panel sits beside the proof loop, not over it.
 test.use({ viewport: { width: 1600, height: 1000 } });
 
@@ -71,7 +83,7 @@ test("A failed test goes from Save analysis to a compared new version", async ({
   await openAgent(page, name);
   await expect(page.getByRole("tab", { name: "Proof loop" })).toHaveAttribute("aria-selected", "true");
 
-  await clickNext(page, "Run current");
+  await runCurrent(page);
   await clickNext(page, "Check answer");
 
   const analysis = page.locator(".failure-analysis-panel");
@@ -120,7 +132,7 @@ test("A failed test checked in an earlier session still reaches Generate fix", a
 test("A failed check stays saved when the packet reload fails", async ({ page, request }) => {
   const name = await seedAgent(request);
   await openAgent(page, name);
-  await clickNext(page, "Run current");
+  await runCurrent(page);
 
   // Fail only the next failure-packet reload, the one Check makes after saving its eval.
   let failed = false;
@@ -138,7 +150,7 @@ test("A failed check stays saved when the packet reload fails", async ({ page, r
 test("A fix proposal names the failure packet when the Check reload failed", async ({ page, request }) => {
   const name = await seedAgent(request);
   await openAgent(page, name);
-  await clickNext(page, "Run current");
+  await runCurrent(page);
 
   // Fail only the failure-packet reload Check makes after saving its eval.
   let failed = false;
@@ -172,7 +184,7 @@ test("The fix message never names a version label other than the one created", a
   ).id;
   await postJson(request, `/agent-designs/${agentId}/versions`, { version_label: "draft", status: "draft" });
   await openAgent(page, name);
-  await clickNext(page, "Run current");
+  await runCurrent(page);
   await clickNext(page, "Check answer");
 
   const analysis = page.locator(".failure-analysis-panel");
@@ -220,7 +232,7 @@ test("A second test's fix gets its own version, not the first test's", async ({ 
 
   /** Run and check the open test, then save its analysis and fix, and create a version from the fix. */
   async function fixOpenTest() {
-    await clickNext(page, "Run current");
+    await runCurrent(page);
     await clickNext(page, "Check answer");
     const analysis = page.locator(".failure-analysis-panel");
     await analysis.getByRole("button", { name: "Auto-diagnose" }).click();
@@ -336,7 +348,7 @@ test("A test sharing a default contract does not inherit another test's failure 
 
   // The second, newest test opens selected and starts its own proof loop.
   await openAgent(page, name);
-  await clickNext(page, "Run current");
+  await runCurrent(page);
   await clickNext(page, "Check answer");
   const analysis = page.locator(".failure-analysis-panel");
   await expect(analysis.getByRole("heading", { name: "Name this failure" })).toBeVisible();
