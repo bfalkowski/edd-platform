@@ -3477,6 +3477,51 @@ def test_create_fix_proposal_requires_consistent_references() -> None:
     assert response.status_code == 400
 
 
+def test_fix_proposal_rejects_blank_instructions_change() -> None:
+    client = TestClient(app)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Blank Fix Agent", "intent": "Gather evidence."},
+    ).json()["agent"]
+    payload = {
+        "agent_design_id": agent["id"],
+        "title": "Blank fix",
+        "rationale": "Instructions left blank.",
+    }
+    blank_changes = [
+        [{"surface": "instructions", "change": "   "}],
+        [{"surface": "instructions", "change": "\u200b\n"}],
+    ]
+
+    for changes in blank_changes:
+        response = client.post(
+            "/api/projects/project_default/fix-proposals",
+            json={**payload, "proposed_changes": changes},
+        )
+        assert response.status_code == 422, changes
+
+    proposal = client.post(
+        "/api/projects/project_default/fix-proposals",
+        json={
+            **payload,
+            "proposed_changes": [{"surface": "instructions", "change": "Ask for a plan."}],
+        },
+    ).json()
+    for changes in blank_changes:
+        response = client.patch(
+            f"/api/projects/project_default/fix-proposals/{proposal['id']}",
+            json={"proposed_changes": changes},
+        )
+        assert response.status_code == 422, changes
+
+    stored = client.get(
+        f"/api/projects/project_default/fix-proposals/{proposal['id']}"
+    ).json()
+    assert stored["proposed_changes"] == [
+        {"surface": "instructions", "change": "Ask for a plan."}
+    ]
+
+
 def test_create_comparison_summarizes_baseline_and_candidate_failures() -> None:
     client = TestClient(app)
     create_response = client.post(

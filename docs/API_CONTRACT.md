@@ -1010,6 +1010,11 @@ created_at
 updated_at
 ```
 
+On create and update, a `proposed_changes` entry whose `surface` is
+`instructions` must have a `change` that contains a visible character, as for
+`intent`, or the request returns 422. The change becomes the next version's
+instructions, so a blank one would reach live runs as an empty system prompt.
+
 ### Comparisons
 
 Comparisons show whether a candidate improved against a baseline.
