@@ -763,7 +763,12 @@ function App() {
       fetchAgentWizardState(project.id, agent.id)
         .then(async (agentState) => [
           agentState,
-          await hydrateEddFlow(project.id, agent, agentState.scenario.id),
+          await hydrateEddFlow(
+            project.id,
+            agent,
+            agentState.scenario.id,
+            agentState.eval_contract.id,
+          ),
         ] as const)
         .then(([agentState, flow]) => {
           const resumeState = wizardStateFromFlow(project.id, agentState, flow);

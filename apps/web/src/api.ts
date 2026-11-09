@@ -1,4 +1,4 @@
-import { testFailurePackets, testFixProposal } from "./testScope";
+import { testContract, testFailurePackets, testFixProposal } from "./testScope";
 import type {
   AgentDesign,
   AgentRunResult,
@@ -1139,29 +1139,6 @@ function latestRunForVersion(
 }
 
 /**
- * A scenario's test contract: its newest own contract (one naming the
- * scenario), else its default contract unless that names another scenario (a
- * run refuses such a contract). `contracts` is one agent's, newest first.
- * Matches `active_tests` in apps/api/edd_platform_api/routers/suites.py.
- */
-function testContract(
-  scenario: Scenario | undefined,
-  contracts: EvalContract[],
-): EvalContract | undefined {
-  if (!scenario) {
-    return undefined;
-  }
-  return (
-    contracts.find((item) => item.scenario_id === scenario.id) ??
-    contracts.find(
-      (item) =>
-        item.id === scenario.default_eval_contract_id &&
-        (!item.scenario_id || item.scenario_id === scenario.id),
-    )
-  );
-}
-
-/**
  * A saved test is an active scenario paired with its test contract, oldest
  * first. Draft scenarios (left by earlier edits) and superseded ones are not
  * tests.
@@ -1205,12 +1182,14 @@ export async function listSavedTests(projectId: string, agentDesignId: string): 
 /**
  * Load the proof loop for one test: the given scenario, else the newest saved
  * test. A given scenario is honoured even when it is not listed (a legacy draft
- * or a superseded revision), so wizard resume reads the wizard's own test.
+ * or a superseded revision), and so is a given contract, so wizard resume reads
+ * the wizard's own test.
  */
 export async function hydrateEddFlow(
   projectId: string,
   agent: AgentDesign,
   scenarioId?: string,
+  contractId?: string,
 ): Promise<EddFlowState> {
   const [versions, scenarios, contracts, runs, failurePackets, fixProposals, comparisons] =
     await Promise.all([
@@ -1224,7 +1203,7 @@ export async function hydrateEddFlow(
     ]);
 
   const requestedScenario = scenarios.find((item) => item.id === scenarioId);
-  const requestedContract = testContract(requestedScenario, contracts);
+  const requestedContract = testContract(requestedScenario, contracts, contractId);
   const tests = pairActiveTests(scenarios, contracts);
   const selectedTest =
     requestedScenario && requestedContract
