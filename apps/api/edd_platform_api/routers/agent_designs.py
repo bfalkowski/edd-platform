@@ -48,6 +48,7 @@ from edd_platform_api.state import (
     _tool_definitions,
     _trace_refs,
     store,
+    write_lock,
 )
 
 router = APIRouter()
@@ -587,44 +588,45 @@ def create_agent_version(
             )
 
     now = datetime.now(timezone.utc)
-    existing_count = len(
-        [
-            version
-            for version in _agent_versions.values()
-            if version.project_id == project_id and version.agent_design_id == agent_id
-        ]
-    )
-    version_label = payload.version_label or f"v{existing_count}"
-    version = AgentVersion(
-        id=f"version_{uuid4().hex[:12]}",
-        project_id=project_id,
-        agent_design_id=agent.id,
-        version_label=version_label.strip(),
-        parent_version_id=payload.parent_version_id,
-        instructions=(payload.instructions or agent.intent).strip(),
-        tool_policy=payload.tool_policy or {"allowed_tool_names": agent.allowed_tool_names},
-        source_fix_proposal_id=payload.source_fix_proposal_id,
-        status=payload.status.strip(),
-        langfuse_prompt_name=(
-            payload.langfuse_prompt_name.strip()
-            if payload.langfuse_prompt_name is not None
-            else agent.langfuse_prompt_name
-        ),
-        langfuse_prompt_version=(
-            payload.langfuse_prompt_version.strip()
-            if payload.langfuse_prompt_version is not None
-            else agent.langfuse_prompt_version
-        ),
-        langfuse_prompt_label=(
-            payload.langfuse_prompt_label.strip()
-            if payload.langfuse_prompt_label is not None
-            else agent.langfuse_prompt_label
-        ),
-        created_at=now,
-        updated_at=now,
-    )
-    _agent_versions[version.id] = version
-    store.save_record("agent_versions", version.id, version)
+    with write_lock:
+        existing_count = len(
+            [
+                version
+                for version in _agent_versions.values()
+                if version.project_id == project_id and version.agent_design_id == agent_id
+            ]
+        )
+        version_label = payload.version_label or f"v{existing_count}"
+        version = AgentVersion(
+            id=f"version_{uuid4().hex[:12]}",
+            project_id=project_id,
+            agent_design_id=agent.id,
+            version_label=version_label.strip(),
+            parent_version_id=payload.parent_version_id,
+            instructions=(payload.instructions or agent.intent).strip(),
+            tool_policy=payload.tool_policy or {"allowed_tool_names": agent.allowed_tool_names},
+            source_fix_proposal_id=payload.source_fix_proposal_id,
+            status=payload.status.strip(),
+            langfuse_prompt_name=(
+                payload.langfuse_prompt_name.strip()
+                if payload.langfuse_prompt_name is not None
+                else agent.langfuse_prompt_name
+            ),
+            langfuse_prompt_version=(
+                payload.langfuse_prompt_version.strip()
+                if payload.langfuse_prompt_version is not None
+                else agent.langfuse_prompt_version
+            ),
+            langfuse_prompt_label=(
+                payload.langfuse_prompt_label.strip()
+                if payload.langfuse_prompt_label is not None
+                else agent.langfuse_prompt_label
+            ),
+            created_at=now,
+            updated_at=now,
+        )
+        _agent_versions[version.id] = version
+        store.save_record("agent_versions", version.id, version)
 
     artifact = api_main.create_artifact(
         project_id=project_id,
