@@ -3373,6 +3373,8 @@ dd {
   font-size: 13px;
   line-height: 1.4;
   margin: 2px 0 0;
+  max-height: 320px;
+  overflow-y: auto;
   white-space: pre-wrap;
 }
 
