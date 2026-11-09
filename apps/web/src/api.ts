@@ -493,7 +493,7 @@ export async function createReviewCorpus(
     }),
   });
   if (!response.ok) {
-    throw await responseError(response, "Unable to create review corpus.");
+    throw await responseError(response, "Unable to create review set.");
   }
   return response.json();
 }
