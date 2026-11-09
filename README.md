@@ -50,7 +50,7 @@ failure mode taxonomy:
 1. **Build review set** — pull in the live runs and traces you want to review.
    A data table shows each item with its source, status, and note count.
 
-   ![Error analysis step 1: the review set table](./docs/assets/error-analysis-build-corpus.webp)
+   ![Error analysis step 1: the review set table](./docs/assets/error-analysis-build-review-set.webp)
 
 2. **Review & code** — read each run's input, the agent's output and the
    judge's verdict, and write a note on what went wrong. Name a failure mode
