@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 
 class AgentDesignCreate(BaseModel):
     name: str = Field(min_length=1)
-    intent: str = Field(min_length=1)
+    # A version created without instructions uses the intent as its system prompt.
+    intent: str = Field(pattern=r"\S")
     allowed_tool_names: List[str] = Field(default_factory=list)
     langfuse_prompt_name: Optional[str] = None
     langfuse_prompt_version: Optional[str] = None
@@ -17,7 +18,7 @@ class AgentDesignCreate(BaseModel):
 
 class AgentDesignUpdate(BaseModel):
     name: Optional[str] = None
-    intent: Optional[str] = None
+    intent: Optional[str] = Field(default=None, pattern=r"\S")
     allowed_tool_names: Optional[List[str]] = None
     status: Optional[str] = None
     langfuse_prompt_name: Optional[str] = None

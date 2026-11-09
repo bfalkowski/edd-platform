@@ -96,7 +96,7 @@
             "type": "array"
           },
           "intent": {
-            "minLength": 1,
+            "pattern": "\\S",
             "title": "Intent",
             "type": "string"
           },
@@ -181,6 +181,7 @@
           "intent": {
             "anyOf": [
               {
+                "pattern": "\\S",
                 "type": "string"
               },
               {
