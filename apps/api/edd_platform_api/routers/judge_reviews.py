@@ -100,11 +100,11 @@ def review_judge_output(
     # a result the judge passed are treated as a reviewer overrule's: agreeing
     # with the judge closes them as "withdrawn". A packet added by hand through
     # POST /failure-packets changes status like the others on its result, but
-    # only the reviewer's own packet takes the overrule reason as its diagnosis.
+    # only the reviewer's own packet (origin "reviewer_overrule", whatever its
+    # title) takes the overrule reason as its diagnosis.
     # An overrule of a pass always opens or reopens the reviewer's own packet and
     # returns it, so its reason is recorded even beside a hand-added packet.
     closed_status = "withdrawn" if judge_passed else "overruled"
-    reviewer_title_prefix = "Reviewer overruled judge:"
     diagnosis = f"A reviewer overruled the judge's pass. Reason: {payload.reason}"
     failure_packet: Optional[FailurePacket] = None
     reviewer_packet: Optional[FailurePacket] = None
@@ -116,7 +116,7 @@ def review_judge_output(
             update = {"status": closed_status}
         elif not passed and packet.status in (closed_status, "open"):
             update = {"status": "open"}
-            if judge_passed and packet.title.startswith(reviewer_title_prefix):
+            if judge_passed and packet.origin == "reviewer_overrule":
                 # The reviewer packet carries the latest overrule's reason.
                 update["diagnosis"] = diagnosis
         update = {key: value for key, value in update.items() if getattr(packet, key) != value}
@@ -125,7 +125,7 @@ def review_judge_output(
             _failure_packets[packet.id] = packet
             store.save_record("failure_packets", packet.id, packet)
         if not passed and packet.status == "open":
-            if judge_passed and packet.title.startswith(reviewer_title_prefix):
+            if judge_passed and packet.origin == "reviewer_overrule":
                 reviewer_packet = reviewer_packet or packet
             elif failure_packet is None:
                 failure_packet = packet
@@ -138,13 +138,14 @@ def review_judge_output(
             eval_result_id=eval_result.id,
             eval_contract_id=contract.id,
             failed_check_ids=[check.check_id for check in eval_result.checks],
-            title=f"{reviewer_title_prefix} {contract.name}",
+            title=f"Reviewer overruled judge: {contract.name}",
             diagnosis=diagnosis,
             severity="medium",
             evidence_artifact_ids=[*eval_result.artifact_ids, review_artifact.id],
             recommended_fix="Address the reviewer's reason and propose a bounded agent change.",
             status="open",
             now=now,
+            origin="reviewer_overrule",
         )
 
     return JudgeReviewResult(

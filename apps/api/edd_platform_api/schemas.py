@@ -865,6 +865,8 @@ class FailurePacket(BaseModel):
     evidence_artifact_ids: List[str]
     recommended_fix: str
     status: str
+    # Set only when a reviewer's overrule opens the packet; null for every other packet.
+    origin: Optional[Literal["reviewer_overrule"]] = None
     created_at: datetime
     updated_at: datetime
 
