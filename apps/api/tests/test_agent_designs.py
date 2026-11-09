@@ -2237,6 +2237,33 @@ def test_comparison_keeps_packets_without_candidate_evidence_remaining() -> None
     )
 
 
+def test_comparison_keeps_packet_remaining_when_check_was_edited_under_same_id() -> None:
+    client = TestClient(app)
+    loop = _fix_loop_for_gate(client, "Edited Check Gate Agent")
+    v0 = loop["version"]("v0", "Answer with evidence only.")
+    v1 = loop["version"]("v1", "Answer with evidence only, again.", v0["id"])
+    v0_run, v0_eval = loop["run_and_evaluate"](v0["id"])
+    assert v0_eval["passed"] is False
+    [packet] = loop["packets"]()
+    assert packet["failed_check_ids"] == ["requires_fixed_phrase"]
+    checks_response = client.patch(
+        f"/api/projects/project_default/eval-contracts/{v0_eval['eval_contract_id']}/checks",
+        json={
+            "checks": [
+                {"id": "requires_fixed_phrase", "type": "output_contains", "value": "evidence"}
+            ]
+        },
+    )
+    assert checks_response.status_code == 200
+    v1_run, v1_eval = loop["run_and_evaluate"](v1["id"])
+    assert v1_eval["passed"] is True
+
+    comparison = loop["compare"](v0_run, v1_run)
+
+    assert comparison["fixed_failure_packet_ids"] == []
+    assert comparison["remaining_failure_packet_ids"] == [packet["id"]]
+
+
 def test_gate_decision_rationale_labels_eval_only_version() -> None:
     loop = _fix_loop_for_gate(TestClient(app), "Eval Only Gate Agent")
     v0 = loop["version"]("v0", "Answer with evidence and include fixed phrase.")

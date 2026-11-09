@@ -44,6 +44,7 @@ from edd_platform_api.evidence_context import (
     context_pack_cache_key,
 )
 from edd_platform_api.eval_checks import (
+    check_fingerprint,
     contract_generated_checks,
     evaluate_contract_check,
     evaluate_run_text,
@@ -764,6 +765,12 @@ def create_failure_packet_record(
     now: datetime,
     origin: Optional[str] = None,
 ) -> FailurePacket:
+    eval_result = get_eval_result_or_404(project_id, eval_result_id)
+    failed_check_fingerprints = [
+        check_fingerprint(check)
+        for check in eval_result.checks
+        if check.check_id in failed_check_ids
+    ]
     failure_packet = FailurePacket(
         id=f"failure_{uuid4().hex[:12]}",
         project_id=project_id,
@@ -773,6 +780,7 @@ def create_failure_packet_record(
         eval_result_id=eval_result_id,
         eval_contract_id=eval_contract_id,
         failed_check_ids=failed_check_ids,
+        failed_check_fingerprints=failed_check_fingerprints,
         title=title,
         diagnosis=diagnosis,
         severity=severity,
