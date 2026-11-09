@@ -6,6 +6,14 @@ export type CheckRef = {
   expected?: string;
 };
 
+// llm_judge is an alias of rubric_judge (RUBRIC_CHECK_TYPES in apps/api/edd_platform_api/eval_checks.py).
+const rubricCheckTypes = ["rubric_judge", "llm_judge"];
+
+/** Whether a check of this type carries a rubric for the live judge. */
+export function isRubricCheckType(checkType: string | undefined): boolean {
+  return checkType !== undefined && rubricCheckTypes.includes(checkType);
+}
+
 // One entry per check type the API evaluates (apps/api/edd_platform_api/eval_checks.py).
 const typeLabels: Record<string, (expected: string) => string> = {
   output_contains: (expected) => (expected ? `Includes “${expected}”` : "Includes required text"),
@@ -13,6 +21,7 @@ const typeLabels: Record<string, (expected: string) => string> = {
   tool_called: (expected) => (expected ? `Calls ${expected}` : "Calls the required tool"),
   tool_not_called: (expected) => (expected ? `Does not call ${expected}` : "Does not call the forbidden tool"),
   rubric_judge: () => "Rubric judge",
+  llm_judge: () => "Rubric judge",
   manual_review_required: () => "Needs manual review",
 };
 

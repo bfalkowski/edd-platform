@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 
 from edd_platform_api import main as api_main
+from edd_platform_api.eval_checks import contract_rubric
 from edd_platform_api.lookups import (
     get_agent_design_or_404,
     get_agent_version_or_404,
@@ -188,12 +189,7 @@ def diagnose_failure(
                 summary += f": observed={check_result.observed}"
             failed_check_summaries.append(summary)
 
-    rubric = ""
-    if contract:
-        for check in contract.checks:
-            if check.get("type") == "rubric_judge" and check.get("value"):
-                rubric = check["value"]
-                break
+    rubric = contract_rubric(contract.checks) if contract else ""
 
     run_output = run.output if run else ""
 
@@ -383,12 +379,7 @@ def generate_fix_proposal(
     ]
     contract = _eval_contracts.get(payload.validation_contract_id) if payload.validation_contract_id else None
 
-    rubric_text = ""
-    if contract:
-        for check in contract.checks:
-            if check.get("type") == "rubric_judge" and check.get("value"):
-                rubric_text = check["value"]
-                break
+    rubric_text = contract_rubric(contract.checks) if contract else ""
 
     failure_lines = []
     for p in packets:

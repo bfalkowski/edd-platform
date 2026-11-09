@@ -4,7 +4,7 @@
  */
 import { ExternalLink, Loader } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { checkLabel } from "./checkLabel";
+import { checkLabel, isRubricCheckType } from "./checkLabel";
 import type { ScenarioStatus } from "./types";
 
 const apiBase = "/api";
@@ -1074,7 +1074,7 @@ export function Wizard({ projectId, onAgentCreated, onDone, resumeState }: Props
     comparisonSummary: string | null;
     suggestMoreTests?: boolean;
   }) {
-    const rubric = agent?.eval_contract.checks.find((c) => c.type === "rubric_judge")?.value ?? null;
+    const rubric = agent?.eval_contract.checks.find((c) => isRubricCheckType(c.type))?.value ?? null;
     return (
       <div className="wizard-body">
         <p className="wizard-eyebrow">Done</p>
