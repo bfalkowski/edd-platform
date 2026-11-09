@@ -518,6 +518,8 @@ function App() {
     let isCurrent = true;
     // An error from the last agent's context does not belong to this one.
     setError(null);
+    // Nor do its artifacts: until this load lands, show none rather than the last list.
+    setAgentArtifacts([]);
     setEddFlow({ failurePackets: [] });
     resetProofLoopCtx();
     setIsLoadingContext(true);

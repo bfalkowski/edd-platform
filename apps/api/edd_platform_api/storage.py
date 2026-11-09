@@ -21,16 +21,41 @@ class JsonStore(Protocol):
         ...
 
 
+class SharedCollection(dict):
+    """A collection that request threads share: each walk is over a copy.
+
+    FastAPI runs sync routes on a thread pool, so one request can add a record
+    while another loops over the collection. A plain dict then raises
+    "dictionary changed size during iteration". list() over the base dict's
+    items runs in C, so another thread cannot insert part way through it.
+    """
+
+    def _snapshot(self) -> dict:
+        return dict(list(dict.items(self)))
+
+    def __iter__(self):
+        return iter(self._snapshot())
+
+    def keys(self):
+        return self._snapshot().keys()
+
+    def values(self):
+        return self._snapshot().values()
+
+    def items(self):
+        return self._snapshot().items()
+
+
 class InMemoryJsonStore:
     def __init__(self) -> None:
         self._records: Dict[str, Dict[str, str]] = {}
 
     def load_collection(self, collection: str, model: Type[ModelT]) -> Dict[str, ModelT]:
         records = self._records.get(collection, {})
-        return {
-            record_id: model.model_validate(json.loads(payload))
+        return SharedCollection(
+            (record_id, model.model_validate(json.loads(payload)))
             for record_id, payload in records.items()
-        }
+        )
 
     def save_record(self, collection: str, record_id: str, record: BaseModel) -> None:
         records = self._records.setdefault(collection, {})
@@ -53,10 +78,7 @@ class PostgresJsonStore:
                     (collection,),
                 )
                 rows = cursor.fetchall()
-        return {
-            row[0]: model.model_validate(row[1])
-            for row in rows
-        }
+        return SharedCollection((row[0], model.model_validate(row[1])) for row in rows)
 
     def save_record(self, collection: str, record_id: str, record: BaseModel) -> None:
         payload = json.dumps(record.model_dump(mode="json"), sort_keys=True)
