@@ -529,6 +529,8 @@ old scenario back to `active` and a new scenario left without a contract to
 `draft`, so one revision stays listed. `draft` scenarios are not listed.
 `status` must be one of `draft`, `active`, or `superseded`; any other value is
 rejected with `422`.
+A scenario saved before this check with another status loads as `draft`, so
+responses only ever return one of the three values.
 
 Minimum response fields:
 

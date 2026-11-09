@@ -1,9 +1,11 @@
+import json
 import os
 from datetime import datetime, timezone
 
 import pytest
 
-from edd_platform_api.main import Project
+from edd_platform_api.main import Project, app
+from edd_platform_api.schemas import Scenario
 from edd_platform_api.storage import InMemoryJsonStore, create_store_from_env
 
 
@@ -60,3 +62,48 @@ def test_postgres_json_store_round_trips_records() -> None:
 
     store.delete_record("test_projects", project.id)
     assert project.id not in store.load_collection("test_projects", Project)
+
+
+def _stored_scenario(status: str) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "id": "scenario_legacy",
+        "project_id": "project_default",
+        "agent_design_id": "agent_legacy",
+        "name": "Legacy test",
+        "input": "Hello",
+        "setup_context": "",
+        "fixture_refs": [],
+        "default_eval_contract_id": None,
+        "status": status,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def test_scenario_saved_before_status_check_loads_as_draft() -> None:
+    # Before T-35, create and update accepted any status string.
+    store = InMemoryJsonStore()
+    store._records["scenarios"] = {"scenario_legacy": json.dumps(_stored_scenario("archived"))}
+
+    scenarios = store.load_collection("scenarios", Scenario)
+
+    assert scenarios["scenario_legacy"].status == "draft"
+
+
+@pytest.mark.parametrize("status", ["draft", "active", "superseded"])
+def test_scenario_keeps_a_valid_stored_status(status: str) -> None:
+    assert Scenario.model_validate(_stored_scenario(status)).status == status
+
+
+def test_scenario_response_contract_lists_the_three_statuses() -> None:
+    schema = app.openapi()["components"]["schemas"]["Scenario"]["properties"]["status"]
+
+    assert schema["enum"] == ["draft", "active", "superseded"]
+
+
+def test_scenario_loaded_with_unknown_status_logs_a_warning(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING", logger="edd_platform_api.schemas"):
+        Scenario.model_validate(_stored_scenario("archived"))
+
+    assert "'archived'" in caplog.text
