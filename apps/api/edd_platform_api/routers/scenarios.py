@@ -5,10 +5,11 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from edd_platform_api import main as api_main
 from edd_platform_api.lookups import get_agent_design_or_404, get_eval_contract_or_404, get_project_or_404, get_scenario_or_404
+from edd_platform_api.query_params import reject_unknown_query_params
 from edd_platform_api.schemas import ExternalArtifactRef, Scenario, ScenarioCreate, ScenarioUpdate
 from edd_platform_api.state import _scenarios, store
 
@@ -142,7 +143,7 @@ def sync_langfuse_scenario_dataset_refs(
     ]
 
 
-@router.get("/api/projects/{project_id}/scenarios")
+@router.get("/api/projects/{project_id}/scenarios", dependencies=[Depends(reject_unknown_query_params)])
 def list_scenarios(
     project_id: str,
     agent_design_id: Optional[str] = None,

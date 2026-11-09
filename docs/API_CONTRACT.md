@@ -61,6 +61,14 @@ Do not stub Langfuse, live LLM routing, broad gate workflows, or unrelated
 admin surfaces until they are close enough to implementation to validate the
 contract.
 
+## Query Filters
+
+A GET route that takes query parameters must reject one it does not declare.
+Add `dependencies=[Depends(reject_unknown_query_params)]` to the route. A
+request with an unknown parameter then returns 400 naming it and listing the
+supported ones, instead of ignoring the filter and returning every record.
+`tests/test_unknown_filters.py` checks every such route.
+
 ## Phase 2 API Backbone
 
 The next implementation milestone is contract-first. The API should expose the

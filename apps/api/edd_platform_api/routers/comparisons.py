@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from edd_platform_api import main as api_main
 from edd_platform_api.lookups import (
@@ -15,6 +15,7 @@ from edd_platform_api.lookups import (
     get_run_or_404,
 )
 from edd_platform_api.routers.suites import active_tests, latest_eval_for_test
+from edd_platform_api.query_params import reject_unknown_query_params
 from edd_platform_api.schemas import (
     Comparison,
     ComparisonCreate,
@@ -404,7 +405,7 @@ def create_suite_comparison(
     return comparison
 
 
-@router.get("/api/projects/{project_id}/comparisons")
+@router.get("/api/projects/{project_id}/comparisons", dependencies=[Depends(reject_unknown_query_params)])
 def list_comparisons(
     project_id: str,
     agent_design_id: Optional[str] = None,

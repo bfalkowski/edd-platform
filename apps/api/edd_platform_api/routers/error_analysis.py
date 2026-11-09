@@ -10,7 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from edd_platform_api import main as api_main
 from edd_platform_api.lookups import (
@@ -31,6 +31,7 @@ from edd_platform_api.polars_analysis import (
     review_corpus_analysis,
     review_corpus_analysis_from_snapshot,
 )
+from edd_platform_api.query_params import reject_unknown_query_params
 from edd_platform_api.routers import eval_contracts as _eval_contracts_router
 from edd_platform_api.routers import scenarios as _scenarios_router
 from edd_platform_api.schemas import (
@@ -742,7 +743,7 @@ def sync_langfuse_comment_ref(
     ]
 
 
-@router.get("/api/projects/{project_id}/review-notes")
+@router.get("/api/projects/{project_id}/review-notes", dependencies=[Depends(reject_unknown_query_params)])
 def list_review_notes(
     project_id: str,
     target_artifact_id: Optional[str] = None,
@@ -818,7 +819,7 @@ def get_review_note(project_id: str, review_note_id: str) -> ReviewNote:
     return get_review_note_or_404(project_id, review_note_id)
 
 
-@router.get("/api/projects/{project_id}/review-corpora")
+@router.get("/api/projects/{project_id}/review-corpora", dependencies=[Depends(reject_unknown_query_params)])
 def list_review_corpora(
     project_id: str,
     agent_design_id: Optional[str] = None,
@@ -918,7 +919,7 @@ def update_review_corpus(
     return updated
 
 
-@router.get("/api/projects/{project_id}/review-corpora/{corpus_id}/sampling-plan")
+@router.get("/api/projects/{project_id}/review-corpora/{corpus_id}/sampling-plan", dependencies=[Depends(reject_unknown_query_params)])
 def get_review_sampling_plan(
     project_id: str,
     corpus_id: str,
@@ -1019,7 +1020,7 @@ def sync_langfuse_comments_to_corpus(
     )
 
 
-@router.get("/api/projects/{project_id}/review-items")
+@router.get("/api/projects/{project_id}/review-items", dependencies=[Depends(reject_unknown_query_params)])
 def list_review_items(
     project_id: str,
     corpus_id: Optional[str] = None,
@@ -1284,7 +1285,7 @@ def import_langfuse_review_annotations(
     )
 
 
-@router.get("/api/projects/{project_id}/failure-modes")
+@router.get("/api/projects/{project_id}/failure-modes", dependencies=[Depends(reject_unknown_query_params)])
 def list_failure_modes(
     project_id: str,
     agent_design_id: Optional[str] = None,
@@ -1406,7 +1407,7 @@ def update_failure_mode(
     return updated
 
 
-@router.get("/api/projects/{project_id}/review-annotations")
+@router.get("/api/projects/{project_id}/review-annotations", dependencies=[Depends(reject_unknown_query_params)])
 def list_review_annotations(
     project_id: str,
     corpus_id: Optional[str] = None,
@@ -1679,7 +1680,7 @@ def update_review_annotation(
     return updated
 
 
-@router.get("/api/projects/{project_id}/agent-suggestions")
+@router.get("/api/projects/{project_id}/agent-suggestions", dependencies=[Depends(reject_unknown_query_params)])
 def list_agent_suggestions(
     project_id: str,
     corpus_id: Optional[str] = None,

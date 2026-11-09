@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Literal, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from edd_platform_api import main as api_main
 from edd_platform_api.lookups import (
@@ -17,6 +17,7 @@ from edd_platform_api.lookups import (
     get_project_or_404,
     get_run_or_404,
 )
+from edd_platform_api.query_params import reject_unknown_query_params
 from edd_platform_api.schemas import (
     ArtifactRecord,
     FailurePacket,
@@ -231,7 +232,7 @@ def create_gate_decision_record(
     return decision
 
 
-@router.get("/api/projects/{project_id}/gates")
+@router.get("/api/projects/{project_id}/gates", dependencies=[Depends(reject_unknown_query_params)])
 def list_gate_definitions(
     project_id: str,
     agent_design_id: Optional[str] = None,
@@ -301,7 +302,7 @@ def get_gate_definition(project_id: str, gate_id: str) -> GateDefinition:
     return get_gate_definition_or_404(project_id, gate_id)
 
 
-@router.get("/api/projects/{project_id}/gate-decisions")
+@router.get("/api/projects/{project_id}/gate-decisions", dependencies=[Depends(reject_unknown_query_params)])
 def list_gate_decisions(
     project_id: str,
     agent_design_id: Optional[str] = None,

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from edd_platform_api import main as api_main
 from edd_platform_api.eval_checks import contract_rubric
@@ -19,6 +19,7 @@ from edd_platform_api.lookups import (
     get_fix_proposal_or_404,
     get_project_or_404,
 )
+from edd_platform_api.query_params import reject_unknown_query_params
 from edd_platform_api.schemas import (
     FailureDiagnosis,
     FailureDiagnosisRequest,
@@ -235,7 +236,7 @@ def diagnose_failure(
         }
 
 
-@router.get("/api/projects/{project_id}/failure-packets")
+@router.get("/api/projects/{project_id}/failure-packets", dependencies=[Depends(reject_unknown_query_params)])
 def list_failure_packets(
     project_id: str,
     agent_design_id: Optional[str] = None,
@@ -340,7 +341,7 @@ def update_failure_packet(
     return updated
 
 
-@router.get("/api/projects/{project_id}/fix-proposals")
+@router.get("/api/projects/{project_id}/fix-proposals", dependencies=[Depends(reject_unknown_query_params)])
 def list_fix_proposals(
     project_id: str,
     agent_design_id: Optional[str] = None,

@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from urllib.request import Request
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from edd_platform_api import main as api_main
 from edd_platform_api.eval_checks import (
@@ -34,6 +34,7 @@ from edd_platform_api.lookups import (
     get_run_or_404,
     get_scenario_or_404,
 )
+from edd_platform_api.query_params import reject_unknown_query_params
 from edd_platform_api.routers import artifacts as _artifacts_router
 from edd_platform_api.routers import trace_refs as _trace_refs_router
 from edd_platform_api.schemas import (
@@ -809,7 +810,7 @@ def assemble_context_pack_artifacts(
     return [artifact for artifact in artifacts if artifact.artifact_type in allowed_types]
 
 
-@router.get("/api/projects/{project_id}/runs")
+@router.get("/api/projects/{project_id}/runs", dependencies=[Depends(reject_unknown_query_params)])
 def list_runs(
     project_id: str,
     agent_design_id: Optional[str] = None,
@@ -1194,7 +1195,7 @@ def get_eval_result(project_id: str, eval_result_id: str) -> EvalResult:
     return get_eval_result_or_404(project_id, eval_result_id)
 
 
-@router.get("/api/projects/{project_id}/eval-results")
+@router.get("/api/projects/{project_id}/eval-results", dependencies=[Depends(reject_unknown_query_params)])
 def list_eval_results(
     project_id: str,
     run_id: Optional[str] = None,
@@ -1214,7 +1215,7 @@ def list_eval_results(
     return sorted(eval_results, key=lambda eval_result: eval_result.created_at, reverse=True)
 
 
-@router.get("/api/projects/{project_id}/judge-outputs")
+@router.get("/api/projects/{project_id}/judge-outputs", dependencies=[Depends(reject_unknown_query_params)])
 def list_judge_outputs(
     project_id: str,
     eval_result_id: Optional[str] = None,
