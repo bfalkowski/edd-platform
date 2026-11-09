@@ -9,6 +9,18 @@ from edd_platform_api.schemas import (
     RunRecord,
 )
 
+# llm_judge is an alias of rubric_judge: both carry a rubric for the live judge.
+RUBRIC_CHECK_TYPES = ("rubric_judge", "llm_judge")
+
+
+def is_rubric_check(check: Dict[str, object]) -> bool:
+    return check.get("type") in RUBRIC_CHECK_TYPES
+
+
+def contract_rubric(checks: List[Dict[str, object]]) -> str:
+    """The value of the contract's first rubric check that has one, or ""."""
+    return next((str(c["value"]) for c in checks if is_rubric_check(c) and c.get("value")), "")
+
 
 def contract_generated_checks(payload: EvalContractCreate) -> List[Dict[str, object]]:
     checks: List[Dict[str, object]] = []
@@ -118,7 +130,7 @@ def evaluate_contract_check(
         )
         observed = run_artifact_body
         comment = f"Run should not call tool {expected!r}."
-    elif check_type == "rubric_judge":
+    elif check_type in RUBRIC_CHECK_TYPES:
         passed = False
         observed = run.output
         comment = "Live judge required for rubric checks."

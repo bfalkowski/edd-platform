@@ -13,7 +13,12 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 
 from edd_platform_api import main as api_main
-from edd_platform_api.eval_checks import evaluate_contract_check
+from edd_platform_api.eval_checks import (
+    RUBRIC_CHECK_TYPES,
+    contract_rubric,
+    evaluate_contract_check,
+    is_rubric_check,
+)
 from edd_platform_api.evidence_context import (
     build_deterministic_evidence_summary,
     build_evidence_summary_prompt,
@@ -69,8 +74,6 @@ from edd_platform_api.state import (
 from edd_runner import RunnerAgentDesign, RunnerScenario, RunnerToolDefinition, run_mock_agent
 
 router = APIRouter()
-
-_LIVE_JUDGE_CHECK_TYPES = {"rubric_judge", "llm_judge"}
 
 # First word of the judge reply, after markdown emphasis and an optional "Verdict:".
 _LIVE_JUDGE_VERDICT = re.compile(r"^[\s*_#>`]*(?:verdict\s*:[\s*_`]*)?(pass|fail)(?![a-z])", re.IGNORECASE)
@@ -169,7 +172,7 @@ def build_live_judge_prompt(
     # evaluated by the live judge itself and their stub results ("live judge required")
     # would pollute the evidence context.
     deterministic_checks = [
-        c for c in checks if c.check_type not in _LIVE_JUDGE_CHECK_TYPES
+        c for c in checks if c.check_type not in RUBRIC_CHECK_TYPES
     ]
     check_lines = "\n".join(
         f"- {check.check_id}: {'pass' if check.passed else 'fail'}; "
@@ -182,10 +185,7 @@ def build_live_judge_prompt(
         else "Explain whether the response satisfies the eval contract. Cite the provided evidence only."
     )
     # evaluate_run allows at most one judge check in live mode.
-    rubric_check = next(
-        (c for c in contract.checks if c.get("type") in _LIVE_JUDGE_CHECK_TYPES), None
-    )
-    rubric = (rubric_check.get("value") or "" if rubric_check else "").strip()
+    rubric = contract_rubric(contract.checks).strip()
     rubric_section = f"Rubric:\n{rubric}\n\n" if rubric else ""
     deterministic_section = (
         f"Deterministic check results:\n{check_lines}\n\n" if check_lines else ""
@@ -989,7 +989,7 @@ def evaluate_run(
     if payload.judge_mode == "live":
         # The live judge returns one verdict, so it can only stand for one judge check.
         judge_check_count = sum(
-            1 for check in contract.checks if check.get("type") in _LIVE_JUDGE_CHECK_TYPES
+            1 for check in contract.checks if is_rubric_check(check)
         )
         if judge_check_count > 1:
             raise HTTPException(
@@ -1021,7 +1021,7 @@ def evaluate_run(
             status_code = 400 if "ANTHROPIC_API_KEY" in detail else 502
             raise HTTPException(status_code=status_code, detail=detail) from exc
         cost_estimate = estimate_live_judge_cost(token_usage)
-        if any(check.check_type in _LIVE_JUDGE_CHECK_TYPES for check in checks):
+        if any(check.check_type in RUBRIC_CHECK_TYPES for check in checks):
             judge_passed = live_judge_passed(judge_output_text)
             checks = [
                 check.model_copy(
@@ -1035,7 +1035,7 @@ def evaluate_run(
                         ),
                     }
                 )
-                if check.check_type in _LIVE_JUDGE_CHECK_TYPES
+                if check.check_type in RUBRIC_CHECK_TYPES
                 else check
                 for check in checks
             ]

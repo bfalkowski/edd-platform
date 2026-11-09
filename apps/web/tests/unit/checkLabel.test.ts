@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { checkLabel, labelledCheckTypes } from "../../src/checkLabel.ts";
+import { checkLabel, isRubricCheckType, labelledCheckTypes } from "../../src/checkLabel.ts";
 
 // Every check type the API can put on an eval result: the types its evaluator
-// branches on, plus the type it gives a check that has none.
+// branches on, its rubric check types, plus the type it gives a check that has none.
 const evaluator = readFileSync(
   new URL("../../../api/edd_platform_api/eval_checks.py", import.meta.url),
   "utf8",
 );
+const apiRubricCheckTypes = [
+  ...(/^RUBRIC_CHECK_TYPES = \(([^)]*)\)/m.exec(evaluator)?.[1] ?? "").matchAll(/"([a-z_]+)"/g),
+].map((match) => match[1]);
 const apiCheckTypes = [
   ...new Set([
     ...[...evaluator.matchAll(/check_type == "([a-z_]+)"/g)].map((match) => match[1]),
+    ...apiRubricCheckTypes,
     "manual_review_required",
   ]),
 ];
@@ -32,8 +36,16 @@ for (const checkType of apiCheckTypes) {
   });
 }
 
+test("the console's rubric check types are the API's", () => {
+  assert.ok(apiRubricCheckTypes.includes("rubric_judge"), `found only ${apiRubricCheckTypes.join(", ")}`);
+  for (const checkType of apiCheckTypes) {
+    assert.equal(isRubricCheckType(checkType), apiRubricCheckTypes.includes(checkType), checkType);
+  }
+});
+
 test("labels name what the check expects", () => {
   assert.equal(checkLabel({ check_id: "satisfies_rubric", check_type: "rubric_judge" }), "Rubric judge");
+  assert.equal(checkLabel({ check_id: "satisfies_rubric", check_type: "llm_judge" }), "Rubric judge");
   assert.equal(
     checkLabel({ check_id: "rollback_plan", check_type: "output_contains", expected: "rollback plan" }),
     "Includes “rollback plan”",

@@ -10,6 +10,7 @@ import { ReadinessTab } from "./ReadinessTab";
 import { ErrorAnalysisTab } from "./ErrorAnalysisTab";
 import { ProofLoopTab } from "./ProofLoopTab";
 import { saveTestRevision } from "./saveTestRevision";
+import { isRubricCheckType } from "./checkLabel";
 import type {
   AgentDesign,
   AgentSuggestion,
@@ -416,7 +417,7 @@ function App() {
   function applyTestToEditor(scenario: Scenario | undefined, contract: EvalContract | undefined) {
     setScenarioInput(scenario?.input ?? defaultScenarioInput);
     setTestShape(testShapeFromSetupContext(scenario?.setup_context));
-    const rubric = contract?.checks.find((check) => check.type === "rubric_judge")?.value;
+    const rubric = contract?.checks.find((check) => isRubricCheckType(check.type))?.value;
     const tool = contract?.checks.find((check) => check.tool)?.tool;
     const phrase = contract?.checks.find((check) => check.type === "output_contains")?.value;
     const inferredPhrase = selectedAgent ? inferExpectedResponse(selectedAgent) : "";
@@ -636,7 +637,7 @@ function App() {
       setTestShape(testShapeFromSetupContext(drafted.scenario.setup_context));
       const draftedTool = drafted.eval_contract.checks.find((check) => check.tool)?.tool;
       const draftedRubric = drafted.eval_contract.checks.find(
-        (check) => check.type === "rubric_judge",
+        (check) => isRubricCheckType(check.type),
       )?.value;
       if (draftedTool) {
         setEvalMethod("tool");
@@ -1153,7 +1154,7 @@ function App() {
         : rubricText || "No rubric set";
   // Judge the saved, selected test, not whatever is open in the editor.
   const currentJudgeMode: "deterministic" | "live" = eddFlow.contract?.checks.some(
-    (check) => check.type === "rubric_judge",
+    (check) => isRubricCheckType(check.type),
   )
     ? "live"
     : "deterministic";

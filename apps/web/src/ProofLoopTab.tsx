@@ -13,7 +13,7 @@ import {
   listRuns,
   runSuite,
 } from "./api";
-import { checkLabel } from "./checkLabel";
+import { checkLabel, isRubricCheckType } from "./checkLabel";
 import { builtFromAnotherFix, proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
 import {
   suiteComparisonIsCurrent,
@@ -172,7 +172,7 @@ export function ProofLoopTab({
   );
   const selectedSuite = suiteVersion ? suiteResults[suiteVersion.id] : undefined;
   const suiteJudgeMode = savedTests.some((test) =>
-    test.contract.checks.some((check) => check.type === "rubric_judge"),
+    test.contract.checks.some((check) => isRubricCheckType(check.type)),
   )
     ? "live"
     : "deterministic";
@@ -592,16 +592,16 @@ export function ProofLoopTab({
   const savedTestShape = testShapeFromSetupContext(eddFlow.scenario?.setup_context);
   const savedEvalCheck = eddFlow.contract?.checks[0];
   const savedContractUsesRubric =
-    eddFlow.contract?.checks.some((check) => check.type === "rubric_judge") ?? false;
+    eddFlow.contract?.checks.some((check) => isRubricCheckType(check.type)) ?? false;
   const savedEvalLabel = savedEvalCheck
-    ? savedEvalCheck.type === "rubric_judge"
+    ? isRubricCheckType(savedEvalCheck.type)
       ? "Rubric judge"
       : savedEvalCheck.tool
         ? "Tool use"
         : "Exact text"
     : "";
   const savedEvalSummary =
-    savedEvalCheck?.type === "rubric_judge"
+    savedEvalCheck && isRubricCheckType(savedEvalCheck.type)
       ? savedEvalCheck.value || "No rubric set"
       : savedEvalCheck?.tool
         ? savedEvalCheck.tool
@@ -612,7 +612,7 @@ export function ProofLoopTab({
       failedBaselineChecks.length > 0 &&
       failedBaselineChecks.every(
         (check) =>
-          check.check_type === "rubric_judge" ||
+          isRubricCheckType(check.check_type) ||
           check.check_id.toLowerCase().includes("rubric"),
       ),
   );

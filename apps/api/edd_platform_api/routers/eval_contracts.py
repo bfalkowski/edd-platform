@@ -7,7 +7,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 
 from edd_platform_api import main as api_main
-from edd_platform_api.eval_checks import contract_generated_checks
+from edd_platform_api.eval_checks import contract_generated_checks, is_rubric_check
 from edd_platform_api.lookups import (
     get_agent_design_or_404,
     get_eval_contract_or_404,
@@ -142,7 +142,7 @@ def update_eval_contract_rubric(
     contract = get_eval_contract_or_404(project_id, contract_id)
     updated_checks = []
     for check in contract.checks:
-        if check.get("type") == "rubric_judge":
+        if is_rubric_check(check):
             updated_checks.append({**check, "value": payload.rubric.strip()})
         else:
             updated_checks.append(check)
