@@ -64,6 +64,10 @@ test("Error analysis runs end to end with Langfuse offline", async ({ page, requ
   // A long output scrolls inside its box, so the box is in the tab order.
   const output = details.getByRole("region", { name: "Agent output" });
   await expect(output).toHaveAttribute("tabindex", "0");
+  // The region sits inside a plain dd, so each dt/dd pair stays a definition,
+  // and the region is the element that scrolls.
+  await expect(details.getByRole("definition")).toHaveCount(3);
+  await expect(output).toHaveCSS("overflow-y", "auto");
 
   await page.getByRole("textbox", { name: "Note" }).fill("Never suggests rolling back the deploy.");
   await page.getByRole("button", { name: "Add note" }).click();
