@@ -49,12 +49,14 @@ async function seedAgent(request: APIRequestContext, tests: SeedTest[]) {
       await postJson(request, `/runs/${run.id}/evaluate`, { judge_mode: "deterministic" });
     }
   }
-  return name;
+  return { id: agent.id, name };
 }
 
-async function openAgent(page: Page, name: string) {
-  await page.goto("/");
-  await page.getByRole("region", { name: "Agent designs" }).getByText(name).click();
+async function openAgent(page: Page, agent: { id: string; name: string }) {
+  // Open this test's agent by link. Under parallel workers the newest agent,
+  // which the console opens by default, is another test's.
+  await page.goto(`/?agent=${agent.id}`);
+  await expect(page.locator(".agent-row.selected")).toHaveText(agent.name);
   await expect(page.getByRole("tablist", { name: "Agent workspace" })).toBeVisible();
 }
 
@@ -98,8 +100,8 @@ function testRows(page: Page) {
 }
 
 test("Proof loop lists every active test and switches the selected test", async ({ page, request }) => {
-  const agentName = await seedAgent(request, threeTests);
-  await openAgent(page, agentName);
+  const agent = await seedAgent(request, threeTests);
+  await openAgent(page, agent);
 
   const rows = testRows(page);
   await expect(rows).toHaveCount(3);
@@ -126,8 +128,8 @@ test("Proof loop lists every active test and switches the selected test", async 
 });
 
 test("New test starts blank and adds a test without replacing the others", async ({ page, request }) => {
-  const agentName = await seedAgent(request, threeTests);
-  await openAgent(page, agentName);
+  const agent = await seedAgent(request, threeTests);
+  await openAgent(page, agent);
   await expect(testRows(page)).toHaveCount(3);
   const nextAction = page.locator(".next-action-panel h4");
   await expect(nextAction).toHaveText("Run current");
@@ -156,8 +158,8 @@ test("New test starts blank and adds a test without replacing the others", async
 });
 
 test("Editing a test replaces its entry instead of adding one", async ({ page, request }) => {
-  const agentName = await seedAgent(request, threeTests);
-  await openAgent(page, agentName);
+  const agent = await seedAgent(request, threeTests);
+  await openAgent(page, agent);
   const rows = testRows(page);
   await rows.nth(0).click();
   await expect(page.getByRole("heading", { level: 4, name: "Deploy rollback" })).toBeVisible();
@@ -212,7 +214,7 @@ test("An agent whose passed test was saved as a draft opens the workspace, not t
   });
   expect(verdict.passed).toBe(true);
 
-  await openAgent(page, name);
+  await openAgent(page, { id: agent.id, name });
   await page.waitForLoadState("networkidle");
   await expect(page.locator(".wizard-heading")).toHaveCount(0);
 });
@@ -245,7 +247,7 @@ test("An agent whose wizard test was edited opens the workspace, not the wizard"
   });
   expect(patched.ok()).toBeTruthy();
 
-  await openAgent(page, name);
+  await openAgent(page, { id: drafted.agent.id, name });
   await page.waitForLoadState("networkidle");
   await expect(page.locator(".wizard-heading")).toHaveCount(0);
   await expect(testRows(page)).toHaveCount(1);
@@ -281,7 +283,7 @@ test("Scenarios sharing a default contract each show their own latest result", a
     mode: "live",
   });
   await postJson(request, `/runs/${run.id}/evaluate`, { judge_mode: "deterministic" });
-  await openAgent(page, name);
+  await openAgent(page, { id: agent.id, name });
 
   const rows = testRows(page);
   await expect(rows).toHaveCount(2);
