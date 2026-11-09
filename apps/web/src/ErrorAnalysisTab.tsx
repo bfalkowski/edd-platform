@@ -12,6 +12,7 @@ import {
   updateReviewAnnotation,
 } from "./api";
 import { parseArtifactFields, traceUrlFromArtifact } from "./helpers";
+import { runResultSections } from "./runResultSections";
 import type {
   AgentDesign,
   AgentSuggestion,
@@ -84,7 +85,7 @@ export function ErrorAnalysisTab({
   /** The run's input and output, and the latest judge verdict on that run. */
   function reviewItemDetails(item: ReviewItem): { label: string; value: string }[] {
     const runArtifact = evidenceArtifacts.find((artifact) => artifact.id === item.source_id);
-    const runFields = parseArtifactFields(item.content);
+    const run = runResultSections(item.content);
     const field = (fields: { label: string; value: string }[], label: string) =>
       fields.find((candidate) => candidate.label === label)?.value ?? "";
     const evalArtifact = runArtifact
@@ -101,8 +102,8 @@ export function ErrorAnalysisTab({
       ? [field(evalFields, "Result"), field(evalFields, "Checks")].filter(Boolean).join("\n")
       : "Not judged yet.";
     return [
-      { label: "Input", value: field(runFields, "Scenario") || "Not recorded." },
-      { label: "Agent output", value: field(runFields, "Response") || item.content },
+      { label: "Input", value: run?.scenario || "Not recorded." },
+      { label: "Agent output", value: run?.response || item.content },
       { label: "Judge verdict", value: verdict },
     ];
   }
