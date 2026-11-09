@@ -141,6 +141,11 @@ def update_eval_contract_rubric(
 ) -> EvalContract:
     get_project_or_404(project_id)
     contract = get_eval_contract_or_404(project_id, contract_id)
+    if sum(1 for check in contract.checks if is_rubric_check(check)) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Contract has more than one rubric check; edit them with PATCH .../checks.",
+        )
     updated_checks = []
     for check in contract.checks:
         if is_rubric_check(check):
