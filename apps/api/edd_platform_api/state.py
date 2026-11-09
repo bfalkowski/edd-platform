@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timezone
 from typing import Dict
 
@@ -34,6 +35,12 @@ from edd_platform_api.seed_data import WEATHER_TOOL_ID, build_default_tool_defin
 from edd_platform_api.storage import create_store_from_env
 
 store = create_store_from_env()
+# FastAPI runs sync routes on a thread pool and every route shares the dicts
+# below. Hold this lock from the read to the save when a route changes a record
+# it read, or picks a label by counting records, so two requests cannot
+# interleave. One lock, not one per collection: a route often writes several
+# collections, and one lock cannot deadlock. Keep provider calls outside it.
+write_lock = threading.RLock()
 seeded_at = datetime.now(timezone.utc)
 default_project = Project(
     id="project_default",
