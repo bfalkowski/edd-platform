@@ -943,7 +943,8 @@ follow the result:
 Gates block on `open` packets by default, so `overruled` and `withdrawn`
 packets stop blocking unless a gate lists those statuses in
 `blocking_failure_statuses`. Each review saves a `JUDGE_REVIEW` artifact
-that comments on the judge output artifact.
+that comments on the judge output artifact. Its body starts with a `Run` line
+naming the reviewed run, which the Evidence tab uses to group it.
 
 The response returns `judge_output`, `eval_result` and `failure_packet` (the
 open packet when the result fails, else null; after overruling a pass, the
