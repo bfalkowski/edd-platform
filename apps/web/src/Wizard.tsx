@@ -5,6 +5,7 @@
 import { ExternalLink, Loader } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { checkLabel } from "./checkLabel";
+import type { ScenarioStatus } from "./types";
 
 const apiBase = "/api";
 
@@ -23,7 +24,7 @@ type GuidedSetupPreview = {
 type OutcomeAgentResponse = {
   agent: { id: string; name: string; intent: string; allowed_tool_names: string[] };
   version: { id: string; version_label: string; instructions: string };
-  scenario: { id: string; input: string; status: string };
+  scenario: { id: string; input: string; status: ScenarioStatus };
   eval_contract: { id: string; output_requirements: string[]; checks: Array<{ id: string; type: string; value?: string }> };
 };
 

@@ -1,7 +1,9 @@
+import type { ScenarioStatus } from "./types";
+
 export type TestRevisionCalls<S extends { id: string }, C> = {
   createScenario: () => Promise<S>;
   createContract: (scenarioId: string) => Promise<C>;
-  setScenarioStatus: (scenarioId: string, status: "draft" | "active" | "superseded") => Promise<unknown>;
+  setScenarioStatus: (scenarioId: string, status: ScenarioStatus) => Promise<unknown>;
 };
 
 /**
