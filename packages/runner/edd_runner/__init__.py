@@ -656,6 +656,7 @@ def run_langchain_agent(
     tools,
 ) -> RunnerResult:
     try:
+        import anthropic as anthropic_sdk
         from langchain.agents import create_agent
     except ImportError as exc:
         raise RuntimeError("LangChain agent execution requires langchain to be installed.") from exc
@@ -675,10 +676,15 @@ def run_langchain_agent(
     invoke_config: dict = {"recursion_limit": recursion_limit}
     if callbacks:
         invoke_config["callbacks"] = callbacks
-    result = graph.invoke(
-        {"messages": [{"role": "user", "content": scenario.input}]},
-        config=invoke_config,
-    )
+    try:
+        result = graph.invoke(
+            {"messages": [{"role": "user", "content": scenario.input}]},
+            config=invoke_config,
+        )
+    except anthropic_sdk.APIStatusError as exc:
+        raise RuntimeError(f"Anthropic request failed with status {exc.status_code}: {exc.message}") from exc
+    except anthropic_sdk.APIConnectionError as exc:
+        raise RuntimeError(f"Anthropic request failed: {exc}") from exc
     messages = result.get("messages", [])
     response_text = ""
     reported_model = None
