@@ -313,3 +313,35 @@ test("Readiness tab shows the error when creating a gate fails, and clears it on
   await page.getByRole("tab", { name: /Evidence/ }).click();
   await expect(page.locator(".error-text")).toHaveCount(0);
 });
+
+test("Evidence tab shows no other agent's artifacts while the selected agent's load is pending", async ({
+  page,
+  request,
+}) => {
+  const other = await seedAgent(request, { live: 1, mock: 0 });
+  const agent = await seedAgent(request, { live: 1, mock: 0 });
+
+  // Hold this agent's artifact list so the tab renders before it arrives.
+  let releaseLoad: () => void = () => {};
+  const loadReleased = new Promise<void>((resolve) => {
+    releaseLoad = resolve;
+  });
+  await page.route(`**/artifacts?agent_design_id=${agent.id}`, async (route) => {
+    await loadReleased;
+    await route.continue();
+  });
+
+  // Show the other agent's evidence first, then switch while this agent's load is held.
+  await openAgent(page, other.name);
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await expect(page.getByText(`Run: ${other.name}`)).toBeVisible();
+  await page.getByRole("region", { name: "Agent designs" }).getByText(agent.name).click();
+  await page.getByRole("tab", { name: /Evidence/ }).click();
+  await expect(page.getByText("Loading evidence...")).toBeVisible();
+  await expect(page.getByText(`Run: ${other.name}`)).toHaveCount(0);
+  await expect(page.locator(".workflow-evidence-item")).toHaveCount(0);
+
+  releaseLoad();
+  await expect(evidenceRows(page, "Run output")).toHaveCount(1);
+  await expect(page.getByText(`Run: ${other.name}`)).toHaveCount(0);
+});
