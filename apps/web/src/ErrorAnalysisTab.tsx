@@ -392,7 +392,7 @@ export function ErrorAnalysisTab({
           <h4>What this does</h4>
           <ol>
             <li>
-              <strong>Build a review set.</strong> Gather the traces and runs you want to
+              <strong>Build review set.</strong> Gather the traces and runs you want to
               read through.
             </li>
             <li>
@@ -414,7 +414,7 @@ export function ErrorAnalysisTab({
       <div className="discovery-steps">
         {(
           [
-            ["corpus", "Build corpus"],
+            ["corpus", "Build review set"],
             ["review", "Review & code"],
             ["confirm", "Confirm modes"],
             ["done", "Done"],
