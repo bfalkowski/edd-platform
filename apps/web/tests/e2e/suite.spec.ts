@@ -89,6 +89,8 @@ test("Run all tests on v0 and v1, then compare them per test, before and after a
   const passCount = page.locator(".suite-pass-count");
   await expect(version.getByRole("button", { name: "v1" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "Compare all tests" })).toBeDisabled();
+  // Two exact-text tests: one agent call each and no live judge.
+  await expect(page.locator(".suite-run-cost")).toHaveText("2 live calls");
 
   await version.getByRole("button", { name: "v0" }).click();
   await page.getByRole("button", { name: "Run all tests" }).click();
