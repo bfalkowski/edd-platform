@@ -40,6 +40,7 @@ import type {
   ToolDefinitionCreate,
 } from "./types";
 import { setupContextFromTestShape } from "./helpers";
+import { builtFromAnotherFix } from "./proofLoopStep";
 
 const apiBase = "/api";
 
@@ -1210,11 +1211,15 @@ export async function hydrateEddFlow(
     versions.find((version) => version.id === comparison?.baseline_version_id) ??
     versions.find((version) => version.status === "baseline") ??
     versions.find((version) => version.version_label === "v0");
+  const fixProposal = fixProposals.find(
+    (proposal) => contract && proposal.validation_contract_ids.includes(contract.id),
+  );
+  const candidateVersions = versions.filter((version) => !builtFromAnotherFix(version, fixProposal));
   const candidateVersion =
     versions.find((version) => version.id === comparison?.candidate_version_id) ??
-    versions.find((version) => version.source_fix_proposal_id) ??
-    versions.find((version) => version.status === "candidate") ??
-    versions.find((version) => version.version_label === "v1");
+    candidateVersions.find((version) => version.source_fix_proposal_id) ??
+    candidateVersions.find((version) => version.status === "candidate") ??
+    candidateVersions.find((version) => version.version_label === "v1");
   const baselineRun =
     runs.find((run) => run.id === comparison?.baseline_run_id) ??
     latestRunForVersion(runs, baselineVersion?.id, scenario?.id, contract?.id);
@@ -1236,9 +1241,7 @@ export async function hydrateEddFlow(
     baselineEval: baselineEvalResults[0],
     candidateEval: candidateEvalResults[0],
     failurePackets: failurePackets.filter((packet) => packet.eval_contract_id === contract?.id),
-    fixProposal: fixProposals.find(
-      (proposal) => contract && proposal.validation_contract_ids.includes(contract.id),
-    ),
+    fixProposal,
     comparison,
     suiteComparison: comparisons.find(
       (item) =>

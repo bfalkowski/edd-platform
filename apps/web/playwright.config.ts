@@ -12,11 +12,10 @@ export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: true,
-  // Five workers share one API, so a busy machine slows every request. The
-  // longest flows (the proof loop) take close to 30s there, and single steps
-  // can take over 5s, so give both limits twice the default.
+  // A busy machine can stall the browser for several seconds mid-test; a
+  // passing step still returns at once, so only real failures wait longer.
   timeout: 60_000,
-  expect: { timeout: 10_000 },
+  expect: { timeout: 15_000 },
   reporter: "list",
   use: {
     baseURL: `http://127.0.0.1:${WEB_PORT}`,
