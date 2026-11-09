@@ -4,9 +4,11 @@ import { request } from "@playwright/test";
  * Make one live run before the tests start. The API imports its provider
  * libraries on the first live run, which takes seconds and, under five
  * parallel workers, can push whichever test gets there first past its timeout.
- * The warm-up agent is deleted afterwards so no test sees it.
+ * The warm-up agent is deleted afterwards so no test sees it. A reused API
+ * (EDD_E2E_REUSE_SERVERS=1) is not ours to write to, so it is left alone.
  */
 export default async function warmUpLiveRuns() {
+  if (process.env.EDD_E2E_REUSE_SERVERS === "1") return;
   const apiPort = Number(process.env.EDD_E2E_API_PORT ?? 8091);
   const api = await request.newContext({
     baseURL: `http://127.0.0.1:${apiPort}/api/projects/project_default/`,
