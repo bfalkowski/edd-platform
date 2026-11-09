@@ -44,9 +44,11 @@ async function seedAgent(
   return { name, id: agent.id, liveRunIds };
 }
 
-async function openAgent(page: Page, name: string) {
-  await page.goto("/");
-  await page.getByRole("region", { name: "Agent designs" }).getByText(name).click();
+async function openAgent(page: Page, agent: { id: string; name: string }) {
+  // Open this test's agent by link. Under parallel workers the newest agent,
+  // which the console opens by default, is another test's.
+  await page.goto(`/?agent=${agent.id}`);
+  await expect(page.locator(".agent-row.selected")).toHaveText(agent.name);
   await expect(page.getByRole("tablist", { name: "Agent workspace" })).toBeVisible();
 }
 
@@ -67,7 +69,7 @@ function runOutputRows(page: Page, agentName: string) {
 
 test("Evidence tab lists every run output, eval result and judge output", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 3, mock: 0 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
   await expect(evidenceRows(page, "Run output")).toHaveCount(3);
@@ -80,7 +82,7 @@ test("Evidence tab lists every run output, eval result and judge output", async 
 
 test("Evidence tab groups rows by run and pages older runs", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 7, mock: 0 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
   const agentSection = page.getByRole("region", { name: "Agent artifacts" });
@@ -115,7 +117,7 @@ test("Pull in new runs adds one review item per live run, once", async ({ page, 
     run_id: tracedRunId,
     url: "http://langfuse.local/trace/trace-e2e-1",
   });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: "Error analysis" }).click();
   await page.getByRole("button", { name: "Pull in new runs" }).click();
@@ -164,7 +166,7 @@ test("Pull in new runs takes langfuse_ref only from Langfuse trace refs", async 
     run_id: mixedRunId,
     url: "http://otel.local/trace/otel-mixed-1",
   });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: "Error analysis" }).click();
   await page.getByRole("button", { name: "Pull in new runs" }).click();
@@ -184,7 +186,7 @@ test("Pull in new runs takes langfuse_ref only from Langfuse trace refs", async 
 
 test("No live runs: the message shows on Error analysis only", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 0, mock: 1 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: "Error analysis" }).click();
   await page.getByRole("button", { name: "Pull in new runs" }).click();
@@ -205,7 +207,7 @@ test("A live run output shows the system prompt sent; a mock run output shows no
   request,
 }) => {
   const agent = await seedAgent(request, { live: 1, mock: 1 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
   const runOutputs = runOutputRows(page, agent.name);
@@ -231,7 +233,7 @@ test("An ad hoc run result, which has no run record, still opens in the review p
   request,
 }) => {
   const agent = await seedAgent(request, { live: 0, mock: 0 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("button", { name: `Open actions for ${agent.name}` }).click();
   await page.getByRole("menuitem", { name: /Try scenario/ }).click();
@@ -250,7 +252,7 @@ test("A run lookup that fails for a reason other than 404 says the prompt could 
   request,
 }) => {
   const agent = await seedAgent(request, { live: 1, mock: 0 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
   await page.route(/\/runs\/[^/?]+$/, (route) =>
     route.fulfill({ status: 500, contentType: "application/json", body: '{"detail":"Boom."}' }),
   );
@@ -266,7 +268,7 @@ test("A run lookup that fails for a reason other than 404 says the prompt could 
 
 test("Evidence tab shows the error when an artifact fails to load", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 1, mock: 0 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
   // Fail only the artifact GET, not its /links call.
@@ -286,7 +288,7 @@ test("An artifact load error shows once when the tools panel is open on the Evid
   request,
 }) => {
   const agent = await seedAgent(request, { live: 1, mock: 0 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
   await page.getByRole("button", { name: "Manage tools" }).click();
@@ -310,7 +312,7 @@ test("Readiness tab shows the error when creating a gate fails, and clears it on
   request,
 }) => {
   const agent = await seedAgent(request, { live: 0, mock: 0 });
-  await openAgent(page, agent.name);
+  await openAgent(page, agent);
 
   await page.getByRole("tab", { name: "Readiness" }).click();
   await page.route(/\/gates$/, (route) =>
@@ -343,7 +345,7 @@ test("Evidence tab shows no other agent's artifacts while the selected agent's l
   });
 
   // Show the other agent's evidence first, then switch while this agent's load is held.
-  await openAgent(page, other.name);
+  await openAgent(page, other);
   await page.getByRole("tab", { name: /Evidence/ }).click();
   await expect(page.getByText(`Run: ${other.name}`)).toBeVisible();
   await page.getByRole("region", { name: "Agent designs" }).getByText(agent.name).click();
@@ -369,7 +371,7 @@ test("Evidence tab shows no other agent's artifacts when the selected agent's lo
   );
 
   // Show the other agent's evidence first, then switch to the agent whose load fails.
-  await openAgent(page, other.name);
+  await openAgent(page, other);
   await page.getByRole("tab", { name: /Evidence/ }).click();
   await expect(page.getByText(`Run: ${other.name}`)).toBeVisible();
   await page.getByRole("region", { name: "Agent designs" }).getByText(agent.name).click();

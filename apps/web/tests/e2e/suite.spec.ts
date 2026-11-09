@@ -19,7 +19,7 @@ const fixedAndKept: SeedTest[] = [
   { name: "Names a safe next action", type: "output_contains", phrase: "safe next action" },
 ];
 
-async function seedAgent(request: APIRequestContext, tests: SeedTest[]): Promise<string> {
+async function seedAgent(request: APIRequestContext, tests: SeedTest[]): Promise<{ id: string; name: string }> {
   const name = `Suite Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {
     name,
@@ -51,11 +51,14 @@ async function seedAgent(request: APIRequestContext, tests: SeedTest[]): Promise
       checks: [{ id: "phrase_check", type: seed.type, value: seed.phrase }],
     });
   }
-  return name;
+  return { id: agent.id, name };
 }
 
-async function openAgent(page: Page, name: string) {
-  await page.getByRole("region", { name: "Agent designs" }).getByText(name).click();
+async function openAgent(page: Page, agent: { id: string; name: string }) {
+  // Open this test's agent by link. Under parallel workers the newest agent,
+  // which the console opens by default, is another test's.
+  await page.goto(`/?agent=${agent.id}`);
+  await expect(page.locator(".agent-row.selected")).toHaveText(agent.name);
   await expect(page.getByRole("tablist", { name: "Agent workspace" })).toBeVisible();
 }
 
@@ -79,9 +82,8 @@ test("Run all tests on v0 and v1, then compare them per test, before and after a
   page,
   request,
 }) => {
-  const name = await seedAgent(request, fixedAndKept);
-  await page.goto("/");
-  await openAgent(page, name);
+  const agent = await seedAgent(request, fixedAndKept);
+  await openAgent(page, agent);
 
   const version = page.getByRole("group", { name: "Version" });
   const passCount = page.locator(".suite-pass-count");
@@ -106,7 +108,7 @@ test("Run all tests on v0 and v1, then compare them per test, before and after a
 
   // Everything above is rebuilt from saved records.
   await page.reload();
-  await openAgent(page, name);
+  await openAgent(page, agent);
   await expect(passCount).toHaveText("2 of 2 passed");
   await expect(testRow(page, "Gives a rollback plan")).toContainText("Passed");
   await version.getByRole("button", { name: "v0" }).click();
@@ -143,12 +145,11 @@ test("A test that passed on v0 and fails on v1 is marked as a regression and blo
   page,
   request,
 }) => {
-  const name = await seedAgent(request, [
+  const agent = await seedAgent(request, [
     fixedAndKept[0],
     { name: "Never mentions a rollback", type: "output_not_contains", phrase: "rollback" },
   ]);
-  await page.goto("/");
-  await openAgent(page, name);
+  await openAgent(page, agent);
 
   const version = page.getByRole("group", { name: "Version" });
   await version.getByRole("button", { name: "v0" }).click();
@@ -178,9 +179,8 @@ test("A test that passed on v0 and fails on v1 is marked as a regression and blo
 });
 
 test("A test whose run failed shows the error next to it after a suite run", async ({ page, request }) => {
-  const name = await seedAgent(request, fixedAndKept);
-  await page.goto("/");
-  await openAgent(page, name);
+  const agent = await seedAgent(request, fixedAndKept);
+  await openAgent(page, agent);
 
   // The stub provider cannot fail one test, so the real run response gets one
   // test's error added. Its eval stays as saved, as the API leaves it on an error.
@@ -217,9 +217,8 @@ test("A test whose run failed shows the error next to it after a suite run", asy
 });
 
 test("A failed run or check of one test replaces its older suite-run error", async ({ page, request }) => {
-  const name = await seedAgent(request, fixedAndKept);
-  await page.goto("/");
-  await openAgent(page, name);
+  const agent = await seedAgent(request, fixedAndKept);
+  await openAgent(page, agent);
 
   const list = page.getByRole("list", { name: "Saved tests" });
   const row = testRow(page, "Gives a rollback plan");
@@ -275,9 +274,7 @@ test("Scenarios sharing a default contract are tests in both the saved-test list
   // Three active scenarios that name no contract share one as their default.
   // "No contract" has none, and "Borrowed" defaults to a contract that names
   // another scenario (a run refuses it), so neither is a test.
-  const name = await seedAgent(request, []);
-  const agents = await (await request.get(`${PROJECT}/agent-designs`)).json();
-  const agent = agents.find((item: { name: string }) => item.name === name);
+  const agent = await seedAgent(request, []);
   const shared = await postJson<{ id: string }>(request, "/eval-contracts", {
     agent_design_id: agent.id,
     name: "Shared contract",
@@ -312,8 +309,7 @@ test("Scenarios sharing a default contract are tests in both the saved-test list
   });
   // "No contract" now has its own contract, so it is a test; "Borrowed" is not.
   const testNames = [...sharedNames, "No contract"];
-  await page.goto("/");
-  await openAgent(page, name);
+  await openAgent(page, agent);
 
   const rows = page.getByRole("list", { name: "Saved tests" }).getByRole("button");
   await expect(rows).toHaveCount(4);

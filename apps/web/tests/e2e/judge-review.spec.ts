@@ -42,7 +42,7 @@ async function seedJudgedAgent(request: APIRequestContext, runCount = 2) {
     expect(evalResult.passed).toBe(true);
     evalResultIds.push(evalResult.id);
   }
-  return { name, contractId: contract.id, evalResultIds };
+  return { id: agent.id, name, contractId: contract.id, evalResultIds };
 }
 
 test("A reviewer agrees with one judge verdict, overrules another, and sees the agreement rate", async ({
@@ -50,8 +50,7 @@ test("A reviewer agrees with one judge verdict, overrules another, and sees the 
   request,
 }) => {
   const seeded = await seedJudgedAgent(request);
-  await page.goto("/");
-  await page.getByRole("region", { name: "Agent designs" }).getByText(seeded.name).click();
+  await page.goto(`/?agent=${seeded.id}`);
   await page.getByRole("tab", { name: /Evidence/ }).click();
 
   const contract = page
@@ -89,8 +88,7 @@ test("A reviewer agrees with one judge verdict, overrules another, and sees the 
 
 test("Judge agreement shows the five newest verdicts and pages older ones", async ({ page, request }) => {
   const seeded = await seedJudgedAgent(request, 7);
-  await page.goto("/");
-  await page.getByRole("region", { name: "Agent designs" }).getByText(seeded.name).click();
+  await page.goto(`/?agent=${seeded.id}`);
   await page.getByRole("tab", { name: /Evidence/ }).click();
 
   const contract = page

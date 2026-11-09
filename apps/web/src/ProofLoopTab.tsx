@@ -686,7 +686,9 @@ export function ProofLoopTab({
     create_version: {
       eyebrow: "Next action",
       title: "Create the next version",
-      detail: "Apply the saved fix to create a new agent version.",
+      detail: instructionsToUse?.trim()
+        ? "Apply the saved fix to create a new agent version."
+        : "The saved fix has no instructions. Open the fix proposal, edit its instruction change in the review panel, and save it.",
       label: "Create version",
       onClick: handleCreateCandidate,
       disabled: isFlowBusy || !instructionsToUse?.trim(),

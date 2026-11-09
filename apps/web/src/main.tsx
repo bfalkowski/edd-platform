@@ -186,6 +186,9 @@ function App() {
   const [evaluatingArtifactId, setEvaluatingArtifactId] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The last agent whose superseded context loads have all settled. Rendered so
+  // a test can tell their results were handled and dropped, not still in flight.
+  const [settledStaleAgentId, setSettledStaleAgentId] = useState<string | null>(null);
   const [scratchActivity, setScratchActivity] = useState<string | null>(null);
   const [scratchError, setScratchError] = useState<string | null>(null);
   const [scratchArtifact, setScratchArtifact] = useState<ArtifactRecord | null>(null);
@@ -206,7 +209,10 @@ function App() {
           if (items.length === 0) {
             setWizardOpen(true);
           } else {
-            setSelectedId(items[0]?.id ?? null);
+            // ?agent=<id> opens that agent; otherwise open the newest.
+            const linkedId = new URLSearchParams(window.location.search).get("agent");
+            const linked = items.find((agent) => agent.id === linkedId);
+            setSelectedId(linked?.id ?? items[0].id);
           }
         });
       })
@@ -524,7 +530,7 @@ function App() {
     setEddFlow({ failurePackets: [] });
     resetProofLoopCtx();
     setIsLoadingContext(true);
-    Promise.all([
+    const contextLoad = Promise.all([
       listAgentArtifacts(project.id, selectedId ?? undefined),
       selectedAgent
         ? hydrateEddFlow(project.id, selectedAgent)
@@ -557,19 +563,24 @@ function App() {
       });
     // Loaded on its own so the test list never delays the rest of the agent's context.
     setSavedTests([]);
-    if (selectedAgent) {
-      listSavedTests(project.id, selectedAgent.id)
-        .then((tests) => {
-          if (isCurrent) {
-            setSavedTests(tests);
-          }
-        })
-        .catch((err: Error) => {
-          if (isCurrent) {
-            setError(err.message);
-          }
-        });
-    }
+    const savedTestsLoad = selectedAgent
+      ? listSavedTests(project.id, selectedAgent.id)
+          .then((tests) => {
+            if (isCurrent) {
+              setSavedTests(tests);
+            }
+          })
+          .catch((err: Error) => {
+            if (isCurrent) {
+              setError(err.message);
+            }
+          })
+      : Promise.resolve();
+    void Promise.all([contextLoad, savedTestsLoad]).then(() => {
+      if (!isCurrent) {
+        setSettledStaleAgentId(selectedId);
+      }
+    });
     return () => {
       isCurrent = false;
     };
@@ -1184,7 +1195,7 @@ function App() {
         onRequestDeleteAgent={handleRequestDeleteAgent}
       />
 
-      <main className="workspace">
+      <main className="workspace" data-settled-stale-agent-id={settledStaleAgentId ?? undefined}>
         {!selectedAgent ? (
           <header className="topbar">
             <div>
