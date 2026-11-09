@@ -640,3 +640,27 @@ def test_gate_on_an_eval_result_blocks_on_that_versions_open_packets() -> None:
     assert decision["decision"] == "blocked"
     assert decision["blocking_failure_packet_ids"] == [v1_packet_id]
     assert v2_packet_id not in decision["rationale"]
+
+
+def test_a_default_contract_naming_another_scenario_is_not_a_test() -> None:
+    # A run refuses a contract that names another scenario, so such a default
+    # contract would make a test that can never run.
+    client = TestClient(app)
+    setup = _suite_agent(client, "Borrowed Default Agent", ["alpha"])
+    agent, own = setup["agent"], setup["tests"][0]
+    client.post(
+        f"{P}/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "borrows alpha",
+            "input": "A customer reports a failed deployment.",
+            "default_eval_contract_id": own["contract"]["id"],
+            "status": "active",
+        },
+    )
+    v0 = _version(client, agent, "v0", "Always say alpha.")
+
+    result = _run_suite(client, agent, v0)
+
+    assert [test["scenario_id"] for test in result["tests"]] == [own["scenario"]["id"]]
+    assert (result["passed"], result["total"]) == (1, 1)

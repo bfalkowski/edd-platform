@@ -30,7 +30,8 @@ def active_tests(project_id: str, agent_design_id: str) -> List[Tuple[Scenario, 
     """An agent's tests: each active scenario with its test contract, oldest first.
 
     A scenario's test contract is its newest own contract (one naming the
-    scenario), else its default contract when that belongs to the same agent.
+    scenario), else its default contract when that belongs to the same agent and
+    names no other scenario (a run refuses a contract naming another scenario).
     Matches the console's saved-test list (`pairActiveTests` in apps/web/src/api.ts).
     """
     scenarios = sorted(
@@ -58,6 +59,7 @@ def active_tests(project_id: str, agent_design_id: str) -> List[Tuple[Scenario, 
             default is not None
             and default.project_id == project_id
             and default.agent_design_id == agent_design_id
+            and default.scenario_id in (None, scenario.id)
         ):
             tests.append((scenario, default))
     return tests

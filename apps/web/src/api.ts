@@ -1140,7 +1140,8 @@ function latestRunForVersion(
 
 /**
  * A scenario's test contract: its newest own contract (one naming the
- * scenario), else its default contract. `contracts` is one agent's, newest first.
+ * scenario), else its default contract unless that names another scenario (a
+ * run refuses such a contract). `contracts` is one agent's, newest first.
  * Matches `active_tests` in apps/api/edd_platform_api/routers/suites.py.
  */
 function testContract(
@@ -1152,7 +1153,11 @@ function testContract(
   }
   return (
     contracts.find((item) => item.scenario_id === scenario.id) ??
-    contracts.find((item) => item.id === scenario.default_eval_contract_id)
+    contracts.find(
+      (item) =>
+        item.id === scenario.default_eval_contract_id &&
+        (!item.scenario_id || item.scenario_id === scenario.id),
+    )
   );
 }
 
