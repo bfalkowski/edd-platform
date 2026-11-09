@@ -365,6 +365,12 @@ EDD_E2E_API_PORT=8191 EDD_E2E_WEB_PORT=5283 EDD_E2E_STUB_PORT=8192 npm run test:
 Set `EDD_E2E_REUSE_SERVERS=1` to reuse servers you already started on those
 ports.
 
+Only one e2e suite runs at a time on a machine: a second run, from any
+checkout or worktree, waits in global setup until the first ends, and says
+which run it is waiting for. Several suites at once starve the browsers of CPU.
+If a run was killed so hard that its lock is left behind under a live process
+ID, delete the lock folder the waiting message names.
+
 The suite runs fully parallel. On a machine that is already busy (other test
 suites, VMs), a browser page can freeze for 15 seconds or more and a step then
 times out at random. In the failed test's trace (`npx playwright show-trace
