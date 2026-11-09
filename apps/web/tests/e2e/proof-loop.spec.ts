@@ -242,8 +242,16 @@ test("A second test's fix gets its own version, not the first test's", async ({ 
   }
 
   const first = await fixOpenTest();
+  // Running every test on the first fix's version gives the second test a run and a check on it too.
+  await page.getByRole("group", { name: "Version" }).getByRole("button", { name: first.version_label }).click();
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  await expect(page.locator(".suite-pass-count")).toHaveText("2 of 2 passed");
+
   await page.getByRole("list", { name: "Saved tests" }).getByRole("button").filter({ hasText: "Failed deploy" }).click();
   await expect(nextAction(page).getByRole("button", { name: "Run current", exact: true })).toBeVisible();
   const second = await fixOpenTest();
   expect(second.id).not.toBe(first.id);
+  // The new version has no run yet, so the first fix's run and check are not reused for it.
+  await expect(nextAction(page).getByRole("heading", { name: `Run ${second.version_label}` })).toBeVisible();
+  await expect(nextAction(page).getByRole("button", { name: "Run version", exact: true })).toBeVisible();
 });
