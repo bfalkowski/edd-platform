@@ -787,6 +787,8 @@ class EvalCheckResult(BaseModel):
     expected: str
     evidence_artifact_ids: List[str]
     comment: str
+    # The live judge's reply for this check; set only on live-judged rubric checks.
+    explanation: Optional[str] = None
 
 
 class RunEvaluateCreate(BaseModel):
