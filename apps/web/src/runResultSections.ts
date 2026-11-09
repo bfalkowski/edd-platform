@@ -4,8 +4,9 @@
  * The API writes "Response\n<text>\n\nScenario\n<text>\n\nTools\n..." for an agent run and
  * "Response\n<text>\n\nURL\n..." for a URL run. The response and scenario may hold blank lines
  * of their own (a markdown brief does), so the body cannot be split on every blank line.
- * The response runs to the last section header that can follow it; the scenario runs to the
- * last Tools header.
+ * In an agent run the response runs to the last Scenario header and the scenario to the last
+ * Tools header after it. In a URL run the response runs to the first URL header, since the
+ * body excerpt after it is raw page text that may contain one.
  */
 export function runResultSections(body: string): { response: string; scenario: string } | null {
   const responseHeader = "Response\n";

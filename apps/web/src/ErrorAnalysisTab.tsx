@@ -653,7 +653,7 @@ export function ErrorAnalysisTab({
                         {reviewItemDetails(item).map((detail) => (
                           <div key={detail.label}>
                             <dt>{detail.label}</dt>
-                            <dd>{detail.value}</dd>
+                            <dd tabIndex={0}>{detail.value}</dd>
                           </div>
                         ))}
                       </dl>
