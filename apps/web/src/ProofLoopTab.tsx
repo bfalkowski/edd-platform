@@ -14,7 +14,12 @@ import {
 } from "./api";
 import { checkLabel } from "./checkLabel";
 import { proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
-import { suiteComparisonIsCurrent, suiteIsComplete, suiteTestResult } from "./suite";
+import {
+  suiteComparisonIsCurrent,
+  suiteIsComplete,
+  suiteTestError,
+  suiteTestResult,
+} from "./suite";
 import { SuiteComparisonTable } from "./SuiteComparisonTable";
 import { useSuiteResults } from "./useSuiteResults";
 import { failurePacketsForEval, renderScenarioInput, testShapeFromSetupContext, testShapeLabels } from "./helpers";
@@ -879,6 +884,7 @@ export function ProofLoopTab({
             {savedTests.map((test) => {
               const isSelected = test.scenario.id === eddFlow.scenario?.id;
               const result = suiteTestResult(selectedSuite, test.scenario.id) ?? test.latestResult;
+              const runError = suiteTestError(selectedSuite, test.scenario.id);
               return (
                 <li key={test.scenario.id}>
                   <button
@@ -892,10 +898,15 @@ export function ProofLoopTab({
                     <span className="scenario-shape-pill">
                       {testShapeLabels[testShapeFromSetupContext(test.scenario.setup_context)]}
                     </span>
-                    <span className={`saved-test-result ${result}`}>
-                      {savedTestResultLabels[result]}
-                    </span>
+                    {runError ? (
+                      <span className="saved-test-result failed">Error</span>
+                    ) : (
+                      <span className={`saved-test-result ${result}`}>
+                        {savedTestResultLabels[result]}
+                      </span>
+                    )}
                   </button>
+                  {runError ? <p className="error-text saved-test-error">{runError}</p> : null}
                 </li>
               );
             })}

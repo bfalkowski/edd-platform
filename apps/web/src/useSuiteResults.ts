@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { getSuiteResult } from "./api";
+import { keepRunErrors } from "./suite";
 import type { AgentVersion, SavedTest, SuiteResult } from "./types";
 
 /**
  * Each version's latest result on every test, read from saved runs. Refetched
  * when the saved-test list reloads, which happens after every run and check.
  * Old results stay until new ones arrive, so the counts do not flicker.
+ * A suite run's per-test errors are kept across the refetch (see keepRunErrors).
  */
 export function useSuiteResults(
   projectId: string,
@@ -28,7 +30,14 @@ export function useSuiteResults(
     Promise.all(versionIds.map((versionId) => getSuiteResult(projectId, agentId, versionId)))
       .then((loaded) => {
         if (isCurrent) {
-          setResults(Object.fromEntries(loaded.map((result) => [result.agent_version_id, result])));
+          setResults((items) =>
+            Object.fromEntries(
+              loaded.map((result) => [
+                result.agent_version_id,
+                keepRunErrors(items[result.agent_version_id], result),
+              ]),
+            ),
+          );
         }
       })
       .catch((err: Error) => {
