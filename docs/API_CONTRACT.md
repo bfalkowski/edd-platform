@@ -109,6 +109,11 @@ created_at
 updated_at
 ```
 
+On create and update, `intent` must contain a non-whitespace character, or the
+request returns 422; it may be omitted on update. Surrounding whitespace is
+trimmed. A version created without `instructions` uses the intent as its
+instructions, so a blank intent would reach live runs as an empty system prompt.
+
 ### Tool Definitions
 
 Tool definitions are platform-owned. Agents may only use approved tools in

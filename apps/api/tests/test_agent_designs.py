@@ -1522,6 +1522,34 @@ def test_agent_version_rejects_blank_instructions() -> None:
     assert padded.json()["instructions"] == "Be brief."
 
 
+def test_agent_design_rejects_blank_intent() -> None:
+    client = TestClient(app)
+    designs_path = "/api/projects/project_default/agent-designs"
+
+    for blank in ["", "   ", "\n\t"]:
+        response = client.post(designs_path, json={"name": "Blank Intent Agent", "intent": blank})
+        assert response.status_code == 422, repr(blank)
+
+    agent = client.post(
+        designs_path,
+        json={"name": "Blank Intent Agent", "intent": "  Answer billing questions.  "},
+    ).json()["agent"]
+    assert agent["intent"] == "Answer billing questions."
+    agent_path = f"{designs_path}/{agent['id']}"
+
+    for blank in ["", "   ", "\n\t"]:
+        response = client.patch(agent_path, json={"intent": blank})
+        assert response.status_code == 422, repr(blank)
+
+    renamed = client.patch(agent_path, json={"name": "Renamed Agent"})
+    assert renamed.status_code == 200
+    assert renamed.json()["intent"] == "Answer billing questions."
+
+    version = client.post(f"{agent_path}/versions", json={})
+    assert version.status_code == 201
+    assert version.json()["instructions"] == "Answer billing questions."
+
+
 def test_eval_contract_fields_generate_deterministic_checks() -> None:
     client = TestClient(app)
     create_response = client.post(
