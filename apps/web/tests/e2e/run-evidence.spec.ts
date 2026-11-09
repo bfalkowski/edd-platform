@@ -54,6 +54,17 @@ function evidenceRows(page: Page, label: string) {
   return page.locator(".workflow-evidence-item > span").filter({ hasText: new RegExp(`^${label}$`) });
 }
 
+/**
+ * This agent's run output rows. Until its context loads, the Evidence tab can
+ * still list the agent the page opened on, which under parallel tests is
+ * another test's newer agent.
+ */
+function runOutputRows(page: Page, agentName: string) {
+  return page
+    .locator(".workflow-evidence-item", { hasText: "Run output" })
+    .filter({ hasText: `Run: ${agentName}` });
+}
+
 test("Evidence tab lists every run output, eval result and judge output", async ({ page, request }) => {
   const agent = await seedAgent(request, { live: 3, mock: 0 });
   await openAgent(page, agent.name);
@@ -197,7 +208,7 @@ test("A live run output shows the system prompt sent; a mock run output shows no
   await openAgent(page, agent.name);
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
-  const runOutputs = page.locator(".workflow-evidence-item", { hasText: "Run output" });
+  const runOutputs = runOutputRows(page, agent.name);
   await expect(runOutputs).toHaveCount(2);
   const review = page.getByRole("complementary", { name: "Artifact review" });
 
@@ -245,7 +256,7 @@ test("A run lookup that fails for a reason other than 404 says the prompt could 
   );
 
   await page.getByRole("tab", { name: /Evidence/ }).click();
-  await page.locator(".workflow-evidence-item", { hasText: "Run output" }).click();
+  await runOutputRows(page, agent.name).click();
   const prompt = page
     .getByRole("complementary", { name: "Artifact review" })
     .getByRole("region", { name: "System prompt" });
@@ -264,7 +275,7 @@ test("Evidence tab shows the error when an artifact fails to load", async ({ pag
       ? route.fulfill({ status: 500, body: "Internal Server Error" })
       : route.continue(),
   );
-  await evidenceRows(page, "Run output").click();
+  await runOutputRows(page, agent.name).click();
 
   await expect(page.getByText("Unable to load artifact. (HTTP 500)")).toBeVisible();
   await expect(page.locator(".review-panel")).toHaveCount(0);
@@ -286,7 +297,7 @@ test("An artifact load error shows once when the tools panel is open on the Evid
       ? route.fulfill({ status: 500, body: "Internal Server Error" })
       : route.continue(),
   );
-  await evidenceRows(page, "Run output").click();
+  await runOutputRows(page, agent.name).click();
 
   await expect(page.getByText("Unable to load artifact. (HTTP 500)")).toHaveCount(1);
   await expect(
