@@ -10,7 +10,13 @@ const REUSE_SERVERS = process.env.EDD_E2E_REUSE_SERVERS === "1";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: true,
+  // Five workers share one API, so a busy machine slows every request. The
+  // longest flows (the proof loop) take close to 30s there, and single steps
+  // can take over 5s, so give both limits twice the default.
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
   reporter: "list",
   use: {
     baseURL: `http://127.0.0.1:${WEB_PORT}`,
