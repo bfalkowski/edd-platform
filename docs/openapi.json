@@ -1612,6 +1612,17 @@
             "title": "Expected",
             "type": "string"
           },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
           "observed": {
             "title": "Observed",
             "type": "string"
