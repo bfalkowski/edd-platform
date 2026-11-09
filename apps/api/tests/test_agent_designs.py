@@ -4365,3 +4365,41 @@ def test_outcome_draft_names_its_test_after_the_prompt() -> None:
     )
     assert response.status_code == 201, response.text
     assert response.json()["scenario"]["name"] == "Summarize open support tickets by severity."
+
+
+@pytest.mark.parametrize("blank", ["", "   \n\t "])
+def test_outcome_draft_falls_back_to_the_outcome_when_the_llm_intent_is_blank(
+    monkeypatch, blank: str
+) -> None:
+    plan_json = json.dumps(
+        {
+            "name": blank,
+            "intent": blank,
+            "output_focus": "Return a concise answer.",
+            "output_requirements": ["answer"],
+            "allowed_tools": [],
+            "required_tools": [],
+        }
+    )
+
+    class FakeMessages:
+        def create(self, **_kwargs):
+            return types.SimpleNamespace(
+                content=[types.SimpleNamespace(type="text", text=plan_json)]
+            )
+
+    monkeypatch.setattr(api_main, "anthropic_config_from_env", lambda: types.SimpleNamespace(model="fake-model"))
+    monkeypatch.setattr(
+        api_main, "_anthropic_client", lambda _config: types.SimpleNamespace(messages=FakeMessages())
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/projects/project_default/agent-designs/from-outcome",
+        json={"outcome": "Summarize the weekly deployment report."},
+    )
+
+    assert response.status_code == 201, response.text
+    agent = response.json()["agent"]
+    assert agent["intent"] == "Summarize the weekly deployment report."
+    assert agent["name"] == "Outcome Agent"
