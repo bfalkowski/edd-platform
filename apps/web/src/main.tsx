@@ -528,6 +528,16 @@ function App() {
     // Nor do its artifacts: until this load lands, show none rather than the last list.
     setAgentArtifacts([]);
     setEddFlow({ failurePackets: [] });
+    setGates([]);
+    setGateDecisions([]);
+    applyDiscoveryState({
+      corpora: [],
+      items: [],
+      annotations: [],
+      modes: [],
+      suggestions: [],
+      plan: null,
+    });
     resetProofLoopCtx();
     setIsLoadingContext(true);
     const contextLoad = Promise.all([
