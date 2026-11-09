@@ -650,11 +650,18 @@ export function ErrorAnalysisTab({
                   {isExpanded ? (
                     <div className="discovery-annotation-rows">
                       <dl className="discovery-item-details">
-                        {reviewItemDetails(item).map((detail) => (
+                        {reviewItemDetails(item).map((detail, index) => (
                           <div key={detail.label}>
-                            <dt>{detail.label}</dt>
-                            <dd tabIndex={0} role="region" aria-label={detail.label}>
-                              {detail.value}
+                            <dt id={`review-detail-${item.id}-${index}`}>{detail.label}</dt>
+                            <dd>
+                              <div
+                                className="discovery-item-detail-value"
+                                role="region"
+                                aria-labelledby={`review-detail-${item.id}-${index}`}
+                                tabIndex={0}
+                              >
+                                {detail.value}
+                              </div>
                             </dd>
                           </div>
                         ))}
