@@ -42,7 +42,8 @@ test("Error analysis runs end to end with Langfuse offline", async ({ page, requ
   await page.getByRole("region", { name: "Agent designs" }).getByText(agent.name).click();
   await page.getByRole("tab", { name: "Error analysis" }).click();
 
-  // 1. Build review set.
+  // 1. Build review set. The stepper uses the same name as the intro box.
+  await expect(page.locator(".discovery-step.active")).toHaveText("1Build review set");
   await page.getByRole("button", { name: "Pull in new runs" }).click();
   await expect(page.getByText("Added 1 run to the review set.")).toBeVisible();
   await page.getByRole("button", { name: "Start reviewing" }).click();
