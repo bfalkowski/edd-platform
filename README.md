@@ -50,7 +50,7 @@ failure mode taxonomy:
 1. **Build review set** — pull in the live runs and traces you want to review.
    A data table shows each item with its source, status, and note count.
 
-   ![Error analysis step 1: the review set table](./docs/assets/error-analysis-build-corpus.webp)
+   ![Error analysis step 1: the review set table](./docs/assets/error-analysis-build-review-set.webp)
 
 2. **Review & code** — read each run's input, the agent's output and the
    judge's verdict, and write a note on what went wrong. Name a failure mode
@@ -364,6 +364,16 @@ EDD_E2E_API_PORT=8191 EDD_E2E_WEB_PORT=5283 EDD_E2E_STUB_PORT=8192 npm run test:
 
 Set `EDD_E2E_REUSE_SERVERS=1` to reuse servers you already started on those
 ports.
+
+The suite runs fully parallel. On a machine that is already busy (other test
+suites, VMs), a browser page can freeze for 15 seconds or more and a step then
+times out at random. In the failed test's trace (`npx playwright show-trace
+<trace.zip path printed with the failure>`), such a step shows no retries at
+all while it waits, because the page could not run them. Treat a failure as
+this kind only when its trace shows that, then rerun with fewer workers, for
+example `npm run test:e2e -- --workers=2`. A failure whose trace shows retries,
+or that shows an API 500 in the `[WebServer]` output, is a real one, even if it
+goes away with fewer workers: a race between workers also gets rarer then.
 
 A fresh start already has one agent, Apartment Search Agent. To add the
 Customer Triage demo agent, run this after the app is running:

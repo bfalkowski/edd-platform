@@ -10,6 +10,7 @@ import {
   evaluateRun,
   generateFixProposal,
   listFailurePackets,
+  listRuns,
   runSuite,
 } from "./api";
 import { checkLabel, isRubricCheckType } from "./checkLabel";
@@ -21,6 +22,7 @@ import {
   suiteTestResult,
 } from "./suite";
 import { SuiteComparisonTable } from "./SuiteComparisonTable";
+import { testFailurePackets } from "./testScope";
 import { useSuiteResults } from "./useSuiteResults";
 import { failurePacketsForEval, renderScenarioInput, testShapeFromSetupContext, testShapeLabels } from "./helpers";
 import type {
@@ -233,19 +235,28 @@ export function ProofLoopTab({
     }
   }
 
-  /** The contract's failure packets; a failed check creates one on the server. */
-  async function loadFailurePackets(contractId: string) {
-    const packets = await listFailurePackets(projectId, selectedAgent.id);
-    return packets.filter((packet) => packet.eval_contract_id === contractId);
+  /**
+   * One test's failure packets; a failed check creates one on the server.
+   * Scenarios can share a contract, so packets are scoped by scenario too.
+   */
+  async function loadFailurePackets(contractId: string, scenarioId: string) {
+    const [packets, runs] = await Promise.all([
+      listFailurePackets(projectId, selectedAgent.id),
+      listRuns(projectId, selectedAgent.id),
+    ]);
+    return testFailurePackets(packets, runs, scenarioId, contractId);
   }
 
   /** The baseline eval's packets, reloaded if Check's own reload failed and left them stale. */
   async function baselineFailurePackets() {
     const current = failurePacketsForEval(eddFlow, eddFlow.baselineEval?.id);
-    if (current.length > 0 || !eddFlow.baselineEval) {
+    if (current.length > 0 || !eddFlow.baselineEval || !eddFlow.baselineRun) {
       return current;
     }
-    const failurePackets = await loadFailurePackets(eddFlow.baselineEval.eval_contract_id);
+    const failurePackets = await loadFailurePackets(
+      eddFlow.baselineEval.eval_contract_id,
+      eddFlow.baselineRun.scenario_id,
+    );
     setEddFlow((flow) => ({ ...flow, failurePackets }));
     return failurePackets.filter((packet) => packet.eval_result_id === eddFlow.baselineEval?.id);
   }
@@ -290,7 +301,10 @@ export function ProofLoopTab({
       const baselineEval = await evaluateRun(projectId, eddFlow.baselineRun.id, currentJudgeMode);
       // Keep the saved eval even if the packet reload fails, so Check is not run twice.
       setEddFlow((flow) => ({ ...flow, baselineEval }));
-      const failurePackets = await loadFailurePackets(baselineEval.eval_contract_id);
+      const failurePackets = await loadFailurePackets(
+        baselineEval.eval_contract_id,
+        eddFlow.baselineRun.scenario_id,
+      );
       setEddFlow((flow) => ({ ...flow, failurePackets }));
       setActivity(
         baselineEval.passed ? "Current answer passed." : "Current answer failed; evidence saved.",
@@ -506,7 +520,10 @@ export function ProofLoopTab({
       const candidateEval = await evaluateRun(projectId, eddFlow.candidateRun.id, currentJudgeMode);
       // Keep the saved eval even if the packet reload fails, so Check is not run twice.
       setEddFlow((flow) => ({ ...flow, candidateEval }));
-      const failurePackets = await loadFailurePackets(candidateEval.eval_contract_id);
+      const failurePackets = await loadFailurePackets(
+        candidateEval.eval_contract_id,
+        eddFlow.candidateRun.scenario_id,
+      );
       setEddFlow((flow) => ({ ...flow, failurePackets }));
       setActivity(candidateEval.passed ? "New version passed." : "New version still fails.");
       await refreshContext();

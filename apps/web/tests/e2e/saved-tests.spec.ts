@@ -250,3 +250,44 @@ test("An agent whose wizard test was edited opens the workspace, not the wizard"
   await expect(page.locator(".wizard-heading")).toHaveCount(0);
   await expect(testRows(page)).toHaveCount(1);
 });
+
+test("Scenarios sharing a default contract each show their own latest result", async ({ page, request }) => {
+  const name = `Shared Contract Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {
+    name,
+    intent: "Answer support questions with a safe next action.",
+  });
+  const shared = await postJson<{ id: string }>(request, "/eval-contracts", {
+    agent_design_id: agent.id,
+    name: "Shared contract",
+    checks: [{ id: "includes_required_phrase", type: "output_contains", value: "next action" }],
+  });
+  const scenarioIds: string[] = [];
+  for (const scenarioName of ["Judged once", "Never run"]) {
+    const scenario = await postJson<{ id: string }>(request, "/scenarios", {
+      agent_design_id: agent.id,
+      name: scenarioName,
+      input: "A deployment failed. What should I do?",
+      setup_context: "test_shape:single_turn",
+      default_eval_contract_id: shared.id,
+      status: "active",
+    });
+    scenarioIds.push(scenario.id);
+  }
+  const run = await postJson<{ id: string }>(request, "/runs", {
+    agent_design_id: agent.id,
+    scenario_id: scenarioIds[0],
+    eval_contract_id: shared.id,
+    mode: "live",
+  });
+  await postJson(request, `/runs/${run.id}/evaluate`, { judge_mode: "deterministic" });
+  await openAgent(page, name);
+
+  const rows = testRows(page);
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText("Judged once");
+  await expect(rows.nth(0)).toContainText("Passed");
+  // The other scenario's eval of the shared contract is not this one's result.
+  await expect(rows.nth(1)).toContainText("Never run");
+  await expect(rows.nth(1)).toContainText("Not run");
+});

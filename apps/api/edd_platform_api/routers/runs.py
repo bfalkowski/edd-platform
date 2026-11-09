@@ -13,7 +13,12 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 
 from edd_platform_api import main as api_main
-from edd_platform_api.eval_checks import RUBRIC_CHECK_TYPES, contract_rubric, evaluate_contract_check
+from edd_platform_api.eval_checks import (
+    RUBRIC_CHECK_TYPES,
+    contract_rubric,
+    evaluate_contract_check,
+    is_rubric_check,
+)
 from edd_platform_api.evidence_context import (
     build_deterministic_evidence_summary,
     build_evidence_summary_prompt,
@@ -179,6 +184,7 @@ def build_live_judge_prompt(
         if template is not None
         else "Explain whether the response satisfies the eval contract. Cite the provided evidence only."
     )
+    # evaluate_run allows at most one judge check in live mode.
     rubric = contract_rubric(contract.checks).strip()
     rubric_section = f"Rubric:\n{rubric}\n\n" if rubric else ""
     deterministic_section = (
@@ -981,6 +987,18 @@ def evaluate_run(
     token_usage: Dict[str, object] = {}
     cost_estimate: Optional[float] = None
     if payload.judge_mode == "live":
+        # The live judge returns one verdict, so it can only stand for one judge check.
+        judge_check_count = sum(
+            1 for check in contract.checks if is_rubric_check(check)
+        )
+        if judge_check_count > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Live judge supports at most one rubric_judge or llm_judge check per "
+                    f"eval contract; this contract has {judge_check_count}."
+                ),
+            )
         template = (
             get_judge_prompt_template_or_404(project_id, contract.judge_prompt_template_id)
             if contract.judge_prompt_template_id is not None

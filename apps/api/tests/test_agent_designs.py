@@ -4,6 +4,7 @@ import types
 from datetime import datetime, timezone
 from typing import List, Optional
 
+import pytest
 from fastapi.testclient import TestClient
 
 import edd_platform_api.main as api_main
@@ -2763,6 +2764,70 @@ def test_live_judge_verdict_marks_llm_judge_check(monkeypatch) -> None:
     assert check["check_id"] == "asks_for_logs"
     assert check["passed"] is True
     assert check["comment"] == "Live judge marked the rubric as passed."
+
+
+@pytest.mark.parametrize(
+    "judge_types",
+    [
+        ("rubric_judge", "rubric_judge"),
+        ("llm_judge", "llm_judge"),
+        ("rubric_judge", "llm_judge"),
+    ],
+)
+def test_live_judge_rejects_contract_with_more_than_one_judge_check(
+    monkeypatch, judge_types
+) -> None:
+    client = TestClient(app)
+    judge_calls = []
+
+    def fake_live_judge(prompt: str, trace_id: Optional[str] = None):
+        judge_calls.append(prompt)
+        return "PASS - looks fine.", "test-judge-model", {}
+
+    monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Two Judge Checks Agent", "intent": "Answer with evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Two judge checks scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Two judge checks contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {"id": "asks_for_logs", "type": judge_types[0], "value": "Asks for logs."},
+                {"id": "stays_polite", "type": judge_types[1], "value": "Stays polite."},
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+    eval_count = len(api_main._eval_results)
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "live"},
+    )
+
+    assert eval_response.status_code == 400
+    assert "one rubric_judge or llm_judge check" in eval_response.json()["detail"]
+    assert judge_calls == []
+    assert len(api_main._eval_results) == eval_count
 
 
 def test_live_judge_requires_openai_api_key(monkeypatch) -> None:

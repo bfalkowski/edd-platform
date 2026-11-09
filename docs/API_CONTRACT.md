@@ -529,6 +529,8 @@ old scenario back to `active` and a new scenario left without a contract to
 `draft`, so one revision stays listed. `draft` scenarios are not listed.
 `status` must be one of `draft`, `active`, or `superseded`; any other value is
 rejected with `422`.
+A scenario saved before this check with another status loads as `draft`, so
+responses only ever return one of the three values.
 
 Minimum response fields:
 
@@ -584,10 +586,15 @@ trimmed.
 ### Suite Runs
 
 A suite run executes every test for an agent against one version: each
-`active` scenario paired with its newest eval contract, the same list the
-Proof loop shows as saved tests. Tests run one at a time, and each stores one
-run and one eval result. Nothing else is stored: a version's suite result is
-the latest eval per (version, scenario, contract), read on demand.
+`active` scenario paired with its test contract, the same list the Proof loop
+shows as saved tests. A scenario's test contract is its newest own contract
+(one whose `scenario_id` names it), else its `default_eval_contract_id` when
+that contract belongs to the same agent and names no other scenario (a run
+refuses a contract that names another scenario), so several scenarios can
+share one default contract. An active scenario with neither is not a test.
+Tests run one at a time, and each stores one run and one eval result. Nothing
+else is stored: a version's suite result is the latest eval per (version,
+scenario, contract), read on demand.
 
 ```text
 POST  /api/projects/{project_id}/agent-designs/{agent_id}/versions/{version_id}/suite-runs
@@ -864,6 +871,10 @@ Evaluation request:
 Live judge mode records provider token usage on the judge output. Cost estimates
 are calculated only when `EDD_OPENAI_INPUT_COST_PER_1M` and
 `EDD_OPENAI_OUTPUT_COST_PER_1M` are configured.
+
+The live judge returns one PASS/FAIL verdict, so live mode rejects with `400`
+an eval contract that has more than one `rubric_judge` or `llm_judge` check,
+before calling the judge. Deterministic mode accepts such contracts.
 
 Minimum response fields:
 
