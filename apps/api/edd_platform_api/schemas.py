@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Dict, List, Literal, Optional, get_args
 
 from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 
 class AgentDesignCreate(BaseModel):
@@ -77,11 +80,15 @@ class Scenario(BaseModel):
     updated_at: datetime
 
     # Before T-35 a scenario could be saved with any status. Such a scenario
-    # was never listed as a saved test, so it loads as a draft.
+    # was never listed as a saved test, so it loads as a draft. The warning
+    # keeps the old value visible, since the next save overwrites it.
     @field_validator("status", mode="before")
     @classmethod
     def _load_unknown_status_as_draft(cls, value: object) -> object:
-        return value if value in get_args(ScenarioStatus) else "draft"
+        if value in get_args(ScenarioStatus):
+            return value
+        logger.warning("Scenario status %r is not valid; loading it as draft.", value)
+        return "draft"
 
 
 class ScenarioUpdate(BaseModel):

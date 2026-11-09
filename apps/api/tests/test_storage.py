@@ -100,3 +100,10 @@ def test_scenario_response_contract_lists_the_three_statuses() -> None:
     schema = app.openapi()["components"]["schemas"]["Scenario"]["properties"]["status"]
 
     assert schema["enum"] == ["draft", "active", "superseded"]
+
+
+def test_scenario_loaded_with_unknown_status_logs_a_warning(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING", logger="edd_platform_api.schemas"):
+        Scenario.model_validate(_stored_scenario("archived"))
+
+    assert "'archived'" in caplog.text
