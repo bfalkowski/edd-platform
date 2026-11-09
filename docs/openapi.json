@@ -2571,6 +2571,18 @@
             "title": "Id",
             "type": "string"
           },
+          "origin": {
+            "anyOf": [
+              {
+                "const": "reviewer_overrule",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
           "project_id": {
             "title": "Project Id",
             "type": "string"

@@ -762,6 +762,7 @@ def create_failure_packet_record(
     recommended_fix: str,
     status: str,
     now: datetime,
+    origin: Optional[str] = None,
 ) -> FailurePacket:
     failure_packet = FailurePacket(
         id=f"failure_{uuid4().hex[:12]}",
@@ -778,6 +779,7 @@ def create_failure_packet_record(
         evidence_artifact_ids=evidence_artifact_ids,
         recommended_fix=recommended_fix,
         status=status,
+        origin=origin,
         created_at=now,
         updated_at=now,
     )

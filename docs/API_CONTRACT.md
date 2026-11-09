@@ -910,10 +910,12 @@ follow the result:
 - Judge failed, reviewer overrules: the judge's open packets move to
   `overruled`. Agreeing later reopens them.
 - Judge passed, reviewer overrules: a packet titled "Reviewer overruled judge"
-  is opened with the reason, even when a packet added by hand is already open
-  on the result. Agreeing later moves it to `withdrawn`.
+  with `origin` `reviewer_overrule` is opened with the reason, even when a
+  packet added by hand is already open on the result. Agreeing later moves it
+  to `withdrawn`.
   Overruling again reopens it, and each overrule writes its reason into the
-  packet's diagnosis.
+  packet's diagnosis. The reviewer's packet is found by `origin`, not by title,
+  so a hand-added packet with the same title keeps its own diagnosis.
 
 Gates block on `open` packets by default, so `overruled` and `withdrawn`
 packets stop blocking unless a gate lists those statuses in
@@ -962,6 +964,8 @@ severity
 evidence_artifact_ids
 recommended_fix
 status
+origin   (reviewer_overrule when a judge review opened it, else null;
+          not accepted on create or update)
 created_at
 updated_at
 ```
