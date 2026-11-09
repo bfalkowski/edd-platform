@@ -3431,6 +3431,11 @@ dd {
   margin-left: auto;
 }
 
+.suite-run-cost {
+  align-self: center;
+  color: var(--text-muted);
+}
+
 .suite-comparison {
   display: grid;
   gap: 8px;

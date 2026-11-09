@@ -5,9 +5,12 @@ import {
   keepRunErrors,
   suiteComparisonIsCurrent,
   suiteIsComplete,
+  suiteJudgeMode,
+  suiteLiveCalls,
+  suiteLiveCallsLabel,
   suiteTestResult,
 } from "../../src/suite.ts";
-import type { Comparison, EvalResult, SuiteResult } from "../../src/types.ts";
+import type { Comparison, EvalContract, EvalResult, SavedTest, SuiteResult } from "../../src/types.ts";
 
 function suite(results: (boolean | null)[], version = "v1"): SuiteResult {
   return {
@@ -111,4 +114,38 @@ test("a single-test run or check drops that test's suite-run error only", () => 
     keepRunErrors(dropped, suite([null, false])).tests.map((test) => test.error ?? null),
     [null, "Judge timed out."],
   );
+});
+
+function savedTest(checkTypes: string[]): Pick<SavedTest, "contract"> {
+  return {
+    contract: {
+      checks: checkTypes.map((type, index) => ({ id: `check_${index}`, type })),
+    } as EvalContract,
+  };
+}
+
+test("a suite without rubric checks uses the deterministic judge", () => {
+  assert.equal(suiteJudgeMode([savedTest(["output_contains"]), savedTest([])]), "deterministic");
+  assert.equal(suiteJudgeMode([savedTest(["output_contains"]), savedTest(["llm_judge"])]), "live");
+});
+
+test("a suite without rubric checks makes one live call per test", () => {
+  const tests = [savedTest(["output_contains"]), savedTest(["tool_called"])];
+  assert.equal(suiteLiveCalls(tests), 2);
+  assert.equal(suiteLiveCallsLabel(tests), "2 live calls");
+});
+
+test("with a live judge, each test adds a call per rubric check, and at least one", () => {
+  // The API judges every test live once any test has a rubric (runs.py evaluate_run).
+  const tests = [
+    savedTest(["output_contains"]),
+    savedTest(["rubric_judge"]),
+    savedTest(["rubric_judge", "llm_judge", "output_contains"]),
+  ];
+  assert.equal(suiteLiveCalls(tests), 3 + 1 + 1 + 2);
+  assert.equal(suiteLiveCallsLabel(tests), "7 live calls");
+});
+
+test("the cost label uses the singular for one", () => {
+  assert.equal(suiteLiveCallsLabel([savedTest([])]), "1 live call");
 });

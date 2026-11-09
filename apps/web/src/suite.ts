@@ -1,3 +1,4 @@
+import { isRubricCheckType } from "./checkLabel.ts";
 import type { Comparison, SavedTest, SuiteResult, SuiteTestOutcome } from "./types";
 
 export const suiteOutcomeLabels: Record<SuiteTestOutcome, string> = {
@@ -80,4 +81,31 @@ export function suiteComparisonIsCurrent(
       after?.eval_result?.id === row.candidate_eval_result_id
     );
   });
+}
+
+function rubricChecks(test: Pick<SavedTest, "contract">): number {
+  return test.contract.checks.filter((check) => isRubricCheckType(check.type)).length;
+}
+
+/** A suite run uses the live judge for every test once any test has a rubric check. */
+export function suiteJudgeMode(tests: Pick<SavedTest, "contract">[]): "deterministic" | "live" {
+  return tests.some((test) => rubricChecks(test) > 0) ? "live" : "deterministic";
+}
+
+/**
+ * Provider calls a suite run makes: one agent run per test, plus, with the live
+ * judge, one judge call per rubric check, or one for a test without any.
+ */
+export function suiteLiveCalls(tests: Pick<SavedTest, "contract">[]): number {
+  const judgeCalls =
+    suiteJudgeMode(tests) === "live"
+      ? tests.reduce((sum, test) => sum + Math.max(1, rubricChecks(test)), 0)
+      : 0;
+  return tests.length + judgeCalls;
+}
+
+/** What running all tests costs, as in "3 live calls". */
+export function suiteLiveCallsLabel(tests: Pick<SavedTest, "contract">[]): string {
+  const calls = suiteLiveCalls(tests);
+  return `${calls} live ${calls === 1 ? "call" : "calls"}`;
 }

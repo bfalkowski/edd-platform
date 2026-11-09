@@ -18,6 +18,8 @@ import { builtFromAnotherFix, proofLoopStep, type ProofLoopStep } from "./proofL
 import {
   suiteComparisonIsCurrent,
   suiteIsComplete,
+  suiteJudgeMode,
+  suiteLiveCallsLabel,
   suiteTestError,
   suiteTestResult,
 } from "./suite";
@@ -171,11 +173,6 @@ export function ProofLoopTab({
     setError,
   );
   const selectedSuite = suiteVersion ? suiteResults[suiteVersion.id] : undefined;
-  const suiteJudgeMode = savedTests.some((test) =>
-    test.contract.checks.some((check) => isRubricCheckType(check.type)),
-  )
-    ? "live"
-    : "deterministic";
   const canCompareSuite = Boolean(
     eddFlow.baselineVersion &&
       eddFlow.candidateVersion &&
@@ -191,7 +188,7 @@ export function ProofLoopTab({
     setActivity(`Running all ${savedTests.length} tests on ${suiteVersion.version_label}.`);
     setIsFlowBusy(true);
     try {
-      const result = await runSuite(projectId, selectedAgent.id, suiteVersion.id, suiteJudgeMode);
+      const result = await runSuite(projectId, selectedAgent.id, suiteVersion.id, suiteJudgeMode(savedTests));
       setSuiteResult(result);
       setActivity(
         `${suiteVersion.version_label} passed ${result.passed} of ${result.total} tests.`,
@@ -890,6 +887,7 @@ export function ProofLoopTab({
                 : `${savedTests.length} tests`}
             </span>
             <div className="suite-bar-actions">
+              <span className="suite-run-cost">{suiteLiveCallsLabel(savedTests)}</span>
               <button
                 className="secondary-button"
                 type="button"
