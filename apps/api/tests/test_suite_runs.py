@@ -1,5 +1,10 @@
+import sys
+import types
 from typing import List
 
+import anthropic
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from edd_platform_api import main as api_main
@@ -8,6 +13,7 @@ from edd_platform_api.main import app
 import edd_runner  # noqa: E402  (importable once main has put the runner on sys.path)
 
 P = "/api/projects/project_default"
+_ANTHROPIC_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 
 
 def _suite_agent(client: TestClient, name: str, phrases: List[str]) -> dict:
@@ -335,6 +341,65 @@ def test_suite_run_records_a_test_error_and_runs_the_remaining_tests(monkeypatch
     ]
     assert [len(items) for items in evals] == [1, 0, 1]
     assert {evals[0][0]["run_id"], evals[2][0]["run_id"]} == {run["id"] for run in runs}
+
+
+@pytest.mark.parametrize(
+    ("provider_error", "expected_error"),
+    [
+        (
+            anthropic.BadRequestError(
+                "Bad tool schema.",
+                response=httpx.Response(400, request=_ANTHROPIC_REQUEST),
+                body=None,
+            ),
+            "Anthropic request failed with status 400: Bad tool schema.",
+        ),
+        (
+            anthropic.APIConnectionError(request=_ANTHROPIC_REQUEST),
+            "Anthropic request failed: Connection error.",
+        ),
+    ],
+)
+def test_suite_run_records_a_provider_error_on_a_tools_agent_as_a_test_error(
+    monkeypatch, provider_error, expected_error
+) -> None:
+    client = TestClient(app)
+    setup = _suite_agent(client, "Suite Tools Provider Error Agent", ["alpha", "beta"])
+    agent = setup["agent"]
+    v0 = _version(client, agent, "v0", "Always say alpha and beta.")
+    calls = []
+
+    class FakeMessage:
+        type = "ai"
+        content = "alpha and beta"
+        response_metadata = {}
+
+    class FlakyGraph:
+        def invoke(self, _state, config=None):
+            calls.append(_state)
+            if len(calls) == 1:
+                raise provider_error
+            return {"messages": [FakeMessage()]}
+
+    fake_agents_module = types.ModuleType("langchain.agents")
+    fake_agents_module.create_agent = lambda **_kwargs: FlakyGraph()
+    monkeypatch.setitem(sys.modules, "langchain.agents", fake_agents_module)
+    monkeypatch.setattr(edd_runner, "build_langchain_tools", lambda _definitions: [object()])
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+
+    response = client.post(
+        f"{P}/agent-designs/{agent['id']}/versions/{v0['id']}/suite-runs",
+        json={"mode": "live", "provider": "anthropic", "judge_mode": "deterministic"},
+    )
+
+    assert response.status_code == 201, response.text
+    result = response.json()
+    assert len(calls) == 2
+    assert [test["error"] for test in result["tests"]] == [expected_error, None]
+    assert [test["eval_result"] is not None for test in result["tests"]] == [False, True]
+    assert result["passed"] == 1
 
 
 def test_suite_run_records_a_judge_error_after_the_run_is_stored(monkeypatch) -> None:
