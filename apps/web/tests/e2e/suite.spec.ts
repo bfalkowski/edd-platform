@@ -215,3 +215,55 @@ test("A test whose run failed shows the error next to it after a suite run", asy
   await expect(failedRow).toContainText("Passed");
   await expect(list.getByText(message)).toHaveCount(0);
 });
+
+test("A failed run or check of one test replaces its older suite-run error", async ({ page, request }) => {
+  const name = await seedAgent(request, fixedAndKept);
+  await page.goto("/");
+  await openAgent(page, name);
+
+  const list = page.getByRole("list", { name: "Saved tests" });
+  const row = testRow(page, "Gives a rollback plan");
+  const nextAction = page.locator(".next-action-panel");
+  const suiteError = "Judge request failed with status 529: Overloaded";
+  async function runSuiteWithError() {
+    await page.route("**/suite-runs", async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.tests[0].error = suiteError;
+      await route.fulfill({ response, json: body });
+    });
+    await page.getByRole("button", { name: "Run all tests" }).click();
+    await expect(list.getByText(suiteError)).toBeVisible();
+    await page.unroute("**/suite-runs");
+  }
+
+  // Run current and Check answer use v0, so the suite runs on v0 too.
+  await page.getByRole("group", { name: "Version" }).getByRole("button", { name: "v0" }).click();
+  await row.click();
+  await runSuiteWithError();
+
+  // A run that fails over HTTP saves nothing; its error shows, not the suite's.
+  await page.route(/\/runs$/, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 500, json: { detail: "Run store unavailable" } })
+      : route.continue(),
+  );
+  await nextAction.getByRole("button", { name: "Run current", exact: true }).click();
+  await expect(page.getByText("Run store unavailable (HTTP 500)")).toBeVisible();
+  await expect(list.getByText(suiteError)).toHaveCount(0);
+  await expect(row).not.toContainText("Error");
+  await page.unroute(/\/runs$/);
+
+  // The same for a check that fails over HTTP and saves no eval.
+  await nextAction.getByRole("button", { name: "Run current", exact: true }).click();
+  const check = nextAction.getByRole("button", { name: "Check answer", exact: true });
+  await expect(check).toBeEnabled();
+  await runSuiteWithError();
+  await page.route(/\/runs\/[^/]+\/evaluate$/, (route) =>
+    route.fulfill({ status: 500, json: { detail: "Check store unavailable" } }),
+  );
+  await check.click();
+  await expect(page.getByText("Check store unavailable (HTTP 500)")).toBeVisible();
+  await expect(list.getByText(suiteError)).toHaveCount(0);
+  await expect(row).not.toContainText("Error");
+});
