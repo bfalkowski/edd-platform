@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { proofLoopStep, type ProofLoopStep, type ProofLoopStepInput } from "../../src/proofLoopStep.ts";
+import { builtFromAnotherFix, proofLoopStep, type ProofLoopStep, type ProofLoopStepInput } from "../../src/proofLoopStep.ts";
 import type { EddFlowState } from "../../src/types.ts";
 
 // Only presence and `passed` matter to the step logic, so records are stubs.
@@ -108,4 +108,14 @@ test("every step is covered", () => {
     candidate_failed: true,
   };
   assert.deepEqual(new Set(cases.map(([step]) => step)), new Set(Object.keys(all)));
+});
+
+test("only a version built from a different fix is another fix's version", () => {
+  const version = (source_fix_proposal_id: string | null) => ({ source_fix_proposal_id }) as never;
+  const ownFix = { id: "fix_a" } as never;
+  assert.equal(builtFromAnotherFix(version("fix_b"), ownFix), true);
+  assert.equal(builtFromAnotherFix(version("fix_a"), ownFix), false);
+  assert.equal(builtFromAnotherFix(version(null), ownFix), false);
+  // A test without its own fix yet keeps every version, so the suite still has a candidate.
+  assert.equal(builtFromAnotherFix(version("fix_b"), undefined), false);
 });

@@ -13,7 +13,7 @@ import {
   runSuite,
 } from "./api";
 import { checkLabel } from "./checkLabel";
-import { proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
+import { builtFromAnotherFix, proofLoopStep, type ProofLoopStep } from "./proofLoopStep";
 import {
   suiteComparisonIsCurrent,
   suiteIsComplete,
@@ -409,7 +409,20 @@ export function ProofLoopTab({
         generatedInstructions,
         generatedRationale,
       );
-      setEddFlow((flow) => ({ ...flow, fixProposal }));
+      setEddFlow((flow) =>
+        flow.candidateVersion && builtFromAnotherFix(flow.candidateVersion, fixProposal)
+          ? // Drop the other fix's version and everything recorded on it.
+            {
+              ...flow,
+              fixProposal,
+              candidateVersion: undefined,
+              candidateRun: undefined,
+              candidateEval: undefined,
+              comparison: undefined,
+              suiteComparison: undefined,
+            }
+          : { ...flow, fixProposal },
+      );
       setActivity("Fix proposal saved. Create the next version to apply it.");
       await refreshContext();
       await reviewFirstArtifact(fixProposal.artifact_ids);
