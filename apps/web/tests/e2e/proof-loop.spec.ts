@@ -9,7 +9,7 @@ async function postJson<T>(request: APIRequestContext, path: string, data: objec
 }
 
 /** An agent with one test the stub model fails until its instructions ask for a rollback plan. */
-async function seedAgent(request: APIRequestContext, checkFirst = false): Promise<string> {
+async function seedAgent(request: APIRequestContext, checkFirst = false): Promise<{ id: string; name: string }> {
   const name = `Proof Loop Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {
     name,
@@ -44,12 +44,14 @@ async function seedAgent(request: APIRequestContext, checkFirst = false): Promis
     });
     await postJson(request, `/runs/${run.id}/evaluate`, { judge_mode: "deterministic" });
   }
-  return name;
+  return { id: agent.id, name };
 }
 
-async function openAgent(page: Page, name: string) {
-  await page.goto("/");
-  await page.getByRole("region", { name: "Agent designs" }).getByText(name).click();
+async function openAgent(page: Page, agent: { id: string; name: string }) {
+  // Open this test's agent by link. Under parallel workers the newest agent,
+  // which the console opens by default, is another test's.
+  await page.goto(`/?agent=${agent.id}`);
+  await expect(page.locator(".agent-row.selected")).toHaveText(agent.name);
   await expect(page.getByRole("tablist", { name: "Agent workspace" })).toBeVisible();
 }
 
@@ -67,8 +69,8 @@ async function clickNext(page: Page, label: string) {
 test.use({ viewport: { width: 1600, height: 1000 } });
 
 test("A failed test goes from Save analysis to a compared new version", async ({ page, request }) => {
-  const name = await seedAgent(request);
-  await openAgent(page, name);
+  const agent = await seedAgent(request);
+  await openAgent(page, agent);
   await expect(page.getByRole("tab", { name: "Proof loop" })).toHaveAttribute("aria-selected", "true");
 
   await clickNext(page, "Run current");
@@ -105,8 +107,8 @@ test("A failed test goes from Save analysis to a compared new version", async ({
 });
 
 test("A failed test checked in an earlier session still reaches Generate fix", async ({ page, request }) => {
-  const name = await seedAgent(request, true);
-  await openAgent(page, name);
+  const agent = await seedAgent(request, true);
+  await openAgent(page, agent);
 
   const analysis = page.locator(".failure-analysis-panel");
   await analysis.getByLabel("Failure mode").fill("missing rollback plan");
@@ -118,8 +120,8 @@ test("A failed test checked in an earlier session still reaches Generate fix", a
 });
 
 test("A failed check stays saved when the packet reload fails", async ({ page, request }) => {
-  const name = await seedAgent(request);
-  await openAgent(page, name);
+  const agent = await seedAgent(request);
+  await openAgent(page, agent);
   await clickNext(page, "Run current");
 
   // Fail only the next failure-packet reload, the one Check makes after saving its eval.
@@ -136,8 +138,8 @@ test("A failed check stays saved when the packet reload fails", async ({ page, r
 });
 
 test("A fix proposal names the failure packet when the Check reload failed", async ({ page, request }) => {
-  const name = await seedAgent(request);
-  await openAgent(page, name);
+  const agent = await seedAgent(request);
+  await openAgent(page, agent);
   await clickNext(page, "Run current");
 
   // Fail only the failure-packet reload Check makes after saving its eval.
@@ -165,13 +167,10 @@ test("A fix proposal names the failure packet when the Check reload failed", asy
 });
 
 test("The fix message never names a version label other than the one created", async ({ page, request }) => {
-  const name = await seedAgent(request);
+  const agent = await seedAgent(request);
   // An extra version that is neither the baseline nor a candidate: the server's next label skips past it.
-  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
-    (agent: { name: string }) => agent.name === name,
-  ).id;
-  await postJson(request, `/agent-designs/${agentId}/versions`, { version_label: "draft", status: "draft" });
-  await openAgent(page, name);
+  await postJson(request, `/agent-designs/${agent.id}/versions`, { version_label: "draft", status: "draft" });
+  await openAgent(page, agent);
   await clickNext(page, "Run current");
   await clickNext(page, "Check answer");
 
@@ -198,25 +197,22 @@ test("The fix message never names a version label other than the one created", a
 });
 
 test("A second test's fix gets its own version, not the first test's", async ({ page, request }) => {
-  const name = await seedAgent(request);
-  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
-    (agent: { name: string }) => agent.name === name,
-  ).id;
+  const agent = await seedAgent(request);
   // A second test, saved after the first, so the agent opens on it.
   const scenario = await postJson<{ id: string }>(request, "/scenarios", {
-    agent_design_id: agentId,
+    agent_design_id: agent.id,
     name: "Failed migration",
     input: "A database migration failed. What should I do?",
     setup_context: "test_shape:single_turn",
     status: "active",
   });
   await postJson(request, "/eval-contracts", {
-    agent_design_id: agentId,
+    agent_design_id: agent.id,
     name: "Gives a rollback plan for the migration",
     scenario_id: scenario.id,
     checks: [{ id: "rollback_plan", type: "output_contains", value: "rollback plan" }],
   });
-  await openAgent(page, name);
+  await openAgent(page, agent);
 
   /** Run and check the open test, then save its analysis and fix, and create a version from the fix. */
   async function fixOpenTest() {
@@ -257,16 +253,13 @@ test("A second test's fix gets its own version, not the first test's", async ({ 
 });
 
 test("A saved fix with blank instructions leaves Create version disabled and says why", async ({ page, request }) => {
-  const name = await seedAgent(request, true);
+  const agent = await seedAgent(request, true);
   // A fix saved before the API rejected blank instructions: seeded valid, read back as whitespace.
-  const agentId = (await (await request.get(`${PROJECT}/agent-designs`)).json()).find(
-    (agent: { name: string }) => agent.name === name,
-  ).id;
-  const [contract] = await (await request.get(`${PROJECT}/eval-contracts?agent_design_id=${agentId}`)).json();
+  const [contract] = await (await request.get(`${PROJECT}/eval-contracts?agent_design_id=${agent.id}`)).json();
   // Like the console's, the fix names the failure it addresses, so it is this test's fix.
-  const packets = await (await request.get(`${PROJECT}/failure-packets?agent_design_id=${agentId}`)).json();
+  const packets = await (await request.get(`${PROJECT}/failure-packets?agent_design_id=${agent.id}`)).json();
   await postJson(request, "/fix-proposals", {
-    agent_design_id: agentId,
+    agent_design_id: agent.id,
     title: "Blank fix",
     rationale: "Instructions left blank.",
     proposed_changes: [{ surface: "instructions", change: "Give a rollback plan." }],
@@ -279,7 +272,7 @@ test("A saved fix with blank instructions leaves Create version disabled and say
     for (const fix of fixes) fix.proposed_changes[0].change = "   ";
     await route.fulfill({ response, json: fixes });
   });
-  await openAgent(page, name);
+  await openAgent(page, agent);
 
   const analysis = page.locator(".failure-analysis-panel");
   await analysis.getByLabel("Failure mode").fill("missing rollback plan");
@@ -342,7 +335,7 @@ test("A test sharing a default contract does not inherit another test's failure 
   });
 
   // The second, newest test opens selected and starts its own proof loop.
-  await openAgent(page, name);
+  await openAgent(page, { id: agent.id, name });
   await clickNext(page, "Run current");
   await clickNext(page, "Check answer");
   const analysis = page.locator(".failure-analysis-panel");

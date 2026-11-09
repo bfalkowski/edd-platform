@@ -38,8 +38,7 @@ async function seedAgentWithRun(request: APIRequestContext): Promise<{ name: str
 
 test("Error analysis runs end to end with Langfuse offline", async ({ page, request }) => {
   const agent = await seedAgentWithRun(request);
-  await page.goto("/");
-  await page.getByRole("region", { name: "Agent designs" }).getByText(agent.name).click();
+  await page.goto(`/?agent=${agent.id}`);
   await page.getByRole("tab", { name: "Error analysis" }).click();
 
   // 1. Build review set. The stepper uses the same name as the intro box.

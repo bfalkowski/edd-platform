@@ -209,7 +209,10 @@ function App() {
           if (items.length === 0) {
             setWizardOpen(true);
           } else {
-            setSelectedId(items[0]?.id ?? null);
+            // ?agent=<id> opens that agent; otherwise open the newest.
+            const linkedId = new URLSearchParams(window.location.search).get("agent");
+            const linked = items.find((agent) => agent.id === linkedId);
+            setSelectedId(linked?.id ?? items[0].id);
           }
         });
       })
