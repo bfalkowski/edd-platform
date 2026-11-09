@@ -109,9 +109,10 @@ created_at
 updated_at
 ```
 
-On create and update, `intent` must contain a non-whitespace character, or the
-request returns 422; it may be omitted on update. Surrounding whitespace is
-trimmed. A version created without `instructions` uses the intent as its
+On create and update, `intent` must contain a visible character, or the request
+returns 422; it may be omitted on update. Whitespace and the zero-width
+characters U+200B, U+200C, U+200D, U+2060 and U+FEFF do not count as visible.
+Surrounding whitespace is trimmed. A version created without `instructions` uses the intent as its
 instructions, so a blank intent would reach live runs as an empty system prompt.
 
 ### Tool Definitions
@@ -580,8 +581,8 @@ updated_at
 A version's `instructions` are sent unchanged as the system prompt (Anthropic)
 or agent instructions (Foundry) on live runs. On create, `instructions` may be
 omitted, and then the agent's intent is used; if sent, they must contain a
-non-whitespace character, or the request returns 422. Surrounding whitespace is
-trimmed.
+visible character, as for `intent`, or the request returns 422. Surrounding
+whitespace is trimmed.
 
 ### Suite Runs
 

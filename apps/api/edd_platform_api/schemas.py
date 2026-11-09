@@ -8,11 +8,16 @@ from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
+# Matches a character that is neither whitespace nor zero-width (U+200B, U+200C,
+# U+200D, U+2060, U+FEFF). Zero-width characters survive str.strip(), so text made
+# only of them and whitespace would otherwise reach live runs as an invisible prompt.
+VISIBLE_TEXT = r"[^\s\u200b\u200c\u200d\u2060\ufeff]"
+
 
 class AgentDesignCreate(BaseModel):
     name: str = Field(min_length=1)
     # A version created without instructions uses the intent as its system prompt.
-    intent: str = Field(pattern=r"\S")
+    intent: str = Field(pattern=VISIBLE_TEXT)
     allowed_tool_names: List[str] = Field(default_factory=list)
     langfuse_prompt_name: Optional[str] = None
     langfuse_prompt_version: Optional[str] = None
@@ -21,7 +26,7 @@ class AgentDesignCreate(BaseModel):
 
 class AgentDesignUpdate(BaseModel):
     name: Optional[str] = None
-    intent: Optional[str] = Field(default=None, pattern=r"\S")
+    intent: Optional[str] = Field(default=None, pattern=VISIBLE_TEXT)
     allowed_tool_names: Optional[List[str]] = None
     status: Optional[str] = None
     langfuse_prompt_name: Optional[str] = None
@@ -222,7 +227,7 @@ class AgentVersionCreate(BaseModel):
     version_label: Optional[str] = None
     parent_version_id: Optional[str] = None
     # Sent unchanged as the live system prompt, so it must not be blank.
-    instructions: Optional[str] = Field(default=None, pattern=r"\S")
+    instructions: Optional[str] = Field(default=None, pattern=VISIBLE_TEXT)
     tool_policy: Dict[str, object] = Field(default_factory=dict)
     source_fix_proposal_id: Optional[str] = None
     status: str = "candidate"
