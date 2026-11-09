@@ -1008,7 +1008,7 @@ def evaluate_run(
             status_code = 400 if "ANTHROPIC_API_KEY" in detail else 502
             raise HTTPException(status_code=status_code, detail=detail) from exc
         cost_estimate = estimate_live_judge_cost(token_usage)
-        if any(check.check_type == "rubric_judge" for check in checks):
+        if any(check.check_type in _LIVE_JUDGE_CHECK_TYPES for check in checks):
             judge_passed = live_judge_passed(judge_output_text)
             checks = [
                 check.model_copy(
@@ -1022,7 +1022,7 @@ def evaluate_run(
                         ),
                     }
                 )
-                if check.check_type == "rubric_judge"
+                if check.check_type in _LIVE_JUDGE_CHECK_TYPES
                 else check
                 for check in checks
             ]
