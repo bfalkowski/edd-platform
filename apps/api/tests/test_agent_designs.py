@@ -2857,6 +2857,65 @@ def test_live_judge_judges_each_rubric_check_separately(monkeypatch, judge_types
     assert judge_output.token_usage == {"input_tokens": 30, "output_tokens": 12}
 
 
+def test_live_judge_pairs_replies_with_rubric_checks_that_share_an_id(monkeypatch) -> None:
+    client = TestClient(app)
+
+    def fake_live_judge(prompt: str, trace_id: Optional[str] = None):
+        if "Rubric:\nAsks for logs." in prompt:
+            return "PASS - asks for logs.", "test-judge-model", {}
+        return "FAIL - curt.", "test-judge-model", {}
+
+    monkeypatch.setattr(api_main, "run_live_judge", fake_live_judge)
+    agent = client.post(
+        "/api/projects/project_default/agent-designs",
+        json={"name": "Unnamed Judge Checks Agent", "intent": "Answer with evidence."},
+    ).json()["agent"]
+    scenario = client.post(
+        "/api/projects/project_default/scenarios",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Unnamed judge checks scenario",
+            "input": "A customer reports a failed deployment.",
+        },
+    ).json()
+    contract = client.post(
+        "/api/projects/project_default/eval-contracts",
+        json={
+            "agent_design_id": agent["id"],
+            "name": "Unnamed judge checks contract",
+            "scenario_id": scenario["id"],
+            "checks": [
+                {"type": "rubric_judge", "value": "Asks for logs."},
+                {"type": "rubric_judge", "value": "Stays polite."},
+            ],
+        },
+    ).json()
+    run = client.post(
+        "/api/projects/project_default/runs",
+        json={
+            "agent_design_id": agent["id"],
+            "scenario_id": scenario["id"],
+            "eval_contract_id": contract["id"],
+        },
+    ).json()
+
+    eval_response = client.post(
+        f"/api/projects/project_default/runs/{run['id']}/evaluate",
+        json={"judge_mode": "live"},
+    )
+
+    assert eval_response.status_code == 201
+    eval_result = eval_response.json()
+    first, second = eval_result["checks"]
+    assert first["passed"] is True
+    assert first["explanation"] == "PASS - asks for logs."
+    assert second["passed"] is False
+    assert second["explanation"] == "FAIL - curt."
+    judge_output = api_main._judge_outputs[eval_result["judge_output_ids"][0]]
+    assert "PASS - asks for logs." in judge_output.output
+    assert "FAIL - curt." in judge_output.output
+
+
 def test_live_judge_requires_openai_api_key(monkeypatch) -> None:
     client = TestClient(app)
 

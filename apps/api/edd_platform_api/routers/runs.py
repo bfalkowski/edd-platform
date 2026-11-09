@@ -4,7 +4,7 @@ import json
 import os
 import re
 from datetime import datetime, timezone
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request
@@ -1023,7 +1023,8 @@ def evaluate_run(
         # The judge returns one verdict per call, so each rubric check gets its own call.
         # A contract without rubric checks still gets one call for its explanation.
         rubric_checks = [check for check in contract.checks if is_rubric_check(check)]
-        replies: Dict[str, str] = {}
+        # Replies line up with rubric_checks by position; check ids need not be unique.
+        replies: List[Tuple[str, str]] = []
         token_usage = {}
         for rubric_check in rubric_checks or [{}]:
             prompt = build_live_judge_prompt(
@@ -1042,17 +1043,19 @@ def evaluate_run(
                 detail = str(exc)
                 status_code = 400 if "ANTHROPIC_API_KEY" in detail else 502
                 raise HTTPException(status_code=status_code, detail=detail) from exc
-            replies[str(rubric_check.get("id") or "unnamed_check")] = reply
+            replies.append((str(rubric_check.get("id") or "unnamed_check"), reply))
             token_usage = add_token_usage(token_usage, call_usage)
         judge_output_text = (
-            "\n\n".join(f"{check_id}:\n{reply}" for check_id, reply in replies.items())
+            "\n\n".join(f"{check_id}:\n{reply}" for check_id, reply in replies)
             if len(replies) > 1
-            else next(iter(replies.values()))
+            else replies[0][1]
         )
         cost_estimate = estimate_live_judge_cost(token_usage)
         if rubric_checks:
+            # Results come from contract.checks in order, so the rubric ones match replies.
+            rubric_replies = iter(reply for _, reply in replies)
             checks = [
-                judged_rubric_check(check, run, replies[check.check_id])
+                judged_rubric_check(check, run, next(rubric_replies))
                 if check.check_type in RUBRIC_CHECK_TYPES
                 else check
                 for check in checks
