@@ -82,3 +82,20 @@ test("before the eval and failure records load, judge and failure rows join the 
   );
   assert.deepEqual(ids(grouped.agentArtifacts), ["judge_orphan"]);
 });
+
+test("before the failure records load, a failure saved later joins the run its Run line names", () => {
+  const rows = [
+    artifact("run_d", "RUN_RESULT", "2026-11-06T00:00:00Z", { artifact_id: "run_d_id" }),
+    artifact("eval_d", "EVAL_RESULT", "2026-11-06T00:00:01Z", { body: "Contract\nOne fix\n\nRun\nrun_d_id" }),
+    // A reviewer overrule saves its failure later, with its own timestamp.
+    artifact("failure_d", "FAILURE_PACKET", "2026-11-06T00:05:00Z", {
+      body: "Run\nrun_d_id\n\nDiagnosis\nReviewer overruled the judge.",
+    }),
+  ];
+  const grouped = groupEvidence(rows, new Map());
+  assert.deepEqual(
+    grouped.runGroups.map((group) => [group.runId, ids(group.artifacts)]),
+    [["run_d_id", ["run_d", "eval_d", "failure_d"]]],
+  );
+  assert.deepEqual(ids(grouped.agentArtifacts), []);
+});

@@ -602,6 +602,15 @@ def test_promote_annotation_creates_proof_loop_artifacts() -> None:
     assert packets_response.status_code == 200
     assert packets_response.json()[0]["id"] == failure_packet["id"]
 
+    # The Evidence tab groups these rows by their Run line before the records load.
+    run_line = f"Run\n{failure_packet['run_id']}\n"
+    for artifact_type in ("EVAL_RESULT", "FAILURE_PACKET"):
+        [saved] = client.get(
+            "/api/projects/project_default/artifacts",
+            params={"agent_design_id": agent["id"], "artifact_type": artifact_type},
+        ).json()
+        assert run_line in saved["body"]
+
     finding_artifact_id = promotion["artifact_ids"][0]
     links_response = client.get(
         f"/api/projects/project_default/artifacts/{finding_artifact_id}/links"
