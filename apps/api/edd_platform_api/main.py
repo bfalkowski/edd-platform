@@ -30,6 +30,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Response
 
+from edd_platform_api.logging_setup import configure_app_logging
 from edd_platform_api.service_status import ServiceStatusResponse, service_status_response
 from edd_platform_api.polars_analysis import (
     materialize_review_corpus_snapshot,
@@ -217,6 +218,7 @@ try:
 except Exception:
     pass
 
+configure_app_logging()
 app = FastAPI(title="EDD Platform API")
 
 from edd_platform_api.routers import core as _core_router  # noqa: E402
