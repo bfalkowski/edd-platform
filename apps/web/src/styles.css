@@ -3279,6 +3279,13 @@ dd {
   color: #fff;
 }
 
+.saved-test-error {
+  font-size: 12px;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 0 10px 8px;
+}
+
 .judge-review-panel,
 .judge-review-contract {
   display: grid;

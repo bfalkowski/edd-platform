@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { suiteComparisonIsCurrent, suiteIsComplete, suiteTestResult } from "../../src/suite.ts";
+import {
+  keepRunErrors,
+  suiteComparisonIsCurrent,
+  suiteIsComplete,
+  suiteTestResult,
+} from "../../src/suite.ts";
 import type { Comparison, EvalResult, SuiteResult } from "../../src/types.ts";
 
 function suite(results: (boolean | null)[], version = "v1"): SuiteResult {
@@ -61,4 +66,31 @@ test("a suite comparison is current only for the same tests and the same evals",
   const rerun = suite([true, true], "v1");
   rerun.tests[1] = { ...rerun.tests[1], eval_result: { id: "v1_eval_rerun", passed: true } as EvalResult };
   assert.equal(suiteComparisonIsCurrent(comparison, v0, rerun), false);
+});
+
+test("a run error stays after a reload of the suite result until that test gets a new eval", () => {
+  const run = suite([true, null, false]);
+  run.tests[1] = { ...run.tests[1], error: "Provider timed out." };
+  run.tests[2] = { ...run.tests[2], error: "Judge timed out." };
+
+  // The saved-result read never has errors; the run's errors are kept.
+  const loaded = keepRunErrors(run, suite([true, null, false]));
+  assert.deepEqual(
+    loaded.tests.map((test) => test.error ?? null),
+    [null, "Provider timed out.", "Judge timed out."],
+  );
+
+  // A later eval on a test clears its error; the other test keeps its own.
+  const rerun = suite([true, true, false]);
+  rerun.tests[1] = { ...rerun.tests[1], eval_result: { id: "v1_eval_new", passed: true } as EvalResult };
+  assert.deepEqual(
+    keepRunErrors(loaded, rerun).tests.map((test) => test.error ?? null),
+    [null, null, "Judge timed out."],
+  );
+
+  // Nothing to keep without an earlier result.
+  assert.deepEqual(
+    keepRunErrors(undefined, suite([null])).tests.map((test) => test.error ?? null),
+    [null],
+  );
 });

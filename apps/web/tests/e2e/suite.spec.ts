@@ -176,3 +176,42 @@ test("A test that passed on v0 and fails on v1 is marked as a regression and blo
   await page.getByRole("button", { name: "Run gate" }).click();
   await expect(page.getByRole("heading", { name: "Blocked" })).toBeVisible();
 });
+
+test("A test whose run failed shows the error next to it after a suite run", async ({ page, request }) => {
+  const name = await seedAgent(request, fixedAndKept);
+  await page.goto("/");
+  await openAgent(page, name);
+
+  // The stub provider cannot fail one test, so the real run response gets one
+  // test's error added. Its eval stays as saved, as the API leaves it on an error.
+  const message = "Judge request failed with status 529: Overloaded";
+  await page.route("**/suite-runs", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.tests[0].error = message;
+    await route.fulfill({ response, json: body });
+  });
+
+  const failedRow = testRow(page, "Gives a rollback plan");
+  const list = page.getByRole("list", { name: "Saved tests" });
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  await expect(page.locator(".suite-pass-count")).toHaveText("2 of 2 passed");
+  await expect(testRow(page, "Names a safe next action")).toContainText("Passed");
+  await expect(failedRow).toContainText("Error");
+  await expect(failedRow).not.toContainText("Passed");
+  await expect(list.getByText(message)).toBeVisible();
+
+  // The saved results reload after the run; the error stays, on that version only.
+  const version = page.getByRole("group", { name: "Version" });
+  await version.getByRole("button", { name: "v0" }).click();
+  await expect(failedRow).toContainText("Not run");
+  await expect(list.getByText(message)).toHaveCount(0);
+  await version.getByRole("button", { name: "v1" }).click();
+  await expect(list.getByText(message)).toBeVisible();
+
+  // A later run that gives the test a new eval clears its error.
+  await page.unroute("**/suite-runs");
+  await page.getByRole("button", { name: "Run all tests" }).click();
+  await expect(failedRow).toContainText("Passed");
+  await expect(list.getByText(message)).toHaveCount(0);
+});

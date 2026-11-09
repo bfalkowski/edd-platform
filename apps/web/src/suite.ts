@@ -19,6 +19,28 @@ export function suiteTestResult(
   return test.eval_result.passed ? "passed" : "failed";
 }
 
+/** Why a test failed to run or be judged in the latest suite run, if it did. */
+export function suiteTestError(suite: SuiteResult | undefined, scenarioId: string): string | null {
+  return suite?.tests.find((item) => item.scenario_id === scenarioId)?.error ?? null;
+}
+
+/**
+ * Only a suite run's response has per-test errors; the saved-result read does
+ * not. Keep a test's error from the earlier result while the test still has the
+ * same eval it had then. A newer eval on that test means the error is old.
+ */
+export function keepRunErrors(earlier: SuiteResult | undefined, loaded: SuiteResult): SuiteResult {
+  if (!earlier) return loaded;
+  return {
+    ...loaded,
+    tests: loaded.tests.map((test) => {
+      const before = earlier.tests.find((item) => item.scenario_id === test.scenario_id);
+      const sameEval = (before?.eval_result?.id ?? null) === (test.eval_result?.id ?? null);
+      return before?.error && sameEval ? { ...test, error: before.error } : test;
+    }),
+  };
+}
+
 /** A suite comparison needs both versions checked on every test. */
 export function suiteIsComplete(suite: SuiteResult | undefined): boolean {
   return Boolean(suite && suite.total > 0 && suite.tests.every((test) => test.eval_result));
