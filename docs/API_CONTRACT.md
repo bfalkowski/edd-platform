@@ -865,6 +865,10 @@ Live judge mode records provider token usage on the judge output. Cost estimates
 are calculated only when `EDD_OPENAI_INPUT_COST_PER_1M` and
 `EDD_OPENAI_OUTPUT_COST_PER_1M` are configured.
 
+The live judge returns one PASS/FAIL verdict, so live mode rejects with `400`
+an eval contract that has more than one `rubric_judge` or `llm_judge` check,
+before calling the judge. Deterministic mode accepts such contracts.
+
 Minimum response fields:
 
 ```text

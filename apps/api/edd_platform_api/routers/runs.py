@@ -181,8 +181,9 @@ def build_live_judge_prompt(
         if template is not None
         else "Explain whether the response satisfies the eval contract. Cite the provided evidence only."
     )
+    # evaluate_run allows at most one judge check in live mode.
     rubric_check = next(
-        (c for c in contract.checks if c.get("type") in ("rubric_judge", "llm_judge")), None
+        (c for c in contract.checks if c.get("type") in _LIVE_JUDGE_CHECK_TYPES), None
     )
     rubric = (rubric_check.get("value") or "" if rubric_check else "").strip()
     rubric_section = f"Rubric:\n{rubric}\n\n" if rubric else ""
@@ -986,6 +987,18 @@ def evaluate_run(
     token_usage: Dict[str, object] = {}
     cost_estimate: Optional[float] = None
     if payload.judge_mode == "live":
+        # The live judge returns one verdict, so it can only stand for one judge check.
+        judge_check_count = sum(
+            1 for check in contract.checks if check.get("type") in _LIVE_JUDGE_CHECK_TYPES
+        )
+        if judge_check_count > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Live judge supports at most one rubric_judge or llm_judge check per "
+                    f"eval contract; this contract has {judge_check_count}."
+                ),
+            )
         template = (
             get_judge_prompt_template_or_404(project_id, contract.judge_prompt_template_id)
             if contract.judge_prompt_template_id is not None
