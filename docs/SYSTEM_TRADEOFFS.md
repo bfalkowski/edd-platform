@@ -213,3 +213,30 @@ long-running work can move to queues and workers later.
 
 The platform first needs a correct evidence model. Once the model is stable,
 background execution can scale it without changing the product vocabulary.
+
+## Stored Names Are Shown As Saved
+
+### Decision
+
+When a default name changes, only new records get the new default. Records
+saved earlier keep their stored name, with no data migration and no rewrite at
+display time. Example: review sets created before T-96 keep the name
+"<agent> review corpus" as the Error analysis heading, while new ones get
+"<agent> review set".
+
+### Benefits
+
+- The UI shows exactly what is stored, so the name matches the API and exports.
+- Names a user chose or edited are never changed behind their back.
+- Nothing needs a migration that cannot easily be undone.
+
+### Costs
+
+- Older records can show an old word next to newer copy.
+- A user who wants the new wording has to rename the record.
+
+### Why It Fits
+
+A name is user data, not UI copy. If users report the old wording as
+confusing, a one-off migration that renames only names exactly equal to the
+old default is the next step.

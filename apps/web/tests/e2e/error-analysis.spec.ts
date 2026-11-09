@@ -106,3 +106,28 @@ test("Error analysis runs end to end with Langfuse offline", async ({ page, requ
     expect.objectContaining({ name: "Missing rollback", accepted_annotations: 1 }),
   ]);
 });
+
+test("A review set saved under the old default name keeps that name as its heading", async ({
+  page,
+  request,
+}) => {
+  // Before T-96 the default name was "<agent> review corpus". The name is
+  // stored data the user may have chosen, so it is shown as saved (T-115).
+  const name = `Old Name Agent ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const { agent } = await postJson<{ agent: { id: string } }>(request, "/agent-designs", {
+    name,
+    intent: "Answer support questions with a safe next action.",
+  });
+  await postJson(request, "/review-corpora", {
+    agent_design_id: agent.id,
+    name: `${name} review corpus`,
+    source: "mixed",
+  });
+  await page.goto(`/?agent=${agent.id}`);
+  await page.getByRole("tab", { name: "Error analysis" }).click();
+
+  const intro = page.locator(".error-analysis-intro");
+  await expect(intro.getByRole("heading", { level: 3 })).toHaveText(`${name} review corpus`);
+  // The copy around it still says "review set".
+  await expect(intro.locator(".analysis-scope-card small")).toContainText("review set ·");
+});
