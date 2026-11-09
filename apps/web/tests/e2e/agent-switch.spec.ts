@@ -114,3 +114,68 @@ test("a failed saved-tests load for a previously selected agent shows no error o
   await expect(page.getByRole("heading", { name: newAgent.name })).toBeVisible();
   await expect(page.locator(".error-text")).toHaveCount(0);
 });
+
+test("suite results never ask for the last agent's versions while the new agent's load", async ({
+  page,
+  request,
+}) => {
+  const oldAgent = await createAgent(request, "Suite Old Agent");
+  const newAgent = await createAgent(request, "Suite New Agent");
+  const versionIds: Record<string, string> = {};
+  for (const agent of [oldAgent, newAgent]) {
+    const response = await request.post(
+      `/api/projects/project_default/agent-designs/${agent.id}/versions`,
+      {
+        data: {
+          version_label: "v0",
+          instructions: "Answer support questions with a safe next action.",
+          status: "baseline",
+        },
+      },
+    );
+    expect(response.ok(), await response.text()).toBeTruthy();
+    versionIds[agent.id] = ((await response.json()) as { id: string }).id;
+  }
+
+  const suiteRequests: string[] = [];
+  page.on("request", (req) => {
+    if (req.url().endsWith("/suite-result")) {
+      suiteRequests.push(new URL(req.url()).pathname);
+    }
+  });
+
+  // Hold the new agent's version list so the page sits between the two agents.
+  let releaseNewVersions: () => void = () => {};
+  const newVersionsReleased = new Promise<void>((resolve) => {
+    releaseNewVersions = resolve;
+  });
+  await page.route(`**/agent-designs/${newAgent.id}/versions`, async (route) => {
+    await newVersionsReleased;
+    await route.continue();
+  });
+
+  await page.goto("/");
+  const agents = page.getByRole("region", { name: "Agent designs" });
+  const oldSuiteLoaded = page.waitForResponse(
+    `**/agent-designs/${oldAgent.id}/versions/${versionIds[oldAgent.id]}/suite-result`,
+  );
+  await agents.getByText(oldAgent.name).click();
+  await page.getByRole("tab", { name: "Proof loop" }).click();
+  await oldSuiteLoaded;
+
+  await agents.getByText(newAgent.name).click();
+  // Give any request built from the last agent's versions time to go out.
+  await page.waitForTimeout(500);
+  const newSuiteLoaded = page.waitForResponse(
+    `**/agent-designs/${newAgent.id}/versions/${versionIds[newAgent.id]}/suite-result`,
+  );
+  releaseNewVersions();
+  await newSuiteLoaded;
+
+  const crossed = suiteRequests.filter(
+    (path) =>
+      path.includes(`/agent-designs/${newAgent.id}/`) && path.includes(versionIds[oldAgent.id]),
+  );
+  expect(crossed).toEqual([]);
+  await expect(page.locator(".error-text")).toHaveCount(0);
+});
