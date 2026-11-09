@@ -727,8 +727,8 @@ def _draft_agent_plan_from_llm(
         allowed = [t for t in data.get("allowed_tools", []) if t in valid_tools]
         required = [t for t in data.get("required_tools", []) if t in valid_tools]
         return {
-            "name": str(data.get("name", "Outcome Agent")),
-            "intent": str(data.get("intent", outcome)),
+            "name": str(data.get("name") or "").strip() or "Outcome Agent",
+            "intent": str(data.get("intent") or "").strip() or outcome,
             "output_focus": str(data.get("output_focus", "Return the requested outcome.")),
             "output_requirements": [str(r) for r in data.get("output_requirements", ["outcome"])],
             "allowed_tools": allowed,
